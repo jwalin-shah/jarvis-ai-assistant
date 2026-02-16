@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS contacts (
     phone_or_email TEXT,              -- primary contact method
     handles_json TEXT,                -- JSON array: ["+15551234567", "email@x.com"]
     relationship TEXT,                -- 'sister', 'coworker', 'friend', 'boss'
+    relationship_reasoning TEXT,      -- LLM-derived justification (v18+)
     style_notes TEXT,                 -- 'casual, uses emojis'
     last_extracted_rowid INTEGER,    -- iMessage ROWID of last extracted message (v18)
     last_extracted_at TIMESTAMP,      -- when extraction was last run (v18)
@@ -227,7 +228,7 @@ EXPECTED_INDICES = {
     "idx_reply_logs_created",
 }
 
-CURRENT_SCHEMA_VERSION = 20  # added reply_logs for full traceability
+CURRENT_SCHEMA_VERSION = 21  # added relationship_reasoning column
 
 # Allowlist of valid column names for ALTER TABLE migrations (prevent SQL injection)
 VALID_MIGRATION_COLUMNS = {
@@ -259,6 +260,8 @@ VALID_MIGRATION_COLUMNS = {
     # v18: extraction tracking
     "last_extracted_rowid",
     "last_extracted_at",
+    # v18: relationship
+    "relationship_reasoning",
 }
 
 # Allowlist of valid column types for ALTER TABLE migrations

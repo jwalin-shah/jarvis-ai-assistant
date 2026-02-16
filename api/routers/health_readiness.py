@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import logging
 from typing import Any
 
 import psutil
@@ -14,6 +15,7 @@ from api.schemas import HealthResponse, ModelInfo
 from jarvis.metrics import get_health_cache, get_model_info_cache
 
 router = APIRouter(tags=["health"])
+logger = logging.getLogger(__name__)
 
 BYTES_PER_MB = 1024 * 1024
 BYTES_PER_GB = 1024**3
@@ -24,7 +26,8 @@ def _get_process_memory() -> tuple[float, float]:
         process = psutil.Process(os.getpid())
         mem_info = process.memory_info()
         return mem_info.rss / BYTES_PER_MB, mem_info.vms / BYTES_PER_MB
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to fetch process memory: {e}")
         return 0.0, 0.0
 
 
@@ -36,7 +39,8 @@ def _check_imessage_access() -> bool:
         result = reader.check_access()
         reader.close()
         return result
-    except Exception:
+    except Exception as e:
+        logger.error(f"iMessage access check failed: {e}")
         return False
 
 

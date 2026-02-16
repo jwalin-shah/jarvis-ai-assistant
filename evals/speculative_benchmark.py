@@ -157,7 +157,7 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="Speculative Decoding Benchmark")
     parser.add_argument(
-        "--draft-model", default="lfm-0.3b", help="Draft model ID (default: lfm-0.3b)"
+        "--draft-model", default="models/lfm2-350m-extract-mlx-4bit", help="Draft model ID"
     )
     parser.add_argument(
         "--num-draft-tokens", type=int, default=3, help="Draft tokens per step (default: 3)"

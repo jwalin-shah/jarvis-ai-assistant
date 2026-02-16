@@ -58,16 +58,17 @@ def build_reply_context(
     context_messages: int,
 ) -> tuple[str, list[str], list[str]]:
     """Build last message, participants, and thread context for reply generation."""
-    last_message = None
-    for msg in messages:
-        if not msg.is_from_me and msg.text:
-            last_message = msg.text
-            break
-    if not last_message:
-        last_message = messages[0].text if messages else ""
+    # The actual last message is the first one in our newest-first list
+    last_message = messages[0].text if messages and messages[0].text else ""
+    
+    # We still want to know who sent it for better prompting
+    last_is_from_me = messages[0].is_from_me if messages else False
 
     participants = list({m.sender_name or m.sender for m in messages if not m.is_from_me})
     thread = [m.text for m in reversed(messages) if m.text][:context_messages]
+    
+    # If the last message was from me, the context should reflect that
+    # we might be following up or adding more info.
     return last_message or "", participants, thread
 
 
@@ -91,13 +92,16 @@ async def build_draft_suggestions(
         logger.error("Classification/search failed: %s", e)
         raise ModelError("Model service unavailable", cause=e) from e
 
+    last_is_from_me = messages[0].is_from_me if messages else False
+
     context = MessageContext(
         chat_id=chat_id,
         message_text=last_message,
-        is_from_me=False,
+        is_from_me=last_is_from_me,
         timestamp=datetime.now(UTC),
         metadata={"thread": thread},
     )
+
 
     base_instruction = sanitize_instruction(instruction)
     variant_instructions: list[str | None] = [base_instruction]
@@ -113,6 +117,8 @@ async def build_draft_suggestions(
         )
 
     suggestions: list[DraftSuggestion] = []
+    seen_texts: set[str] = set()
+    
     try:
         async with asyncio.timeout(get_timeout_generation()):
             for i in range(num_suggestions):
@@ -134,23 +140,55 @@ async def build_draft_suggestions(
                     )
                 except Exception as e:
                     logger.warning("Generation %d failed: %s", i, e)
-                    continue
+                    # If the first one fails critically, don't keep trying for more
+                    if not suggestions:
+                        suggestions.append(DraftSuggestion(
+                            text="I'm having trouble generating suggestions right now.", 
+                            confidence=0.0
+                        ))
+                    break
 
-                if gen_response.response:
+                is_fallback = gen_response.metadata.get("type") == "fallback" or \
+                             gen_response.metadata.get("reason") == "memory_pressure"
+                
+                resp_text = gen_response.response.strip() if gen_response.response else ""
+                
+                # If it's a fallback, use the response or a default message
+                if is_fallback and not resp_text:
+                    resp_text = "I'm a bit overloaded right now. Give me a moment and try again."
+
+                if resp_text:
+                    # Avoid redundant suggestions
+                    if resp_text in seen_texts:
+                        if is_fallback: break
+                        continue
+                    
+                    # Double check for fallback strings in text
+                    if "overloaded" in resp_text.lower() or "trouble generating" in resp_text.lower():
+                        is_fallback = True
+                    
                     confidence = max(0.5, gen_response.confidence)
                     suggestions.append(
-                        DraftSuggestion(text=gen_response.response, confidence=confidence)
+                        DraftSuggestion(text=resp_text, confidence=confidence)
                     )
+                    seen_texts.add(resp_text)
+                    
                     await run_in_threadpool(
                         reply_service.log_custom_generation,
                         chat_id=chat_id,
                         incoming_text=last_message,
                         final_prompt=gen_response.metadata.get("final_prompt", ""),
-                        response_text=gen_response.response,
+                        response_text=resp_text,
                         confidence=confidence,
                         category="draft_reply",
                         metadata={"suggestion_index": i},
                     )
+                
+                # If we hit any fallback condition, don't keep looping for 3 of them
+                if is_fallback:
+                    break
+
+
     except TimeoutError:
         logger.warning("Generation timed out after %s seconds", get_timeout_generation())
         if not suggestions:
@@ -217,12 +255,8 @@ def build_smart_reply_input(
     """Build input payload for smart reply endpoint."""
     last_message = requested_last_message
     if not last_message and messages:
-        for msg in messages:
-            if not msg.is_from_me and msg.text:
-                last_message = msg.text
-                break
-    if not last_message:
-        last_message = messages[0].text if messages and messages[0].text else ""
+        # The actual last message is the first one in our newest-first list
+        last_message = messages[0].text if messages[0].text else ""
 
     thread_context = [msg.text for msg in reversed(messages) if msg.text and len(msg.text) > 0][
         -10:
@@ -231,9 +265,10 @@ def build_smart_reply_input(
     context_info = ContextInfo(
         num_messages=len(messages),
         participants=participants,
-        last_message=last_message,
+        last_message=last_message or "",
     )
-    return last_message, thread_context, context_info
+    return last_message or "", thread_context, context_info
+
 
 
 async def route_smart_reply(

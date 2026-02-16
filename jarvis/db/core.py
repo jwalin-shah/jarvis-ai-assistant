@@ -39,6 +39,19 @@ def _migrate_v16_to_v17(conn: sqlite3.Connection) -> None:
             raise
 
 
+def _migrate_v20_to_v21(conn: sqlite3.Connection) -> None:
+    """Migration v20 -> v21: Add relationship_reasoning column to contacts."""
+    try:
+        conn.execute("ALTER TABLE contacts ADD COLUMN relationship_reasoning TEXT")
+        logger.info("Added relationship_reasoning column to contacts table")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            logger.debug("relationship_reasoning column already exists")
+        else:
+            logger.error("Migration v20->v21 failed: %s", e)
+            raise
+
+
 # Maps (max_version_inclusive) -> migration callable.
 # A migration runs when current_version > 0 and current_version <= max_version.
 # Entries with exact_version=True run only when current_version == that version.
@@ -46,6 +59,7 @@ def _migrate_v16_to_v17(conn: sqlite3.Connection) -> None:
 _MIGRATIONS: list[tuple[int, bool, Any]] = [
     # (max_version, exact_match_only, callable)
     (16, True, _migrate_v16_to_v17),
+    (20, True, _migrate_v20_to_v21),
 ]
 
 

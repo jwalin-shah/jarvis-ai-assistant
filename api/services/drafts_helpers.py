@@ -10,13 +10,35 @@ _ALLOWED_INSTRUCTION_PATTERN = re.compile(r"^[a-zA-Z0-9 ,.'!?;:\-/()]+$")
 
 
 def format_messages_for_context(messages: list[Message]) -> str:
-    """Format messages as context string (chronological order)."""
+    """Format messages as context string (chronological order), combining consecutive turns."""
+    if not messages:
+        return ""
+        
     chronological = list(reversed(messages))
-    lines: list[str] = []
+    turns: list[str] = []
+    
+    current_sender: str | None = None
+    current_text_parts: list[str] = []
+    
     for msg in chronological:
-        sender = "You" if msg.is_from_me else (msg.sender_name or msg.sender)
-        lines.append(f"[{sender}]: {msg.text}")
-    return "\n".join(lines)
+        sender = "You" if msg.is_from_me else (msg.sender_name or msg.sender or "Contact")
+        text = (msg.text or "").strip()
+        if not text:
+            continue
+            
+        if sender == current_sender:
+            current_text_parts.append(text)
+        else:
+            if current_sender is not None:
+                turns.append(f"{current_sender}: {' '.join(current_text_parts)}")
+            current_sender = sender
+            current_text_parts = [text]
+            
+    if current_sender is not None:
+        turns.append(f"{current_sender}: {' '.join(current_text_parts)}")
+        
+    return "\n".join(turns)
+
 
 
 def sanitize_instruction(instruction: str | None) -> str | None:

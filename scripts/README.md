@@ -1,52 +1,62 @@
-# JARVIS Scripts
+# Scripts Directory
 
-Utility scripts for development, benchmarking, and automation.
+Organized directory of utility, production, and development scripts.
 
-## Core Pipeline (Topic Segments)
+## Directory Structure
 
-- `backfill_segments.py` - Migrates historical iMessage data to the new topic-based segment system.
-- `export_eval_segments.py` - Exports segmented conversation data for fact extraction evaluation.
-- `backfill_v4_final.py` - V4 fact backfill (instruction-based LFM-0.7b, turn-based). Recommended for populating the knowledge graph.
-- `backfill_contact_facts.py` - Alternative GLiNER-based batch extraction (faster, different quality tradeoffs).
+- **`production/`** - Production and operational scripts
+- **`evaluation/`** - Evaluation, benchmarking, and bakeoff scripts
+- **`training/`** - ML training and data preparation scripts
+- **`analysis/`** - One-off analysis, debugging, and diagnostic scripts
+- **`archived/`** - Deprecated scripts kept for reference
+- **`utils/`** - Shared utility modules
 
-## Evaluation & Benchmarking
+## Production Scripts
 
-- `eval_entailment_gate.py` - Evaluates the impact of the NLI entailment gate on fact extraction.
-- `eval_extraction.py` - Comprehensive fact extraction evaluation against goldsets.
-- `eval_combined_extraction.py` - Evaluates the merged GLiNER + spaCy extraction pipeline.
-- `eval_classifiers.py` - Benchmarks category and mobilization classifiers.
-- `generate_report.py` - Aggregates benchmark results into human-readable reports.
+Located in `production/`:
 
-## Model Training & Preparation
+- `launch.sh` - Launch full application (API + desktop)
+- `health_check.py` - System health validation
+- `self_test.py` - Complete self-test with all components
+- `backfill_complete.py` - Full backfill: segments + facts
+- `backfill_messages.py` - Simple message backfill
+- `sync_contacts.py` - Sync contacts from macOS
+- `sync_calendar.py` - Sync calendar events
+- `batch_process_knowledge.py` - Batch knowledge graph processing
+- `start_worker_loop.py` - Background worker daemon
+- `autonomous_loop.sh` - Autonomous processing loop
+- `start_mlx_server.sh` - MLX model server
 
-- `train_personal.py` - Orchestrates training of style-aware models.
-- `prepare_gliner_training.py` - Prepares datasets for GLiNER fine-tuning.
-- `prepare_mobilization_training.py` - Prepares datasets for mobilization classifier training.
-- `generate_preference_pairs.py` - Uses Gemini to generate ORPO preference pairs for RLHF.
+## Evaluation Scripts
 
-## Development Helpers
+Located in `evaluation/`:
 
-- `ner_server.py` - Standalone spaCy NER service for local development.
-- `db_maintenance.py` - Database optimization and integrity checks (Archived).
-- `check_regression.py` - Runs fast regression tests on key models.
+- `eval_*.py` - Various evaluation pipelines
+- `extraction_bakeoff*.py` - Fact extraction experiments
+- `prompt_bakeoff*.py` - Prompt engineering experiments  
+- `reply_bakeoff.py` - Reply generation experiments
+- `benchmark_speculative.py` - Speculative decoding benchmark
 
----
+## Training Scripts
 
-## Legacy Archive
+Located in `training/`:
 
-Older scripts related to the legacy "pairs" system (trigger/response pairs) have been moved to `scripts/archive/`.
-These include:
-- `filter_quality_pairs.py`
-- `prepare_personal_data.py`
-- `train_category_svm.py`
-- Legacy extraction bakeoffs and goldset cleaning scripts.
+- `prepare_*.py` - Data preparation for training
+- `generate_*.py` - Generate training configs/data
+- `build_all_profiles.py` - Build contact profiles
 
----
+## Analysis Scripts
 
-## Adding New Scripts
+Located in `analysis/`:
 
-When adding scripts:
-1. Add shebang line: `#!/usr/bin/env python3`
-2. Make executable: `chmod +x scripts/your_script.py`
-3. Add docstring with usage examples
-4. Update this README
+- `analyze_*.py` - Analysis scripts
+- `diagnose_*.py` - Diagnostic scripts
+- `check_*.py` - Validation checks
+- `test_*.py` - One-off test scripts (not unit tests)
+- `trace_*.py`, `verify_*.py` - Debugging utilities
+
+## Other Files
+
+- `gen_ref_pages.py` - Generate documentation reference pages
+- `check_swap.sh`, `check_training_status.sh` - Shell utilities
+- `extraction_lab_configs.json` - Config for extraction experiments

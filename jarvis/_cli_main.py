@@ -233,6 +233,14 @@ def cmd_version(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_setup(args: argparse.Namespace) -> int:
+    """Run the setup and onboarding wizard."""
+    from jarvis.setup import run_setup
+
+    result = run_setup(check_only=args.check)
+    return 0 if result.success else 1
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     """Start the API server."""
     import uvicorn
@@ -746,6 +754,20 @@ def create_parser() -> argparse.ArgumentParser:
         formatter_class=HelpFormatter,
     )
     version_parser.set_defaults(func=cmd_version)
+
+    # Setup command
+    setup_parser = subparsers.add_parser(
+        "setup",
+        help="run the setup and onboarding wizard",
+        description="Validate environment and configure JARVIS.",
+        formatter_class=HelpFormatter,
+    )
+    setup_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="only check status without making changes",
+    )
+    setup_parser.set_defaults(func=cmd_setup)
 
     # Serve command
     serve_parser = subparsers.add_parser(

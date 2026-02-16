@@ -266,7 +266,7 @@ class TemplateMatcher:
 
     # NOTE: These thresholds can be customized via ~/.jarvis/config.json
     # See jarvis/config.py for configuration options
-    SIMILARITY_THRESHOLD = 0.7
+    SIMILARITY_THRESHOLD = 0.85
     QUERY_CACHE_SIZE = 500
 
     def __init__(self, templates: list[ResponseTemplate] | None = None) -> None:

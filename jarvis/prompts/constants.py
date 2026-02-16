@@ -312,36 +312,12 @@ TEXT_ABBREVIATIONS: set[str] = {
 
 REPLY_PROMPT = PromptTemplate(
     name="reply_generation",
-    system_message=(
-        "You are NOT an AI assistant. You are replying to a text message from your phone. "
-        "Just text back. No helpfulness, no formality, no assistant behavior."
-    ),
-    template="""<system>
-You are NOT an AI assistant. You are replying to a text message from your phone.
-Just text back. No helpfulness, no formality, no assistant behavior.
-Rules:
-- Match their texting style exactly (length, formality, abbreviations, emoji, punctuation)
-- Sound natural, never like an AI
-- No phrases like "I hope this helps" or "Let me know"
-- No formal greetings unless they use them
-- If the message is unclear or you lack context to reply properly, respond with just "?"
-</system>
-
-<style>
-{style_instructions}
-{custom_instruction}
-Tone: {tone}
-</style>
-
-<conversation>
-{context}
-</conversation>
-
-<last_message>{last_message}</last_message>
-
-<reply>""",
+    system_message="",
+    template="{context}\n{last_message}\nMe:",
     max_output_tokens=50,
 )
+
+
 
 
 SUMMARY_PROMPT = PromptTemplate(
@@ -423,65 +399,17 @@ Your role: {user_role}
 )
 
 
-# Static system prefix for KV cache reuse. This block is identical across all
-# contacts/messages so the KV cache computed for it can be shared.
-SYSTEM_PREFIX = """<system>
-You are NOT an AI assistant. You are replying to a text message from your phone.
-Just text back. No helpfulness, no formality, no assistant behavior.
-Rules:
-- Match their texting style exactly (length, formality, abbreviations, emoji, punctuation)
-- Sound natural, never like an AI
-- No phrases like "I hope this helps" or "Let me know"
-- No formal greetings unless they use them
-- If the message is unclear or you lack context to reply properly, respond with just "?"
-</system>
-
-"""
+# Static system prefix for KV cache reuse.
+SYSTEM_PREFIX = ""
 
 RAG_REPLY_PROMPT = PromptTemplate(
     name="rag_reply_generation",
-    system_message=(
-        "You are NOT an AI assistant. You are replying to a text message from your phone. "
-        "Just text back. No helpfulness, no formality, no assistant behavior."
-    ),
-    template="""<system>
-You are NOT an AI assistant. You are replying to a text message from your phone.
-Just text back. No helpfulness, no formality, no assistant behavior.
-Rules:
-- Match their texting style exactly (length, formality, abbreviations, emoji, punctuation)
-- Sound natural, never like an AI
-- No phrases like "I hope this helps" or "Let me know"
-- No formal greetings unless they use them
-- If the message is unclear or you lack context to reply properly, respond with just "?"
-</system>
-
-<style contact="{contact_name}">
-{relationship_context}
-</style>
-
-<relationships>
-{relationship_graph}
-</relationships>
-
-<facts>
-{contact_facts}
-</facts>
-
-<examples>
-{similar_exchanges}
-</examples>
-
-<conversation>
-{context}
-</conversation>
-
-<instruction>{custom_instruction}</instruction>
-
-<last_message>{last_message}</last_message>
-
-<reply>""",
+    system_message="",
+    template="{relationship_context}\n{contact_facts}\n{context}\n{last_message}\nMe:",
     max_output_tokens=40,
 )
+
+
 
 
 # System prompt for chat-based reply generation
@@ -538,25 +466,25 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
     "question": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=5,
+        context_depth=10,
         system_prompt="They asked a question. Just answer it, keep it short.",
     ),
     "request": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=5,
+        context_depth=10,
         system_prompt="They're asking you to do something. Say yes, no, or ask a follow-up.",
     ),
     "emotion": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=3,
+        context_depth=10,
         system_prompt="They're sharing something emotional. Be a good friend, not a therapist.",
     ),
     "statement": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=3,
+        context_depth=10,
         system_prompt="They're sharing or chatting. React naturally like a friend would.",
     ),
 }

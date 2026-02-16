@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
@@ -164,15 +165,44 @@ def build_generation_request(
     context.metadata["context_messages"] = context_messages
     context.metadata["relationship_profile"] = relationship_profile
     context.metadata["contact_context"] = contact_context
-    if contact and contact.display_name:
-        context.metadata.setdefault("contact_name", contact.display_name)
 
+    # Determine contact name for bot detection and style guide
+    cname = "them"
+    if contact and contact.display_name:
+        cname = contact.display_name
+    elif context.metadata.get("contact_name"):
+        cname = str(context.metadata.get("contact_name"))
+
+    # Bot/Service detection: skip irrelevant context for automated messages
+    is_bot = False
     if chat_id:
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            facts_future = pool.submit(service._fetch_contact_facts, context, chat_id)
-            graph_future = pool.submit(service._fetch_graph_context, context, chat_id)
-            facts_future.result()
-            graph_future.result()
+        # Check for shortcodes or service-like identifiers
+        identifier = chat_id.rsplit(";", 1)[-1] if ";" in chat_id else chat_id
+        if identifier.isdigit() and len(identifier) <= 6:
+            is_bot = True
+        elif any(s in cname.lower() for s in ["airline", "bank", "cvs", "uber", "doordash", "verification"]):
+            is_bot = True
+
+    if chat_id and not is_bot:
+        logger.debug("[build] Fetching context for %s...", chat_id[:12])
+        t_ctx_start = time.perf_counter()
+        
+        # Sequential fetching is safer for SQLite and memory-constrained systems
+        try:
+            service._fetch_contact_facts(context, chat_id)
+            logger.debug("[build] Facts fetched")
+        except Exception as e:
+            logger.warning("[build] Facts fetch failed: %s", e)
+            
+        try:
+            service._fetch_graph_context(context, chat_id)
+            logger.debug("[build] Graph context fetched")
+        except Exception as e:
+            logger.warning("[build] Graph fetch failed: %s", e)
+        
+        logger.debug("[build] Context fetching took %.1fms", (time.perf_counter() - t_ctx_start)*1000)
+    elif is_bot:
+        logger.debug("[build] Skipping person-specific context for bot/service chat")
 
     instruction = service._resolve_instruction(
         instruction,
@@ -180,15 +210,26 @@ def build_generation_request(
         category_config,
         classification,
     )
+    
+    # Add guidance for follow-ups if last message was from Me
+    last_is_from_me = context.is_from_me
+    if last_is_from_me:
+        followup_guidance = " Note: You spoke last. Add a follow-up or ask if they saw your message."
+        instruction = (instruction or "") + followup_guidance
+
     context.metadata["instruction"] = instruction or ""
+    context.metadata.setdefault("contact_name", cname)
 
     if len(search_results) > 3 and service.reranker:
+        logger.debug("[build] Reranking %d results...", len(search_results))
+        t_rerank_start = time.perf_counter()
         search_results = service.reranker.rerank(
             query=incoming,
             candidates=search_results,
             text_key="context_text",
             top_k=5,
         )
+        logger.debug("[build] Rerank took %.1fms", (time.perf_counter() - t_rerank_start)*1000)
 
     optimized_examples = get_optimized_examples(category_name)
     category_exchanges = [(ex.context, ex.output) for ex in optimized_examples]
@@ -208,6 +249,9 @@ def build_generation_request(
 
     if cached_embedder is None:
         cached_embedder = get_embedder()
+    
+    logger.debug("[build] Deduplicating %d examples...", len(all_exchanges))
+    t_dedupe_start = time.perf_counter()
     all_exchanges = dedupe_examples(
         service,
         examples=all_exchanges,
@@ -215,6 +259,7 @@ def build_generation_request(
         rerank_scores=all_rerank_scores,
     )
     all_exchanges = all_exchanges[:5]
+    logger.debug("[build] Dedupe took %.1fms", (time.perf_counter() - t_dedupe_start)*1000)
 
     logger.info(
         "[build] Context: %d messages, %d RAG docs, %d examples, contact=%s",

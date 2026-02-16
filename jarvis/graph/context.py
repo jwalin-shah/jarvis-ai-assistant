@@ -32,14 +32,19 @@ def get_graph_context(contact_id: str, chat_id: str) -> str:
         Compact context string, or empty string if unavailable.
     """
     parts: list[str] = []
+    
+    # Identify if this is a group chat
+    is_group = "chat" in contact_id.lower() or "chat" in chat_id.lower()
 
     # 1. Get all fact summaries (relationships, location, work, preferences, etc.)
-    try:
-        fact_summary = _get_fact_summary(contact_id)
-        if fact_summary:
-            parts.append(fact_summary)
-    except Exception as e:
-        logger.debug("Failed to get fact summary: %s", e)
+    # Skip for group chats as facts are per-person
+    if not is_group:
+        try:
+            fact_summary = _get_fact_summary(contact_id)
+            if fact_summary:
+                parts.append(fact_summary)
+        except Exception as e:
+            logger.debug("Failed to get fact summary: %s", e)
 
     # 2. Get interaction recency
     try:
@@ -50,12 +55,14 @@ def get_graph_context(contact_id: str, chat_id: str) -> str:
         logger.debug("Failed to get interaction recency: %s", e)
 
     # 3. Get shared connections (from linked contacts)
-    try:
-        connections = _get_shared_connections(contact_id)
-        if connections:
-            parts.append(connections)
-    except Exception as e:
-        logger.debug("Failed to get shared connections: %s", e)
+    # Skip for group chats
+    if not is_group:
+        try:
+            connections = _get_shared_connections(contact_id)
+            if connections:
+                parts.append(connections)
+        except Exception as e:
+            logger.debug("Failed to get shared connections: %s", e)
 
     return " ".join(parts)
 

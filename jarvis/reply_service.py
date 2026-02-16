@@ -387,6 +387,7 @@ class ReplyService:
             self._persist_reply_log(context, classification, None, result, latency_ms)
             return result
 
+        logger.debug("   [debug] Starting RAG search...")
         search_results, latency_ms = self._search_context(
             search_results,
             incoming,
@@ -395,6 +396,7 @@ class ReplyService:
             cached_embedder,
             latency_ms,
         )
+        logger.debug("   [debug] RAG search complete (%d candidates)", len(search_results))
 
         can_generate, health_reason = self.can_use_llm()
         if not can_generate:
@@ -413,6 +415,7 @@ class ReplyService:
             self._persist_reply_log(context, classification, search_results, result, latency_ms)
             return result
 
+        logger.debug("   [debug] Starting LLM generation...")
         result, latency_ms = self._generate_response(
             context,
             classification,
@@ -423,6 +426,7 @@ class ReplyService:
             latency_ms,
             instruction=instruction,
         )
+        logger.debug("   [debug] LLM generation complete")
 
         latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
         self._log_and_record_metrics(

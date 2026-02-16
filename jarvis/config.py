@@ -218,8 +218,10 @@ class ModelSettings(BaseModel):
     warm_on_startup: bool = False
     # Turbo Mode: Speculative decoding + KV cache optimization
     speculative_enabled: bool = True
-    speculative_draft_model_id: str = "lfm-0.3b-ft"
+    speculative_draft_model_id: str = "lfm-350m"
     speculative_num_draft_tokens: int = Field(default=4, ge=1, le=10)
+
+
     kv_cache_bits: int = Field(default=8, ge=2, le=16)
 
 
@@ -538,7 +540,7 @@ class JarvisConfig(BaseModel):
     """
 
     config_version: int = CONFIG_VERSION
-    model_path: str = "LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit"
+    model_path: str = "models/lfm-0.7b-4bit"
     memory_thresholds: MemoryThresholds = Field(default_factory=MemoryThresholds)
     imessage_default_limit: int = 50
     ui: UIConfig = Field(default_factory=UIConfig)

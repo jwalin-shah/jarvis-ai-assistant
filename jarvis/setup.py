@@ -294,6 +294,32 @@ class SchemaDetectorImpl:
 
         return get_query(query_name, schema_version)
 
+    def optimize_database(self, db_path: str) -> bool:
+        """Run maintenance on chat.db to ensure peak query performance.
+
+        Runs ANALYZE and PRAGMA optimize. Requires write access to the
+        directory for temp files, though chat.db is opened in read-only.
+        """
+        import sqlite3
+
+        path = Path(db_path)
+        if not path.exists():
+            return False
+
+        try:
+            # We open in read-only mode but SQLite can still run ANALYZE
+            # to populate statistics in its internal tables if permitted.
+            # Even if it can't write, PRAGMA optimize helps the current session.
+            conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=10.0)
+            cursor = conn.cursor()
+            cursor.execute("ANALYZE")
+            cursor.execute("PRAGMA optimize")
+            conn.close()
+            return True
+        except Exception as e:
+            logger.debug(f"Database optimization skipped: {e}")
+            return False
+
 
 class SetupWizard:
     """JARVIS setup and onboarding wizard.
@@ -329,6 +355,7 @@ class SetupWizard:
             SetupResult with all check results.
         """
         self._checks = []
+        self._is_check_only = check_only
         config_created = False
         config_path = None
 
@@ -443,6 +470,9 @@ class SetupWizard:
                     details=f"Found {len(schema_info.tables)} tables, fully compatible",
                 )
             )
+            # Run optimization if allowed
+            if hasattr(self, "_is_check_only") and not self._is_check_only:
+                self.schema_detector.optimize_database(str(db_path))
         elif schema_info.compatible:
             self._checks.append(
                 CheckResult(

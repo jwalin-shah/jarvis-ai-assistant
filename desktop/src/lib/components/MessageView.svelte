@@ -12,6 +12,7 @@
     removeOptimisticMessage,
     clearOptimisticMessages,
     clearPrefetchedDraft,
+    pollMessages,
   } from '../stores/conversations.svelte';
   import type { DraftSuggestion, Message } from '../types';
   import {
@@ -24,6 +25,7 @@
   import { WS_HTTP_BASE } from '../api/websocket';
   import SuggestionBar from './SuggestionBar.svelte';
   import MessageSkeleton from './MessageSkeleton.svelte';
+  import ContactHoverCard from './ContactHoverCard.svelte';
   import { MessageItem, DateHeader, ComposeArea } from './message-view';
   import { EmptyState } from './ui';
   import { MessageIcon } from './icons';
@@ -35,7 +37,30 @@
   let showDraftPanel = $state(false);
   let prefetchedSuggestions = $state<DraftSuggestion[] | undefined>(undefined);
 
+  // Contact hover state
+  let hoverCardVisible = $state(false);
+  let hoverCardX = $state(0);
+  let hoverCardY = $state(0);
+  let hoverTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function handleAvatarMouseEnter(event: MouseEvent) {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    hoverCardX = rect.left;
+    hoverCardY = rect.bottom + 8;
+    
+    if (hoverTimeout) clearTimeout(hoverTimeout);
+    hoverTimeout = setTimeout(() => {
+      hoverCardVisible = true;
+    }, 400);
+  }
+
+  function handleAvatarMouseLeave() {
+    if (hoverTimeout) clearTimeout(hoverTimeout);
+    hoverCardVisible = false;
+  }
+
   // Keyboard navigation state
+
   let focusedMessageIndex = $state(-1);
 
   // Sync with keyboard store
@@ -267,6 +292,8 @@
       if (result.success) {
         updateOptimisticMessage(optimisticId, { status: 'sent' });
         // Watcher push (handleNewMessagePush) clears optimistic when real message arrives.
+        // Proactively poll after 1.5s to catch the chat.db update from AppleScript
+        setTimeout(() => pollMessages(), 1500);
         // Safety timeout: auto-clear if watcher push doesn't arrive within 10s.
         setTimeout(() => removeOptimisticMessage(optimisticId), 10000);
       } else {
@@ -321,7 +348,7 @@
 
     // Check if at bottom
     const { scrollTop, scrollHeight, clientHeight } = container;
-    const threshold = 50;
+    const threshold = 150;
     isAtBottom = scrollHeight - scrollTop - clientHeight < threshold;
 
     if (isAtBottom) {
@@ -492,16 +519,21 @@
 
   async function scrollToBottom(instant = false) {
     await tick();
-    if (messagesContainer) {
-      messagesContainer.scrollTo({
-        top: messagesContainer.scrollHeight,
-        behavior: instant ? 'instant' : 'smooth',
-      });
-      hasNewMessagesBelow = false;
-    }
+    await tick(); // Double tick for complex layouts
+    // Short delay to ensure browser has completed layout and any images/elements are rendered
+    setTimeout(() => {
+      if (messagesContainer) {
+        messagesContainer.scrollTo({
+          top: messagesContainer.scrollHeight,
+          behavior: instant ? 'instant' : 'smooth',
+        });
+        hasNewMessagesBelow = false;
+      }
+    }, 100);
   }
 
   function handleNewMessagesClick() {
+
     const messages = conversationsStore.messages;
     visibleEndIndex = messages.length;
     visibleStartIndex = Math.max(0, messages.length - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
@@ -655,7 +687,12 @@
     </EmptyState>
   {:else}
     <div class="header">
-      <div class="avatar" class:group={conversationsStore.selectedConversation.is_group}>
+      <div 
+        class="avatar" 
+        class:group={conversationsStore.selectedConversation.is_group}
+        onmouseenter={handleAvatarMouseEnter}
+        onmouseleave={handleAvatarMouseLeave}
+      >
         {#if conversationsStore.selectedConversation.is_group}
           <svg viewBox="0 0 24 24" fill="currentColor">
             <path
@@ -676,9 +713,9 @@
         <h2>
           {conversationsStore.selectedConversation.display_name || conversationsStore.selectedConversation.participants.map(p => formatParticipant(p)).join(', ')}
         </h2>
-        <p>{conversationsStore.selectedConversation.message_count} messages</p>
       </div>
       <div class="header-actions">
+
         <button
           class="action-btn primary"
           onclick={() => {
@@ -796,8 +833,18 @@
       disabled={!conversationsStore.selectedConversation}
       sending={sendingMessage}
     />
+
+    {#if conversationsStore.selectedConversation && !conversationsStore.selectedConversation.is_group}
+      <ContactHoverCard
+        identifier={conversationsStore.selectedConversation.participants[0] || ''}
+        bind:visible={hoverCardVisible}
+        x={hoverCardX}
+        y={hoverCardY}
+      />
+    {/if}
   {/if}
 </div>
+
 
 <style>
   .message-view {
