@@ -4,7 +4,7 @@ import asyncio
 import json
 from typing import Any
 
-from websockets.server import ServerConnection
+from websockets.asyncio.server import ServerConnection
 
 
 class WebSocketWriter:
