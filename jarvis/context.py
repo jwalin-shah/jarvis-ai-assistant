@@ -60,7 +60,7 @@ class ContextFetcher:
         with ChatDBReader() as reader:
             fetcher = ContextFetcher(reader)
             context = fetcher.get_reply_context("iMessage;-;+15551234567")
-            print(context.formatted_context)
+            # Example: print(context.formatted_context)
     """
 
     def __init__(self, reader: iMessageReader, max_cached_conversations: int = 500) -> None:
