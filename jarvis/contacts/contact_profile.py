@@ -72,7 +72,7 @@ logger = logging.getLogger(__name__)
 PROFILES_DIR = Path.home() / ".jarvis" / "profiles"
 
 # Minimum messages for reliable analysis
-MIN_MESSAGES_FOR_PROFILE = 10
+MIN_MESSAGES_FOR_PROFILE = 5
 
 # Common text abbreviations
 TEXT_ABBREVIATIONS = frozenset(
@@ -537,13 +537,21 @@ class ContactProfileBuilder:
         # LLM Refinement
         relationship_reasoning = None
         # Keep high-confidence classifier output stable; only refine uncertain cases.
-        if len(messages) >= 5 and rel_confidence < 0.9:
+        if len(messages) >= 3 and rel_confidence < 0.95:
+            logger.info(
+                "Refining relationship for %s (current: %s, confidence: %.2f)",
+                contact_name or contact_id, relationship, rel_confidence
+            )
             relationship, rel_confidence, relationship_reasoning = (
                 self._refine_relationship_with_llm(
                     messages, contact_name or "Contact", relationship, rel_confidence
                 )
             )
             relationship = self._normalize_relationship_label(relationship)
+            logger.info(
+                "LLM refined relationship for %s to: %s (confidence: %.2f)",
+                contact_name or contact_id, relationship, rel_confidence
+            )
 
         # Formality (Laplace-smoothed)
         formality_score = self._compute_formality(analyze_msgs)
