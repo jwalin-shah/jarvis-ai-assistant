@@ -1072,8 +1072,9 @@ class ChatDBReader:
                     params.append(datetime_to_apple_timestamp(before))
                 params.append(limit)
 
+                # USE OPTIMIZED QUERY
                 query = get_query(
-                    "conversations",
+                    "conversations_light",
                     self._schema_version or "v14",
                     with_since_filter=since is not None,
                     with_conversations_before_filter=before is not None,
@@ -1086,34 +1087,30 @@ class ChatDBReader:
                     logger.warning(f"Query error in get_conversations: {e}")
                     return []
 
+            if not rows:
+                return []
+
+            # --- OPTIMIZATION: Batch Fetch Secondary Data ---
+            chat_rowids = [row["chat_id"] for row in rows]
+            
+            # 1. Batch fetch participants
+            participants_map = self._get_participants_batch(chat_rowids)
+            
+            # 2. Batch fetch last message text
+            last_msg_map = self._get_last_messages_batch(chat_rowids)
+
+            # 3. Warm AddressBook cache
+            self._resolve_contact_name("none")
+
             conversations = []
-
-            # --- OPTIMIZATION: Bulk Name Resolution ---
-            # Collect all unique handles that need name resolution
-            handles_to_resolve = set()
             for row in rows:
-                p_str = row["participants"] or ""
-                for p in p_str.split(","):
-                    if p.strip():
-                        normalized = normalize_phone_number(p.strip())
-                        if normalized:
-                            handles_to_resolve.add(normalized)
-
-            # Warm the cache for all handles in one go
-            if handles_to_resolve:
-                # _resolve_contact_name handles lazy loading of the full AddressBook cache
-                # so calling it once for any handle ensures the cache is hot.
-                self._resolve_contact_name(next(iter(handles_to_resolve)))
-
-            for row in rows:
-                # Parse participants
-                participants_str = row["participants"] or ""
-                participants = [
-                    normalized
-                    for p in participants_str.split(",")
-                    if p.strip() and (normalized := normalize_phone_number(p.strip())) is not None
-                ]
-
+                chat_rowid = row["chat_id"]
+                chat_guid = row["chat_guid"]
+                
+                # Use batch-fetched data
+                participants = participants_map.get(chat_rowid, [])
+                last_message_text = last_msg_map.get(chat_rowid)
+                
                 # Determine if group chat
                 is_group = len(participants) > 1
 
@@ -1123,33 +1120,25 @@ class ChatDBReader:
                 # Resolve display name from database or contacts
                 display_name = row["display_name"] or None
 
-                # IMPROVED: Resolve from hot cache (no AddressBook overhead inside loop)
                 if not display_name:
                     if not is_group and len(participants) == 1:
                         display_name = self._resolve_contact_name(participants[0])
                     elif is_group and participants:
                         # For groups, try to build a name from participants
                         resolved_names = []
-                        for p in participants[:3]:  # Try first 3
+                        for p in participants[:3]:
                             name = self._resolve_contact_name(p)
                             if name:
-                                resolved_names.append(name.split()[0])  # Just first names
+                                resolved_names.append(name.split()[0])
 
                         if resolved_names:
                             suffix = "..." if len(participants) > len(resolved_names) else ""
                             display_name = ", ".join(resolved_names) + suffix
 
-                # Get last message text (may be None if no text messages)
-                # Try text column first, fall back to parsing attributedBody
-                row_keys = row.keys()
-                last_message_text = (
-                    row["last_message_text"] if "last_message_text" in row_keys else None
-                )
-
                 conversations.append(
                     Conversation(
-                        chat_id=row["chat_id"],
-                        participants=participants,
+                        chat_id=chat_guid,
+                        participants=participants if participants else ["unknown"],
                         display_name=display_name,
                         last_message_date=last_message_date,
                         message_count=row["message_count"],
@@ -1235,6 +1224,74 @@ class ChatDBReader:
             is_group=is_group,
             last_message_text=last_message_text,
         )
+
+    def _get_participants_batch(self, chat_ids: list[int]) -> dict[int, list[str]]:
+        """Batch fetch participants for a list of chat ROWIDs."""
+        if not chat_ids:
+            return {}
+
+        placeholders = ", ".join(["?"] * len(chat_ids))
+        query = f"""
+            SELECT chat_handle_join.chat_id, handle.id
+            FROM chat_handle_join
+            JOIN handle ON chat_handle_join.handle_id = handle.ROWID
+            WHERE chat_handle_join.chat_id IN ({placeholders})
+        """
+
+        result: dict[int, list[str]] = {}
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(query, chat_ids)
+                for row in cursor.fetchall():
+                    cid = row[0]
+                    handle = normalize_phone_number(row[1]) or row[1]
+                    if cid not in result:
+                        result[cid] = []
+                    result[cid].append(handle)
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.debug(f"Error batch-fetching participants: {e}")
+
+        return result
+
+    def _get_last_messages_batch(self, chat_ids: list[int]) -> dict[int, str]:
+        """Batch fetch last message text for a list of chat ROWIDs."""
+        if not chat_ids:
+            return {}
+
+        # Using ROW_NUMBER() over partitions is expensive, so we use a simpler
+        # join on the message table using the chat_message_join last entry
+        placeholders = ", ".join(["?"] * len(chat_ids))
+        query = f"""
+            SELECT cmj.chat_id, m.text, m.attributedBody
+            FROM chat_message_join cmj
+            JOIN message m ON cmj.message_id = m.ROWID
+            WHERE cmj.chat_id IN ({placeholders})
+            AND cmj.message_date = (
+                SELECT MAX(message_date)
+                FROM chat_message_join cmj2
+                WHERE cmj2.chat_id = cmj.chat_id
+            )
+        """
+
+        result: dict[int, str] = {}
+        with self._connection_context() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(query, chat_ids)
+                for row in cursor.fetchall():
+                    cid = row[0]
+                    text = row[1]
+                    if not text and row[2]:
+                        from .parser import parse_attributed_body
+                        text = parse_attributed_body(row[2])
+                    
+                    if text:
+                        result[cid] = text
+            except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                logger.debug(f"Error batch-fetching last messages: {e}")
+
+        return result
 
     def get_messages(
         self,
@@ -1788,6 +1845,54 @@ class ChatDBReader:
 
         return result
 
+    def _prefetch_reply_rowids(self, guids: Sequence[str]) -> dict[str, int]:
+        """Batch-lookup message row IDs for a list of GUIDs.
+
+        Args:
+            guids: List of message GUIDs to resolve
+
+        Returns:
+            Dict mapping GUID -> row ID
+        """
+        if not guids:
+            return {}
+
+        # Remove duplicates and filter out GUIDs already in cache
+        unique_guids = list(set(guids))
+        result: dict[str, int] = {}
+        missing_guids = []
+
+        for guid in unique_guids:
+            cached = self._guid_to_rowid_cache.get(guid)
+            if cached is not None:
+                result[guid] = cached
+            else:
+                missing_guids.append(guid)
+
+        if not missing_guids:
+            return result
+
+        # Fetch missing GUIDs in chunks
+        chunk_size = 900
+        for i in range(0, len(missing_guids), chunk_size):
+            chunk = missing_guids[i : i + chunk_size]
+            placeholders = ", ".join(["?"] * len(chunk))
+            query = f"SELECT ROWID, guid FROM message WHERE guid IN ({placeholders})"
+
+            with self._connection_context() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(query, chunk)
+                    for row in cursor.fetchall():
+                        rid = int(row[0])
+                        guid = str(row[1])
+                        result[guid] = rid
+                        self._guid_to_rowid_cache.set(guid, rid)
+                except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
+                    logger.debug(f"Error batch-fetching reply rowids: {e}")
+
+        return result
+
     def _rows_to_messages(self, rows: Sequence[sqlite3.Row], chat_id: str) -> list[Message]:
         """Convert database rows to Message objects.
 
@@ -1816,6 +1921,14 @@ class ChatDBReader:
         # Batch-fetch attachments and reactions (2 queries instead of 2*N)
         attachments_map = self._prefetch_attachments(message_ids)
         reactions_map = self._prefetch_reactions(message_ids, id_guid_map=id_guid_map)
+        
+        # Prefetch reply row IDs
+        reply_guids = [
+            row["reply_to_guid"] 
+            for row in rows 
+            if "reply_to_guid" in row.keys() and row["reply_to_guid"]
+        ]
+        reply_map = self._prefetch_reply_rowids(reply_guids)
 
         messages = []
         for row in rows:
@@ -1825,6 +1938,7 @@ class ChatDBReader:
                     chat_id,
                     prefetched_attachments=attachments_map,
                     prefetched_reactions=reactions_map,
+                    prefetched_replies=reply_map,
                 )
                 if msg:
                     messages.append(msg)
@@ -1840,6 +1954,7 @@ class ChatDBReader:
         chat_id: str,
         prefetched_attachments: dict[int, list[Attachment]] | None = None,
         prefetched_reactions: dict[int, list[Reaction]] | None = None,
+        prefetched_replies: dict[str, int] | None = None,
     ) -> Message | None:
         """Convert a database row to a Message object.
 
@@ -1848,6 +1963,7 @@ class ChatDBReader:
             chat_id: The conversation ID
             prefetched_attachments: Pre-fetched attachments keyed by message ID
             prefetched_reactions: Pre-fetched reactions keyed by message ID
+            prefetched_replies: Pre-fetched reply row IDs keyed by GUID
 
         Returns:
             Message object, or None if message has no text and no attachments
@@ -1887,7 +2003,10 @@ class ChatDBReader:
         reply_to_id = None
         reply_to_guid = row_dict.get("reply_to_guid")
         if reply_to_guid:
-            reply_to_id = self._get_message_rowid_by_guid(reply_to_guid)
+            if prefetched_replies and reply_to_guid in prefetched_replies:
+                reply_to_id = prefetched_replies[reply_to_guid]
+            else:
+                reply_to_id = self._get_message_rowid_by_guid(reply_to_guid)
 
         reactions = self._resolve_reactions(message_id, prefetched_reactions)
         date_delivered, date_read = self._parse_receipts(row, row_dict)
