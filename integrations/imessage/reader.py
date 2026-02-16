@@ -1337,6 +1337,9 @@ class ChatDBReader:
 
                 rows = self._execute_with_fallback(cursor, query, params)
 
+            # Warm AddressBook cache before processing rows
+            self._resolve_contact_name("none")
+
             return self._rows_to_messages(rows, chat_id)
 
     @sqlite_retry()
