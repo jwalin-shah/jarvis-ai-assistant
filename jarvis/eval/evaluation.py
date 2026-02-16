@@ -564,9 +564,8 @@ class FeedbackStore:
 
     Thread-safe implementation with file-based persistence.
     Feedback is stored in JSONL format at ~/.jarvis/feedback.jsonl
-
-    TODO: This implementation should be unified with the SQL-based
-    FeedbackStore in jarvis/eval/feedback.py.
+    This store remains for evaluation/backfill workflows that operate on
+    append-only JSONL history.
     """
 
     def __init__(self, feedback_dir: Path | None = None) -> None:

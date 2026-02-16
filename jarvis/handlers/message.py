@@ -240,14 +240,27 @@ class MessageHandler(BaseHandler):
 
             confidence = float(metadata.get("confidence_score", 0.6))
             response_tokens: list[str] = []
+            accumulated = ""
 
             try:
                 async for token_data in reply_service.generator.generate_stream(request):
                     token_text = token_data["token"]
                     token_index = token_data["token_index"]
                     is_final = token_data["is_final"]
-                    response_tokens.append(token_text)
+                    accumulated += token_text
 
+                    # Stop at closing reply tag
+                    if "</reply>" in accumulated:
+                        before_tag = accumulated.split("</reply>")[0]
+                        remaining = before_tag[len("".join(response_tokens)):]
+                        if remaining:
+                            response_tokens.append(remaining)
+                            await self.send_stream_token(
+                                writer, remaining, token_index, True, request_id=request_id
+                            )
+                        break
+
+                    response_tokens.append(token_text)
                     await self.send_stream_token(
                         writer, token_text, token_index, is_final, request_id=request_id
                     )

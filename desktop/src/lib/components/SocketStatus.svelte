@@ -121,11 +121,6 @@
     text-transform: capitalize;
   }
 
-  .latency {
-    color: var(--text-secondary);
-    font-size: var(--text-xs);
-  }
-
   .details-popup {
     position: absolute;
     top: 100%;
@@ -149,10 +144,6 @@
 
   .detail-label {
     color: var(--text-secondary);
-  }
-
-  .detail-row.error .detail-value {
-    color: var(--color-error);
   }
 
   .reconnect-btn {
