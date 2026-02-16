@@ -16,6 +16,7 @@ from .api import FastAPIService
 from .base import Service, ServiceError
 from .ner import NERService
 from .socket import SocketService
+from jarvis.utils.polling import poll_until
 
 logger = logging.getLogger(__name__)
 
@@ -114,12 +115,13 @@ class ServiceManager:
                     service.start()
 
                     # Wait for service to be ready
-                    start_time = time.time()
-                    while time.time() - start_time < timeout:
-                        if service.health_check():
-                            logger.info(f"Service {service_name} is healthy")
-                            break
-                        time.sleep(1.0)
+                    if poll_until(
+                        service.health_check,
+                        timeout=timeout,
+                        interval=1.0,
+                        name=f"service {service_name}"
+                    ):
+                        logger.info(f"Service {service_name} is healthy")
                     else:
                         raise ServiceError(
                             f"Service {service_name} failed to become healthy within {timeout}s"

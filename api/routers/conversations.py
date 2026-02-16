@@ -33,6 +33,7 @@ from api.schemas import (
     SendMessageResponse,
 )
 from integrations.imessage import ChatDBReader, IMessageSender
+from jarvis.errors import ValidationError
 from jarvis.metrics import get_conversation_cache
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -583,10 +584,8 @@ async def send_message(
                 else:
                     # For individual chats, send to the recipient
                     if not message_request.recipient:
-                        raise HTTPException(
-                            status_code=400,
-                            detail="Recipient is required for individual chats",
-                        )
+                        from jarvis.errors import validation_required
+                        raise validation_required("recipient")
                     result = await run_in_threadpool(
                         sender.send_message,
                         text=message_request.text,
@@ -692,15 +691,18 @@ async def send_attachment(
     try:
         resolved = Path(attachment_request.file_path).resolve(strict=True)
         resolved.relative_to(Path.home())
-    except (ValueError, OSError):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid file path: must exist and be within home directory",
+    except (ValueError, OSError) as e:
+        raise ValidationError(
+            "Invalid file path: must exist and be within home directory",
+            field="file_path",
+            value=attachment_request.file_path,
+            cause=e
         )
     if not resolved.is_file():
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid file path: must be a regular file",
+        raise ValidationError(
+            "Invalid file path: must be a regular file",
+            field="file_path",
+            value=attachment_request.file_path
         )
 
     sender = IMessageSender()
@@ -717,10 +719,8 @@ async def send_attachment(
                     )
                 else:
                     if not attachment_request.recipient:
-                        raise HTTPException(
-                            status_code=400,
-                            detail="Recipient is required for individual chats",
-                        )
+                        from jarvis.errors import validation_required
+                        raise validation_required("recipient")
                     result = await run_in_threadpool(
                         sender.send_attachment,
                         file_path=str(resolved),

@@ -8,11 +8,10 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi.testclient import TestClient
 
-from api.dependencies import get_imessage_reader
 from api.main import app
 from contracts.imessage import Attachment, Conversation, Message, Reaction
+from tests.helpers_api import api_client_with_reader
 
 
 @pytest.fixture
@@ -111,10 +110,8 @@ def mock_reader(mock_messages, mock_conversations):
 @pytest.fixture
 def client(mock_reader):
     """Create a test client with mocked iMessage reader."""
-    app.dependency_overrides[get_imessage_reader] = lambda: mock_reader
-    client = TestClient(app, raise_server_exceptions=False)
-    yield client
-    app.dependency_overrides.clear()
+    with api_client_with_reader(app, mock_reader, raise_server_exceptions=False) as client:
+        yield client
 
 
 class TestExportConversationEndpoint:

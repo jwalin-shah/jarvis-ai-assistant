@@ -10,10 +10,11 @@ freeform output mentions the gold fact values, measuring recall only.
 Use --strict for structured FACT: line parsing (only useful for fine-tuned models).
 
 Usage:
-    uv run python scripts/eval_segment_facts.py                          # substring/loose mode (default)
+    uv run python scripts/eval_segment_facts.py                          # substring/loose mode
     uv run python scripts/eval_segment_facts.py --strict                 # strict FACT: line parsing
     uv run python scripts/eval_segment_facts.py --model lfm-0.3b --debug
-    uv run python scripts/eval_segment_facts.py --goldset training_data/segment_eval/segments_labeled_fixed.json
+    uv run python scripts/eval_segment_facts.py --goldset "
+    "training_data/segment_eval/segments_labeled_fixed.json
 """
 
 import argparse

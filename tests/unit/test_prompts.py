@@ -95,7 +95,8 @@ class TestPromptTemplates:
         assert "{context}" in REPLY_PROMPT.template
         assert "{last_message}" in REPLY_PROMPT.template
         assert "{tone}" in REPLY_PROMPT.template
-        # REPLY_PROMPT uses {style_instructions}, {custom_instruction}, {context}, {last_message}, {tone}
+        # REPLY_PROMPT uses {style_instructions}, {custom_instruction}, {context},
+        # {last_message}, {tone}
 
     def test_summary_template_defined(self):
         """Verify summary template is properly defined."""
@@ -242,7 +243,7 @@ class TestBuildReplyPrompt:
 
     def test_build_reply_prompt_includes_examples(self):
         """Test that reply prompt includes few-shot examples."""
-        result = build_reply_prompt(context="Test", last_message="Test", tone="casual")
+        _result = build_reply_prompt(context="Test", last_message="Test", tone="casual")
 
         # Examples are included via the style section and conversation format
 
@@ -277,7 +278,7 @@ class TestBuildSummaryPrompt:
 
     def test_build_summary_prompt_includes_examples(self):
         """Test that summary prompt includes few-shot examples."""
-        result = build_summary_prompt(context="Test conversation")
+        _result = build_summary_prompt(context="Test conversation")
 
         # Summary prompt includes conversation and summary sections
 
@@ -305,7 +306,7 @@ class TestBuildSearchAnswerPrompt:
 
     def test_build_search_answer_prompt_includes_examples(self):
         """Test that search answer prompt includes few-shot examples."""
-        result = build_search_answer_prompt(context="Test messages", query="Test question?")
+        _result = build_search_answer_prompt(context="Test messages", query="Test question?")
 
         # Search prompt includes conversation and question context
 

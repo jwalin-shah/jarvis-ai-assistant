@@ -1,9 +1,9 @@
 <script lang="ts">
   import { api } from "../../api/client";
-  import type { ContactProfileDetail, ContactFact, GraphNode } from "../../api/types";
+  import type { ContactProfileDetail, ContactFact, GraphNode, KnowledgeNode } from "../../api/types";
 
   interface Props {
-    node: GraphNode | null;
+    node: GraphNode | KnowledgeNode | null;
     visible: boolean;
     onClose?: (() => void) | null;
   }

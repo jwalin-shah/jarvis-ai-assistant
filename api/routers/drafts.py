@@ -15,12 +15,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from api.dependencies import get_imessage_reader
@@ -38,17 +36,25 @@ from api.schemas import (
     DraftSummaryRequest,
     DraftSummaryResponse,
     ErrorResponse,
+    RoutedReplyRequest,
+    RoutedReplyResponse,
 )
-from contracts.imessage import Message
-from contracts.models import GenerationRequest
 from integrations.imessage import ChatDBReader
-from jarvis.classifiers.cascade import classify_with_cascade
-from jarvis.classifiers.classification_result import build_classification_result
-from jarvis.contracts.pipeline import ClassificationResult, MessageContext
+from jarvis.contracts.pipeline import MessageContext
 from jarvis.errors import ModelError, iMessageQueryError
 from jarvis.model_warmer import get_warm_generator
 from jarvis.prompts import API_REPLY_EXAMPLES, API_SUMMARY_EXAMPLES
-from jarvis.search.hybrid_search import get_hybrid_searcher
+from api.services.drafts_helpers import (
+    build_summary_prompt,
+    format_messages_for_context,
+    parse_summary_response,
+    sanitize_instruction,
+)
+from api.services.drafts_pipeline import (
+    generate_summary,
+    route_reply_sync,
+    run_classification_and_search,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,153 +64,6 @@ router = APIRouter(prefix="/drafts", tags=["drafts"])
 REPLY_EXAMPLES = API_REPLY_EXAMPLES
 SUMMARY_EXAMPLES = API_SUMMARY_EXAMPLES
 
-
-def _format_messages_for_context(messages: list[Message]) -> str:
-    """Format messages as context string for RAG.
-
-    Args:
-        messages: List of messages (newest first from reader)
-
-    Returns:
-        Formatted context string with messages in chronological order
-    """
-    # Reverse to chronological order (oldest first)
-    chronological = list(reversed(messages))
-
-    lines = []
-    for msg in chronological:
-        sender = "You" if msg.is_from_me else (msg.sender_name or msg.sender)
-        lines.append(f"[{sender}]: {msg.text}")
-
-    return "\n".join(lines)
-
-
-_ALLOWED_INSTRUCTION_PATTERN = re.compile(r"^[a-zA-Z0-9 ,.'!?;:\-/()]+$")
-
-
-def _sanitize_instruction(instruction: str | None) -> str | None:
-    """Sanitize user instruction to prevent prompt injection.
-
-    Uses an allowlist approach: only alphanumeric characters and common
-    punctuation are permitted. Any instruction containing characters outside
-    the allowlist is rejected entirely.
-
-    Args:
-        instruction: Raw user instruction
-
-    Returns:
-        Sanitized instruction string, or None if empty/invalid
-    """
-    if not instruction:
-        return None
-
-    # Limit length to prevent excessive prompts
-    instruction = instruction[:200].strip()
-
-    if not instruction:
-        return None
-
-    # Allowlist: only permit safe characters (letters, digits, common punctuation)
-    if not _ALLOWED_INSTRUCTION_PATTERN.match(instruction):
-        return None
-
-    return instruction
-
-
-def _build_summary_prompt(context: str, num_messages: int) -> str:
-    """Build a prompt for conversation summarization.
-
-    Args:
-        context: Formatted conversation context
-        num_messages: Number of messages being summarized
-
-    Returns:
-        Formatted prompt string
-    """
-    return (
-        f"Summarize this conversation of {num_messages} messages. "
-        "Provide a brief summary and extract 2-4 key points.\n\n"
-        f"Conversation:\n{context}\n\n"
-        "Provide your response in this format:\n"
-        "Summary: [1-2 sentence summary]\n"
-        "Key points:\n- [point 1]\n- [point 2]"
-    )
-
-
-def _parse_summary_response(response_text: str) -> tuple[str, list[str]]:
-    """Parse the LLM summary response into summary and key points.
-
-    Handles variations in LLM output format including:
-    - "Summary: ...", "Here is the summary: ...", "**Summary:** ..."
-    - "Key points:", "Key Points:", "Here are the key points:"
-    - Bullet points with -, *, or numbered lists (1., 2.)
-
-    Args:
-        response_text: Raw LLM response
-
-    Returns:
-        Tuple of (summary, key_points). Falls back to raw text if parsing fails.
-    """
-    import re as _re
-
-    lines = response_text.strip().split("\n")
-    summary = ""
-    key_points: list[str] = []
-
-    in_key_points = False
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            continue
-
-        # Strip markdown bold markers for matching
-        clean = stripped.replace("**", "")
-        lower = clean.lower()
-
-        # Match summary line: "Summary: ...", "Here is the summary: ...", etc.
-        if not summary and not in_key_points:
-            summary_match = _re.match(
-                r"^(?:here\s+is\s+(?:the\s+)?)?summary\s*:\s*(.+)",
-                lower,
-            )
-            if summary_match:
-                # Extract from original line (preserving case) after the colon
-                colon_idx = clean.find(":")
-                if colon_idx >= 0:
-                    summary = clean[colon_idx + 1 :].strip()
-                continue
-
-        # Match key points header (case-insensitive, with optional preamble)
-        if _re.match(r"^(?:here\s+are\s+(?:the\s+)?)?key\s+points\s*:?\s*$", lower):
-            in_key_points = True
-            continue
-
-        # Extract bullet points (-, *, bullet char, or numbered)
-        if in_key_points:
-            bullet_match = _re.match(r"^[-*\u2022]\s*(.+)", stripped)
-            if bullet_match:
-                point = bullet_match.group(1).strip()
-                if point:
-                    key_points.append(point)
-                continue
-            numbered_match = _re.match(r"^\d+[.)\-]\s*(.+)", stripped)
-            if numbered_match:
-                point = numbered_match.group(1).strip()
-                if point:
-                    key_points.append(point)
-                continue
-
-    # Fallback: if structured parsing found nothing, use raw text
-    if not summary:
-        raw = response_text.strip()
-        if len(raw) > 200:
-            summary = raw[:200].rsplit(" ", 1)[0] + "..."
-        else:
-            summary = raw
-    if not key_points:
-        key_points = ["See summary for details"]
-
-    return summary, key_points
 
 
 @router.post(
@@ -346,10 +205,8 @@ async def generate_draft_reply(
         )
 
     if not messages:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No messages found for chat_id: {draft_request.chat_id}",
-        )
+        from jarvis.errors import ConversationNotFoundError
+        raise ConversationNotFoundError(f"No messages found for chat_id: {draft_request.chat_id}")
 
     # Last incoming message and thread (chronological, for RAG)
     last_message = None
@@ -366,20 +223,11 @@ async def generate_draft_reply(
 
     reply_service = get_reply_service()
 
-    def _run_classification_and_search() -> tuple[ClassificationResult, list[dict[str, Any]]]:
-        mobilization = classify_with_cascade(last_message or "")
-        classification = build_classification_result(
-            last_message or "", thread, mobilization
-        )
-        searcher = get_hybrid_searcher()
-        search_results = searcher.search(
-            query=last_message or "", limit=5, rerank=True
-        )
-        return classification, search_results
-
     try:
         classification, search_results = await run_in_threadpool(
-            _run_classification_and_search
+            run_classification_and_search,
+            last_message or "",
+            thread,
         )
     except Exception as e:
         logger.error("Classification/search failed: %s", e)
@@ -394,12 +242,14 @@ async def generate_draft_reply(
     )
 
     # Variety instructions for multiple suggestions
-    base_instruction = _sanitize_instruction(draft_request.instruction)
-    
+    base_instruction = sanitize_instruction(draft_request.instruction)
+
     variant_instructions: list[str | None] = [base_instruction]
     if draft_request.num_suggestions > 1:
         variant_instructions.append(
-            (base_instruction + " (slightly more casual)") if base_instruction else "be slightly more casual"
+            (base_instruction + " (slightly more casual)")
+            if base_instruction
+            else "be slightly more casual"
         )
     if draft_request.num_suggestions > 2:
         variant_instructions.append(
@@ -469,30 +319,6 @@ async def generate_draft_reply(
             last_message=last_message,
         ),
     )
-
-
-def _generate_summary(generator: object, prompt: str) -> str:
-    """Generate a summary synchronously.
-
-    This runs in a thread pool to avoid blocking the event loop.
-
-    Args:
-        generator: The MLX generator instance.
-        prompt: The prompt to generate from.
-
-    Returns:
-        Generated summary text.
-    """
-    gen_request = GenerationRequest(
-        prompt=prompt,
-        context_documents=[],  # Context already in prompt
-        few_shot_examples=SUMMARY_EXAMPLES,
-        max_tokens=500,
-        temperature=0.5,  # Lower temperature for more focused summary
-    )
-    response = generator.generate(gen_request)  # type: ignore[attr-defined]
-    return str(response.text) if response.text else ""
-
 
 @router.post(
     "/summarize",
@@ -623,13 +449,11 @@ async def summarize_conversation(
         )
 
     if not messages:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No messages found for chat_id: {summary_request.chat_id}",
-        )
+        from jarvis.errors import ConversationNotFoundError
+        raise ConversationNotFoundError(f"No messages found for chat_id: {summary_request.chat_id}")
 
     # Build context
-    context_text = _format_messages_for_context(messages)
+    context_text = format_messages_for_context(messages)
 
     # Determine date range (messages are newest-first)
     newest_date = messages[0].date
@@ -646,16 +470,17 @@ async def summarize_conversation(
         )
 
     # Generate summary with timeout
-    prompt = _build_summary_prompt(context_text, len(messages))
+    prompt = build_summary_prompt(context_text, len(messages))
 
     try:
         async with asyncio.timeout(get_timeout_generation()):
             response_text = await run_in_threadpool(
-                _generate_summary,
+                generate_summary,
                 generator,
                 prompt,
+                SUMMARY_EXAMPLES,
             )
-            summary, key_points = _parse_summary_response(response_text)
+            summary, key_points = parse_summary_response(response_text)
 
             # Log for traceability
             from jarvis.reply_service import get_reply_service
@@ -690,101 +515,6 @@ async def summarize_conversation(
             start=oldest_date.strftime("%Y-%m-%d"),
             end=newest_date.strftime("%Y-%m-%d"),
         ),
-    )
-
-
-# =============================================================================
-# Smart Reply (Routed) Endpoint
-# =============================================================================
-
-
-class RoutedReplyRequest(BaseModel):
-    """Request for smart routed reply generation.
-
-    Uses the ReplyRouter's simplified flow:
-    all non-empty inputs route to generation, with mobilization and
-    retrieval used as prompt context.
-    """
-
-    chat_id: str = Field(
-        ...,
-        description="Conversation ID to generate reply for",
-    )
-    last_message: str | None = Field(
-        default=None,
-        description="Override last message (uses latest from chat if not provided)",
-    )
-    instruction: str | None = Field(
-        default=None,
-        description="Reserved for future use. Currently ignored by /drafts/smart-reply.",
-    )
-    context_messages: int = Field(
-        default=10,
-        ge=1,
-        le=30,
-        description="Number of previous messages for context (1-30)",
-    )
-
-
-class RoutedReplyResponse(BaseModel):
-    """Response from smart routed reply generation.
-
-    Includes the response type ('generated' or 'clarify'),
-    confidence level, and routing metadata.
-    """
-
-    response: str = Field(
-        ...,
-        description="The generated response text",
-    )
-    response_type: Literal["generated", "clarify"] = Field(
-        ...,
-        description="How the response was produced: 'generated' or 'clarify'",
-    )
-    confidence: str = Field(
-        ...,
-        description="Confidence level: 'high', 'medium', or 'low'",
-    )
-    similarity_score: float = Field(
-        default=0.0,
-        description="Top similarity score from retrieved historical exchanges (0-1)",
-    )
-    cluster_name: str | None = Field(
-        default=None,
-        description="Legacy field retained for backward compatibility",
-    )
-    similar_triggers: list[str] | None = Field(
-        default=None,
-        description="Similar past triggers found during routing",
-    )
-    context_used: ContextInfo | None = Field(
-        default=None,
-        description="Information about the context used",
-    )
-
-
-def _route_reply_sync(
-    chat_id: str,
-    last_message: str,
-    thread_context: list[str],
-) -> dict[str, Any]:
-    """Run the router synchronously (for thread pool execution).
-
-    Args:
-        chat_id: Chat ID for contact lookup.
-        last_message: The message to respond to.
-        thread_context: Previous messages for context.
-
-    Returns:
-        Routing result dict.
-    """
-    from jarvis.router import get_reply_router
-
-    router = get_reply_router()
-    return router.route(
-        incoming=last_message,
-        chat_id=chat_id,
-        thread=thread_context,
     )
 
 
@@ -865,10 +595,8 @@ async def generate_smart_reply(
         )
 
     if not messages:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No messages found for chat_id: {routed_request.chat_id}",
-        )
+        from jarvis.errors import ConversationNotFoundError
+        raise ConversationNotFoundError(f"No messages found for chat_id: {routed_request.chat_id}")
 
     # Determine the message to respond to
     last_message = routed_request.last_message
@@ -900,7 +628,7 @@ async def generate_smart_reply(
     try:
         async with asyncio.timeout(get_timeout_generation()):
             result = await run_in_threadpool(
-                _route_reply_sync,
+                route_reply_sync,
                 routed_request.chat_id,
                 last_message,
                 thread_context,

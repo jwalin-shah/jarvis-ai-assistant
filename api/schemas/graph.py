@@ -168,3 +168,42 @@ class ExportGraphResponse(BaseModel):
     filename: str
     data: str = Field(description="Exported data (base64 for binary)")
     size_bytes: int
+
+
+class KnowledgeNodeSchema(BaseModel):
+    """Schema for a knowledge graph node (contact or entity)."""
+
+    id: str = Field(description="Unique node identifier")
+    label: str = Field(description="Display name")
+    node_type: str = Field(default="contact", description="Node type: contact or entity")
+    category: str = Field(
+        default="", description="For entities: relationship, location, work, preference, event"
+    )
+    color: str = Field(default="#8E8E93", description="Node color")
+    size: float = Field(default=12.0, description="Node size")
+    relationship_type: str = Field(
+        default="unknown", description="For contacts: relationship category"
+    )
+    message_count: int = Field(default=0, description="For contacts: total messages")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
+class KnowledgeEdgeSchema(BaseModel):
+    """Schema for a knowledge graph edge (fact relationship)."""
+
+    source: str = Field(description="Source node ID (contact)")
+    target: str = Field(description="Target node ID (entity)")
+    edge_type: str = Field(description="Predicate: lives_in, works_at, likes, etc.")
+    label: str = Field(default="", description="Display label")
+    weight: float = Field(default=1.0, description="Edge weight (confidence)")
+    category: str = Field(default="", description="Fact category")
+
+
+class KnowledgeGraphSchema(BaseModel):
+    """Schema for complete knowledge graph with facts as entity nodes."""
+
+    nodes: list[KnowledgeNodeSchema] = Field(
+        default_factory=list, description="Contact and entity nodes"
+    )
+    edges: list[KnowledgeEdgeSchema] = Field(default_factory=list, description="Fact edges")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Graph metadata")

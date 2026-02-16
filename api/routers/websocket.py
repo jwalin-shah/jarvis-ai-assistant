@@ -534,11 +534,13 @@ async def _handle_generate(
             generation_time = (time.perf_counter() - start_time) * 1000
 
             # Log for traceability
+            from jarvis.core.generation.logging import log_custom_generation
             from jarvis.reply_service import get_reply_service
 
             reply_service = get_reply_service()
             await run_in_threadpool(
-                reply_service.log_custom_generation,
+                log_custom_generation,
+                reply_service.db,
                 chat_id=data.get("chat_id"),
                 incoming_text=prompt[:200],
                 final_prompt=prompt,
@@ -629,11 +631,13 @@ async def _stream_generation(
                 model_name = generator.config.model_path
 
             # Log for traceability
+            from jarvis.core.generation.logging import log_custom_generation
             from jarvis.reply_service import get_reply_service
 
             reply_service = get_reply_service()
             await run_in_threadpool(
-                reply_service.log_custom_generation,
+                log_custom_generation,
+                reply_service.db,
                 chat_id=data.get("chat_id"),
                 incoming_text=request.prompt[:200],
                 final_prompt=request.prompt,
@@ -668,11 +672,13 @@ async def _stream_generation(
             generation_time = (time.perf_counter() - start_time) * 1000
 
             # Log for traceability
+            from jarvis.core.generation.logging import log_custom_generation
             from jarvis.reply_service import get_reply_service
 
             reply_service = get_reply_service()
             await run_in_threadpool(
-                reply_service.log_custom_generation,
+                log_custom_generation,
+                reply_service.db,
                 chat_id=data.get("chat_id"),
                 incoming_text=request.prompt[:200],
                 final_prompt=request.prompt,

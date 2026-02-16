@@ -14,9 +14,10 @@ import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel
 
 from api.dependencies import get_imessage_reader
 from api.ratelimit import RATE_LIMIT_READ, limiter
@@ -32,8 +33,54 @@ from api.services.analytics_service import (
 )
 from integrations.imessage import ChatDBReader
 from jarvis.cache import TTLCache
+from jarvis.metrics import get_template_analytics
+from models.templates import _load_templates
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+
+class TemplateAnalyticsResponse(BaseModel):
+    """Response model for template analytics summary."""
+
+    total_queries: int
+    template_hits: int
+    model_fallbacks: int
+    hit_rate_percent: float
+    cache_hit_rate: float
+    unique_templates_matched: int
+    queries_per_second: float
+    uptime_seconds: float
+
+
+class TopTemplateItem(BaseModel):
+    """A single template in the top templates list."""
+
+    template_name: str
+    match_count: int
+
+
+class MissedQueryItem(BaseModel):
+    """A single missed query entry."""
+
+    query_hash: str
+    similarity: float
+    best_template: str | None
+    timestamp: str
+
+
+class CategoryAverageItem(BaseModel):
+    """Average similarity for a template category."""
+
+    category: str
+    average_similarity: float
+
+
+class TemplateInfo(BaseModel):
+    """Information about a single template."""
+
+    name: str
+    pattern_count: int
+    sample_patterns: list[str]
 
 # Cache for analytics data with 5-minute TTL
 _analytics_cache: TTLCache | None = None
@@ -304,9 +351,9 @@ async def get_contact_stats(
     )
 
     if result is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No messages found for contact {chat_id}",
+        from jarvis.errors import GraphContactNotFoundError
+        raise GraphContactNotFoundError(
+            f"No messages found for contact {chat_id}", contact_id=chat_id
         )
 
     cache.set(cache_key, result)
@@ -499,3 +546,125 @@ async def clear_analytics_cache(request: Request) -> dict[str, str]:
     with _analytics_cache_lock:
         _analytics_cache = None
     return {"status": "ok", "message": "Analytics cache cleared"}
+
+
+# --- Template Analytics Endpoints ---
+
+
+@router.get("/templates", response_model=TemplateAnalyticsResponse)
+def get_template_analytics_summary() -> TemplateAnalyticsResponse:
+    """Get template analytics summary."""
+    analytics = get_template_analytics()
+    stats = analytics.get_stats()
+    return TemplateAnalyticsResponse(**stats)
+
+
+@router.get("/templates/top")
+def get_top_templates(limit: int = 20) -> list[TopTemplateItem]:
+    """Get most frequently matched templates."""
+    analytics = get_template_analytics()
+    top = analytics.get_top_templates(limit=limit)
+    return [TopTemplateItem(**item) for item in top]
+
+
+@router.get("/templates/missed")
+def get_missed_queries(limit: int = 50) -> list[MissedQueryItem]:
+    """Get queries that fell through to model generation."""
+    analytics = get_template_analytics()
+    missed = analytics.get_missed_queries(limit=limit)
+    return [MissedQueryItem(**item) for item in missed]
+
+
+@router.get("/templates/categories")
+def get_category_averages() -> list[CategoryAverageItem]:
+    """Get average similarity scores per template category."""
+    analytics = get_template_analytics()
+    averages = analytics.get_category_averages()
+    return [
+        CategoryAverageItem(category=cat, average_similarity=round(avg, 4))
+        for cat, avg in sorted(averages.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+
+@router.get("/templates/list")
+def list_available_templates() -> list[TemplateInfo]:
+    """List all available templates."""
+    templates = _load_templates()
+    return [
+        TemplateInfo(
+            name=t.name,
+            pattern_count=len(t.patterns),
+            sample_patterns=t.patterns[:3],
+        )
+        for t in templates
+    ]
+
+
+@router.get("/templates/coverage")
+def get_template_coverage() -> dict[str, Any]:
+    """Get overall template coverage statistics."""
+    analytics = get_template_analytics()
+    stats = analytics.get_stats()
+    templates = _load_templates()
+    total_patterns = sum(len(t.patterns) for t in templates)
+
+    return {
+        "total_templates": len(templates),
+        "total_patterns": total_patterns,
+        "responses_from_templates": stats["template_hits"],
+        "responses_from_model": stats["model_fallbacks"],
+        "coverage_percent": stats["hit_rate_percent"],
+        "template_efficiency": (
+            round(stats["template_hits"] / len(templates), 2)
+            if len(templates) > 0 and stats["template_hits"] > 0
+            else 0.0
+        ),
+    }
+
+
+@router.get("/templates/export")
+def export_raw_template_analytics() -> JSONResponse:
+    """Export raw template analytics data as JSON."""
+    analytics = get_template_analytics()
+    raw_data = analytics.export_raw()
+    return JSONResponse(
+        content=raw_data,
+        headers={"Content-Disposition": "attachment; filename=template_analytics.json"},
+    )
+
+
+@router.post("/templates/reset")
+def reset_template_analytics() -> dict[str, str]:
+    """Reset all template analytics data."""
+    analytics = get_template_analytics()
+    analytics.reset()
+    return {"status": "ok", "message": "Template analytics reset successfully"}
+
+
+@router.get("/templates/dashboard")
+def get_template_dashboard_data() -> dict[str, Any]:
+    """Get all data needed for the template analytics dashboard."""
+    analytics = get_template_analytics()
+    stats = analytics.get_stats()
+    templates = _load_templates()
+
+    return {
+        "summary": stats,
+        "top_templates": analytics.get_top_templates(limit=20),
+        "missed_queries": analytics.get_missed_queries(limit=20),
+        "category_averages": [
+            {"category": cat, "average_similarity": round(avg, 4)}
+            for cat, avg in analytics.get_category_averages().items()
+        ],
+        "coverage": {
+            "total_templates": len(templates),
+            "total_patterns": sum(len(t.patterns) for t in templates),
+            "responses_from_templates": stats["template_hits"],
+            "responses_from_model": stats["model_fallbacks"],
+            "coverage_percent": stats["hit_rate_percent"],
+        },
+        "pie_chart_data": {
+            "template_responses": stats["template_hits"],
+            "model_responses": stats["model_fallbacks"],
+        },
+    }

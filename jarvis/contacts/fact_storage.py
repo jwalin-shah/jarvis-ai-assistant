@@ -17,6 +17,7 @@ import numpy as np
 
 from jarvis.contacts.contact_profile import Fact
 from jarvis.utils.latency_tracker import track_latency
+from jarvis.utils.sqlite_retry import sqlite_retry
 
 logger = logging.getLogger(__name__)
 _SEMANTIC_DEDUPER: Any | None = None
@@ -221,6 +222,7 @@ def log_pass1_claims(
     return len(rows)
 
 
+@sqlite_retry(max_attempts=10, base_delay=0.2, max_delay=5.0)
 def save_facts(
     facts: list[Fact],
     contact_id: str,
@@ -300,29 +302,26 @@ def save_facts(
         semantic_min_batch = max(1, int(os.getenv("FACT_SEMANTIC_DEDUP_MIN_BATCH", "6")))
 
         # Skip expensive semantic search for very small batches; SQL unique keys still apply.
-        fact_embeddings = np.array([]) if return_embeddings else None
         if len(incoming_list) < semantic_min_batch:
             final_new_facts = incoming_list
             semantic_dedup_rejected = 0
-            # For small batches where we need embeddings, compute them directly
-            if return_embeddings and final_new_facts:
-                from jarvis.embedding_adapter import get_embedder
-
-                texts = [f.value or "" for f in final_new_facts]
-                fact_embeddings = get_embedder().encode(texts, normalize=True)
         else:
             deduper = _get_semantic_deduper()
             # Pass empty list for existing_facts - deduper uses vec_facts index.
-            # Request embeddings back for indexing to avoid re-computation.
+            # Request embeddings if we need them later (e.g. for index_facts)
             dedup_result = deduper.deduplicate(
                 incoming_list, [], return_embeddings=return_embeddings
             )
-            if return_embeddings:
+
+            if return_embeddings and isinstance(dedup_result, tuple):
                 final_new_facts, fact_embeddings = dedup_result
             else:
                 final_new_facts = dedup_result
+                # If we didn't ask for embeddings but somehow need them (unlikely path), empty
                 fact_embeddings = np.array([])
+
             semantic_dedup_rejected = max(0, len(incoming_list) - len(final_new_facts))
+
         inserted_count = 0
         unique_conflict_rejected = 0
 

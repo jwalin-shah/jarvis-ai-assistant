@@ -35,6 +35,7 @@ def main():
     args = parser.parse_args()
 
     db = get_db()
+    db.init_schema()
     reader = ChatDBReader()
     builder = ContactProfileBuilder(min_messages=args.min_messages)
 
@@ -44,9 +45,13 @@ def main():
             "SELECT chat_id, display_name, relationship FROM contacts WHERE chat_id IS NOT NULL"
         ).fetchall()
 
+    print(f"Database: {db.db_path}")
     print(f"Found {len(rows)} contacts in database")
     print(f"Building profiles with min_messages={args.min_messages}")
     print("=" * 60)
+
+    if not rows:
+        print("No contacts found. Run `uv run python scripts/sync_contacts.py` first.")
 
     stats = {
         "processed": 0,
@@ -64,7 +69,6 @@ def main():
     for i, row in enumerate(targets):
         chat_id = row["chat_id"]
         display_name = row["display_name"] or "Contact"
-        existing_rel = row["relationship"] or "unknown"
 
         try:
             # Check if has facts

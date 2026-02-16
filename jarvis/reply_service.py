@@ -7,7 +7,7 @@ Consolidates logic from:
 
 from __future__ import annotations
 
-import json
+import hashlib
 import logging
 import random
 import threading
@@ -36,15 +36,19 @@ from jarvis.contracts.pipeline import (
     RAGDocument,
     UrgencyLevel,
 )
+from jarvis.core.generation.confidence import (
+    UNCERTAIN_SIGNALS,
+    compute_confidence,
+    compute_example_diversity,
+)
+from jarvis.core.generation.logging import log_custom_generation, persist_reply_log
+from jarvis.core.generation.metrics import (
+    record_routing_metrics,
+)
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
 from jarvis.errors import ErrorCode, JarvisError
 from jarvis.observability.logging import log_event
-from jarvis.observability.metrics_router import (
-    RoutingMetrics,
-    get_routing_metrics_store,
-    hash_query,
-)
 from jarvis.prompts import (
     ACKNOWLEDGE_TEMPLATES,
     CLOSING_TEMPLATES,
@@ -63,7 +67,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PrecomputedContext:
-    """Optional precomputed inputs to avoid redundant work in generate_reply / prepare_streaming_context."""
+    """Optional precomputed inputs to avoid redundant work in generate_reply /"""
+    """prepare_streaming_context."""
 
     classification_result: ClassificationResult | None = None
     search_results: list[dict[str, Any]] | None = None
@@ -163,6 +168,46 @@ class ReplyService:
         return check_health()
 
     @staticmethod
+    def _compute_example_diversity(search_results: list[dict[str, Any]]) -> float:
+        """Compatibility shim for legacy callers/tests."""
+        return compute_example_diversity(search_results)
+
+    def _persist_reply_log(
+        self,
+        context: MessageContext,
+        classification: ClassificationResult,
+        search_results: list[dict[str, Any]] | None,
+        result: GenerationResponse,
+        latency_ms: dict[str, float],
+    ) -> None:
+        """Compatibility shim for legacy callers/tests."""
+        persist_reply_log(self.db, context, classification, search_results, result, latency_ms)
+
+    def log_custom_generation(
+        self,
+        chat_id: str | None,
+        incoming_text: str,
+        final_prompt: str,
+        response_text: str,
+        confidence: float = 0.5,
+        category: str = "custom",
+        rag_docs: list[dict[str, Any]] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Compatibility shim for batch tasks and external integrations."""
+        log_custom_generation(
+            self.db,
+            chat_id=chat_id,
+            incoming_text=incoming_text,
+            final_prompt=final_prompt,
+            response_text=response_text,
+            confidence=confidence,
+            category=category,
+            rag_docs=rag_docs,
+            metadata=metadata,
+        )
+
+    @staticmethod
     def _safe_float(value: Any, default: float = 0.0) -> float:
         try:
             return float(value)
@@ -223,7 +268,11 @@ class ReplyService:
         if precomputed:
             classification_result = precomputed.classification_result or classification_result
             contact = precomputed.contact if precomputed.contact is not None else contact
-            search_results = precomputed.search_results if precomputed.search_results is not None else search_results
+            search_results = (
+                precomputed.search_results
+                if precomputed.search_results is not None
+                else search_results
+            )
             cached_embedder = precomputed.cached_embedder or cached_embedder
         can_generate, health_reason = self.can_use_llm()
         if not can_generate:
@@ -307,7 +356,7 @@ class ReplyService:
     def generate_reply(
         self,
         context: MessageContext,
-        classification: ClassificationResult,
+        classification: ClassificationResult | None = None,
         search_results: list[dict[str, Any]] | None = None,
         thread: list[str] | None = None,
         contact: Contact | None = None,
@@ -319,21 +368,21 @@ class ReplyService:
         """Generate a reply from contract types.
 
         Orchestrates: validation -> template shortcut -> context search -> LLM gen -> metrics.
-        Pass precomputed to reuse classification, search, contact, or embedder and skip redundant work.
+        Pass precomputed to reuse classification, search, contact, or embedder and
+        skip redundant work.
         """
         if precomputed:
-            search_results = precomputed.search_results if precomputed.search_results is not None else search_results
+            classification = precomputed.classification_result or classification
+            search_results = (
+                precomputed.search_results
+                if precomputed.search_results is not None
+                else search_results
+            )
             contact = precomputed.contact if precomputed.contact is not None else contact
             cached_embedder = precomputed.cached_embedder or cached_embedder
         routing_start = time.perf_counter()
         latency_ms: dict[str, float] = {}
-        log_event(
-            logger,
-            "reply.generate.start",
-            level=logging.DEBUG,
-            chat_id=context.chat_id or "",
-            category=str(classification.category.value),
-        )
+
         if cached_embedder is None:
             cached_embedder = get_embedder()
 
@@ -343,6 +392,20 @@ class ReplyService:
 
         chat_id = context.chat_id or None
         thread_messages = self._resolve_thread(thread, context)
+
+        if classification is None:
+            mobilization = classify_with_cascade(incoming)
+            classification = self._build_classification_result(
+                incoming, thread_messages, mobilization
+            )
+
+        log_event(
+            logger,
+            "reply.generate.start",
+            level=logging.DEBUG,
+            chat_id=context.chat_id or "",
+            category=str(classification.category.value),
+        )
 
         category_name = str(
             classification.metadata.get("category_name", classification.category.value)
@@ -403,97 +466,9 @@ class ReplyService:
         )
 
         # Persist full generation log for traceability
-        self._persist_reply_log(context, classification, search_results, result, latency_ms)
+        persist_reply_log(self.db, context, classification, search_results, result, latency_ms)
 
         return result
-
-    def _persist_reply_log(
-        self,
-        context: MessageContext,
-        classification: ClassificationResult,
-        search_results: list[dict[str, Any]] | None,
-        result: GenerationResponse,
-        latency_ms: dict[str, float],
-    ) -> None:
-        """Persist a detailed log of the generation process for traceability."""
-        try:
-            chat_id = context.chat_id
-            contact_id = context.sender_id or chat_id
-            incoming_text = context.message_text
-
-            classification_dict = {
-                "category": classification.category.value,
-                "urgency": classification.urgency.value,
-                "confidence": classification.confidence,
-                "metadata": classification.metadata,
-            }
-
-            # RAG context: extract content and scores
-            rag_docs = []
-            if search_results:
-                for res in search_results:
-                    rag_docs.append(
-                        {
-                            "content": res.get("context_text", ""),
-                            "response": res.get("reply_text", ""),
-                            "similarity": self._safe_float(res.get("similarity")),
-                            "source": res.get("chat_id", ""),
-                        }
-                    )
-
-            final_prompt = result.metadata.get("final_prompt", "")
-
-            self.db.save_reply_log(
-                chat_id=chat_id,
-                contact_id=contact_id,
-                incoming_text=incoming_text,
-                classification_json=json.dumps(classification_dict),
-                rag_context_json=json.dumps(rag_docs),
-                final_prompt=final_prompt,
-                response_text=result.response,
-                confidence=result.confidence,
-                metadata_json=json.dumps({"latency_ms": latency_ms, "metadata": result.metadata}),
-            )
-        except Exception as e:
-            logger.debug(f"Failed to persist reply log: {e}")
-
-    def log_custom_generation(
-        self,
-        chat_id: str | None,
-        incoming_text: str,
-        final_prompt: str,
-        response_text: str,
-        confidence: float = 0.5,
-        category: str = "custom",
-        rag_docs: list[dict[str, Any]] | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Log a generation event from outside the standard reply pipeline."""
-        try:
-            classification_json = json.dumps(
-                {
-                    "category": category,
-                    "urgency": "medium",
-                    "confidence": confidence,
-                    "metadata": {},
-                }
-            )
-
-            rag_context_json = json.dumps(rag_docs or [])
-
-            self.db.save_reply_log(
-                chat_id=chat_id,
-                contact_id=chat_id,
-                incoming_text=incoming_text,
-                classification_json=classification_json,
-                rag_context_json=rag_context_json,
-                final_prompt=final_prompt,
-                response_text=response_text,
-                confidence=confidence,
-                metadata_json=json.dumps(metadata or {}),
-            )
-        except Exception as e:
-            logger.debug(f"Failed to log custom generation: {e}")
 
     def _empty_message_response(self) -> GenerationResponse:
         """Return a clarification response for empty messages."""
@@ -616,7 +591,7 @@ class ReplyService:
             default=0.0,
         )
 
-        self._record_metrics(
+        record_routing_metrics(
             incoming=incoming,
             decision="generate",
             similarity_score=similarity,
@@ -712,7 +687,7 @@ class ReplyService:
         if thread:
             context_messages = thread[-context_depth:] if context_depth > 0 else []
         elif chat_id and context_depth > 0:
-            context_messages = self.context_service.fetch_conversation_context(
+            context_messages, _ = self.context_service.fetch_conversation_context(
                 chat_id, limit=context_depth
             )
 
@@ -810,100 +785,6 @@ class ReplyService:
             max_tokens=self._max_tokens_for_pressure(pressure),
         )
 
-    # Responses that signal the model is uncertain / lacks context
-    _UNCERTAIN_SIGNALS = frozenset({"?", "??", "hm?", "what?", "huh?"})
-
-    @staticmethod
-    def _compute_confidence(
-        pressure: ResponsePressure,
-        rag_similarity: float,
-        example_diversity: float,
-        reply_length: int,
-        reply_text: str,
-        incoming_text: str = "",
-        rerank_score: float | None = None,
-    ) -> tuple[float, str]:
-        """Compute confidence level based on multiple signals.
-
-        Args:
-            pressure: Response mobilization pressure level.
-            rag_similarity: Top RAG result similarity score (0-1).
-            example_diversity: Measure of example diversity (0-1).
-            reply_length: Number of words in the reply.
-            reply_text: The actual reply text for uncertain signal detection.
-            incoming_text: Original incoming message for coherence check.
-            rerank_score: Cross-encoder rerank score from top result (0-1).
-
-        Returns:
-            Tuple of (numeric_confidence 0-1, discrete label "high"/"medium"/"low").
-        """
-        # Base confidence by pressure
-        base_confidence = {
-            ResponsePressure.HIGH: 0.85,
-            ResponsePressure.MEDIUM: 0.65,
-            ResponsePressure.LOW: 0.45,
-            ResponsePressure.NONE: 0.30,
-        }[pressure]
-
-        # Adjust based on RAG quality
-        if rag_similarity < 0.5:
-            base_confidence *= 0.8
-
-        # Boost from cross-encoder reranking (more reliable than embedding sim)
-        if rerank_score is not None and rerank_score > 0.7:
-            base_confidence = min(base_confidence * 1.1, 0.95)
-
-        # Adjust based on example diversity
-        if example_diversity < 0.3:  # All from same contact
-            base_confidence *= 0.9
-
-        # Uncertain signals only matter if very short reply + high pressure
-        if (
-            reply_length < 3
-            and pressure == ResponsePressure.HIGH
-            and reply_text.lower() in ReplyService._UNCERTAIN_SIGNALS
-        ):
-            base_confidence *= 0.7
-
-        # Coherence penalty: reply that parrots the input is low quality
-        if incoming_text and reply_text:
-            reply_lower = reply_text.lower().strip()
-            incoming_lower = incoming_text.lower().strip()
-            if reply_lower == incoming_lower or (
-                len(reply_lower) > 5 and incoming_lower.startswith(reply_lower)
-            ):
-                base_confidence *= 0.5
-
-        # Clamp to [0, 1]
-        base_confidence = max(0.0, min(base_confidence, 1.0))
-
-        # Map float to discrete level
-        if base_confidence >= 0.7:
-            label = "high"
-        elif base_confidence >= 0.45:
-            label = "medium"
-        else:
-            label = "low"
-
-        return base_confidence, label
-
-    @staticmethod
-    def _compute_example_diversity(search_results: list[dict[str, Any]]) -> float:
-        """Compute diversity of search results by unique contacts/contexts.
-
-        Args:
-            search_results: List of search result dicts.
-
-        Returns:
-            Diversity score from 0.0 (all same) to 1.0 (all unique).
-        """
-        if not search_results:
-            return 0.0
-
-        # Count unique trigger texts as proxy for diversity
-        unique_triggers = len(set(r.get("trigger_text", "") for r in search_results))
-        return min(unique_triggers / len(search_results), 1.0)
-
     def _dedupe_examples(
         self,
         examples: list[tuple[str, str]],
@@ -929,7 +810,10 @@ class ReplyService:
             return examples
 
         texts = [f"{ctx} {out}" for ctx, out in examples]
-        embeddings = embedder.encode(texts, normalize=True)
+
+        # Use content-addressable caching for dedupe embeddings
+        # This avoids recomputing embeddings for the same examples across calls
+        embeddings = self._get_cached_embeddings(texts, embedder)
 
         # Score for ordering: prefer rerank_score, fallback to context length
         scores = rerank_scores or [0.0] * len(examples)
@@ -954,6 +838,66 @@ class ReplyService:
         # Return in original order
         kept_indices.sort()
         return [examples[i] for i in kept_indices]
+
+    def _get_cached_embeddings(
+        self,
+        texts: list[str],
+        embedder: CachedEmbedder,
+    ) -> Any:
+        """Get embeddings with content-addressable caching.
+
+        Uses a simple hash-based cache to avoid recomputing embeddings
+        for the same text across multiple deduplication calls.
+
+        Args:
+            texts: List of texts to embed.
+            embedder: Embedder for computing embeddings.
+
+        Returns:
+            Array of embeddings corresponding to input texts.
+        """
+        # Use a class-level cache to persist across calls
+        if not hasattr(self, '_embedding_cache'):
+            # LRU cache with max 1000 entries (~4MB for 384-dim float32 embeddings)
+            self._embedding_cache: dict[str, Any] = {}
+            self._embedding_cache_hits = 0
+            self._embedding_cache_misses = 0
+
+        cache = self._embedding_cache
+        results: list[Any] = []
+        texts_to_encode: list[tuple[int, str]] = []
+
+        # Check cache for each text
+        for idx, text in enumerate(texts):
+            # Use hash of text as cache key
+            text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()[:32]
+            if text_hash in cache:
+                results.append((idx, cache[text_hash]))
+                self._embedding_cache_hits += 1
+            else:
+                texts_to_encode.append((idx, text))
+                self._embedding_cache_misses += 1
+
+        # Batch encode missing texts
+        if texts_to_encode:
+            missing_texts = [t for _, t in texts_to_encode]
+            new_embeddings = embedder.encode(missing_texts, normalize=True)
+
+            # Store in cache and results
+            for (idx, text), emb in zip(texts_to_encode, new_embeddings):
+                text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()[:32]
+                # Simple LRU eviction: if cache too big, clear half
+                if len(cache) >= 1000:
+                    # Clear oldest half (arbitrary but simple)
+                    keys_to_remove = list(cache.keys())[:500]
+                    for k in keys_to_remove:
+                        del cache[k]
+                cache[text_hash] = emb
+                results.append((idx, emb))
+
+        # Sort by original index and return embeddings
+        results.sort(key=lambda x: x[0])
+        return np.array([emb for _, emb in results])
 
     def _generate_llm_reply(
         self,
@@ -1005,7 +949,7 @@ class ReplyService:
             response = self.generator.generate(model_request)
             text = response.text.strip()
 
-            if text.lower() in self._UNCERTAIN_SIGNALS:
+            if text.lower() in UNCERTAIN_SIGNALS:
                 return GenerationResponse(
                     response=text,
                     confidence=0.25,
@@ -1023,7 +967,7 @@ class ReplyService:
                 if search_results
                 else 0.0
             )
-            example_diversity = self._compute_example_diversity(search_results)
+            example_diversity = compute_example_diversity(search_results)
             reply_length = len(text.split())
             rerank_score = (
                 self._safe_float(search_results[0].get("rerank_score"), default=0.0)
@@ -1031,7 +975,7 @@ class ReplyService:
                 else None
             )
 
-            confidence_score, confidence_label = self._compute_confidence(
+            confidence_score, confidence_label = compute_confidence(
                 pressure,
                 similarity,
                 example_diversity,
@@ -1098,34 +1042,6 @@ class ReplyService:
         elif mobilization.pressure == ResponsePressure.LOW:
             return "Keep the response brief and casual."
         return "A brief acknowledgment is fine."
-
-    def _record_metrics(
-        self,
-        incoming: str,
-        decision: str,
-        similarity_score: float,
-        latency_ms: dict[str, float],
-        cached_embedder: CachedEmbedder,
-        vec_candidates: int,
-        model_loaded: bool,
-    ) -> None:
-        try:
-            metrics = RoutingMetrics(
-                timestamp=time.time(),
-                query_hash=hash_query(incoming),
-                latency_ms=latency_ms,
-                embedding_computations=cached_embedder.embedding_computations,
-                vec_candidates=vec_candidates,
-                routing_decision=decision,
-                similarity_score=similarity_score,
-                cache_hit=cached_embedder.cache_hit,
-                model_loaded=model_loaded,
-                generation_time_ms=latency_ms.get("generation", 0.0),
-                tokens_per_second=0.0,
-            )
-            get_routing_metrics_store().record(metrics)
-        except Exception as e:
-            logger.debug("Metrics write failed: %s", e)
 
 
 _service: ReplyService | None = None

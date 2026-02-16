@@ -289,10 +289,10 @@ class VecSearcher:
         reply_parts = [m.text for m in segment.messages if m.is_from_me and m.text]
 
         context_text = "\n".join(context_parts) if context_parts else None
-        reply_text = "\n".join(reply_parts) if reply_parts else None
+        reply_text = "\n".join(reply_parts) if reply_parts else ""
 
-        # Skip segments with no text
-        if not context_text or not reply_text:
+        # Skip segments with no context text (need at least something to search)
+        if not context_text:
             return False
 
         try:
@@ -359,9 +359,13 @@ class VecSearcher:
 
         # Prepare batch data
         vec_chunks_batch = []
+        skipped_no_centroid = 0
+        has_reply_count = 0
+        no_reply_count = 0
 
-        for segment in segments:
+        for idx, segment in enumerate(segments):
             if segment.centroid is None or not segment.messages:
+                skipped_no_centroid += 1
                 continue
 
             # Collect context/reply text
@@ -369,11 +373,13 @@ class VecSearcher:
             reply_parts = [m.text for m in segment.messages if m.is_from_me and m.text]
 
             context_text = "\n".join(context_parts) if context_parts else None
-            reply_text = "\n".join(reply_parts) if reply_parts else None
+            reply_text = "\n".join(reply_parts) if reply_parts else ""
 
-            # Skip segments with no reply text
-            if not reply_text:
-                continue
+            # Track whether segment has user reply (for logging)
+            if reply_text:
+                has_reply_count += 1
+            else:
+                no_reply_count += 1
 
             int8_blob = self._quantize_embedding(segment.centroid)
             binary_blob = self._binarize_embedding(segment.centroid)
@@ -381,6 +387,7 @@ class VecSearcher:
             # Handle None start_time gracefully
             start_ts = segment.start_time.timestamp() if segment.start_time else 0.0
 
+            # Use segment index as unique identifier to avoid timestamp collisions
             vec_chunks_batch.append(
                 (
                     int8_blob,
@@ -392,7 +399,17 @@ class VecSearcher:
                     segment.topic_label,
                     segment.message_count,
                     binary_blob,  # Store for vec_binary insert
+                    idx,  # segment index for unique lookup key
                 )
+            )
+
+        if skipped_no_centroid:
+            logger.debug("Skipped %d segments with no centroid/messages", skipped_no_centroid)
+        if no_reply_count > 0:
+            logger.info(
+                "Indexed %d segments with reply, %d without reply (context-only)",
+                has_reply_count,
+                no_reply_count,
             )
 
         if not vec_chunks_batch:
@@ -400,53 +417,69 @@ class VecSearcher:
 
         try:
             with self.db.connection() as conn:
-                # OPTIMIZED: Use executemany for bulk insert, then fetch rowids
-                insert_sql = """
-                    INSERT INTO vec_chunks(
-                        embedding, contact_id, chat_id, source_timestamp,
-                        context_text, reply_text, topic_label, message_count
-                    ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?)
-                """
-
                 chunk_rowids: list[int] = []
-                # Use single transaction for all inserts
+
                 try:
-                    # Bulk insert all chunks at once (much faster than row-by-row)
+                    insert_sql = """
+                        INSERT INTO vec_chunks(
+                            embedding, contact_id, chat_id, source_timestamp,
+                            context_text, reply_text, topic_label, message_count
+                        ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?)
+                    """
+
+                    # Bulk insert all chunks at once
                     conn.executemany(insert_sql, [row[:8] for row in vec_chunks_batch])
 
-                    # Fetch rowids using unique key (contact_id, chat_id, source_timestamp)
-                    # Build placeholders for the query
-                    placeholders = []
-                    params = []
-                    for row in vec_chunks_batch:
-                        placeholders.append(
-                            "(contact_id = ? AND chat_id = ? AND source_timestamp = ?)"
-                        )
-                        params.extend([row[1], row[2], row[3]])
-
-                    # Fetch rowids in insertion order
-                    where_clause = " OR ".join(placeholders)
-                    cursor = conn.execute(
-                        f"""
-                        SELECT rowid, contact_id, chat_id, source_timestamp 
-                        FROM vec_chunks 
-                        WHERE {where_clause}
-                        ORDER BY rowid ASC
-                        """,
-                        params,
-                    )
-
-                    # Build a lookup map
+                    # Fetch rowids using unique composite key to avoid collisions
+                    # Use (contact_id, chat_id, source_timestamp, topic_label, message_count)
                     rowid_map = {}
-                    for row in cursor:
-                        key = (row["contact_id"], row["chat_id"], row["source_timestamp"])
-                        rowid_map[key] = row["rowid"]
+                    chunk_size = 100
+                    for i in range(0, len(vec_chunks_batch), chunk_size):
+                        batch_chunk = vec_chunks_batch[i : i + chunk_size]
+                        placeholders = []
+                        params = []
+                        for row in batch_chunk:
+                            placeholders.append(
+                                "(contact_id = ? AND chat_id = ? AND"
+                                " source_timestamp = ? AND topic_label = ? AND message_count = ?)"
+                            )
+                            params.extend([row[1], row[2], row[3], row[6], row[7]])
+
+                        where_clause = " OR ".join(placeholders)
+                        cursor = conn.execute(
+                            f"""
+                            SELECT rowid, contact_id, chat_id,
+                                source_timestamp, topic_label, message_count
+                            FROM vec_chunks
+                            WHERE {where_clause}
+                            ORDER BY rowid DESC
+                            """,
+                            params,
+                        )
+
+                        for row in cursor:
+                            key = (
+                                row["contact_id"],
+                                row["chat_id"],
+                                row["source_timestamp"],
+                                row["topic_label"],
+                                row["message_count"],
+                            )
+                            # Only store first occurrence (highest rowid due to DESC order)
+                            if key not in rowid_map:
+                                rowid_map[key] = row["rowid"]
 
                     # Get rowids in the same order as input
+                    missed = 0
                     for row in vec_chunks_batch:
-                        key = (row[1], row[2], row[3])
+                        key = (row[1], row[2], row[3], row[6], row[7])
                         if key in rowid_map:
                             chunk_rowids.append(rowid_map[key])
+                        else:
+                            missed += 1
+
+                    if missed:
+                        logger.warning("Failed to retrieve %d rowids after insert", missed)
 
                     # Commit once after all operations
                     conn.commit()
@@ -489,14 +522,18 @@ class VecSearcher:
 
                 if rowids:
                     # Delete from vec_binary by chunk_rowid
+                    # Use chunking to avoid SQLite parameter limits
                     try:
-                        placeholders = ",".join("?" * len(rowids))
-                        # SECURITY: Validate placeholders before SQL interpolation
-                        _validate_placeholders(placeholders)
-                        conn.execute(
-                            f"DELETE FROM vec_binary WHERE chunk_rowid IN ({placeholders})",
-                            rowids,
-                        )
+                        chunk_size = 500
+                        for i in range(0, len(rowids), chunk_size):
+                            batch_rowids = rowids[i : i + chunk_size]
+                            placeholders = ",".join("?" * len(batch_rowids))
+                            # SECURITY: Validate placeholders before SQL interpolation
+                            _validate_placeholders(placeholders)
+                            conn.execute(
+                                f"DELETE FROM vec_binary WHERE chunk_rowid IN ({placeholders})",
+                                batch_rowids,
+                            )
                     except Exception as e:
                         logger.debug("vec_binary delete skipped: %s", e)
 

@@ -134,7 +134,8 @@ def main():
 
         print(f"{'=' * 80}")
         print(
-            f"[{idx}/{args.limit}] {contact_name} | {turns} turns | {claim_count} parsed claims | {elapsed_ms:.0f}ms"
+            f"[{idx}/{args.limit}] {contact_name} | {turns} turns | "
+            f"{claim_count} parsed claims | {elapsed_ms:.0f}ms"
         )
         print(f"{'=' * 80}")
         print(f"INPUT ({turns} turns):")

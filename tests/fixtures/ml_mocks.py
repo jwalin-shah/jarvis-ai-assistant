@@ -223,7 +223,7 @@ class DeterministicGenerator:
 
 
 @dataclass
-class ClassificationResult:
+class MockClassificationResult:
     """Simple dataclass for classification results.
 
     Mirrors the structure of real classification results.
@@ -234,7 +234,7 @@ class ClassificationResult:
     method: str
 
     def __repr__(self) -> str:
-        return f"ClassificationResult({self.category}, conf={self.confidence:.2f})"
+        return f"MockClassificationResult({self.category}, conf={self.confidence:.2f})"
 
 
 class DeterministicClassifier:
@@ -291,7 +291,7 @@ class DeterministicClassifier:
         ),
     ]
 
-    def classify(self, text: str, **kwargs: Any) -> ClassificationResult:
+    def classify(self, text: str, **kwargs: Any) -> MockClassificationResult:
         """Classify text using deterministic rules.
 
         Args:
@@ -299,14 +299,14 @@ class DeterministicClassifier:
             **kwargs: Ignored (for API compatibility)
 
         Returns:
-            ClassificationResult with category, confidence, method
+            MockClassificationResult with category, confidence, method
         """
         for matcher, category, confidence, method in self.RULES:
             if matcher(text):
-                return ClassificationResult(category, confidence, method)
+                return MockClassificationResult(category, confidence, method)
 
         # Default fallback
-        return ClassificationResult("statement", 0.60, "fallback")
+        return MockClassificationResult("statement", 0.60, "fallback")
 
     def classify_with_scores(self, text: str, **kwargs: Any) -> list[tuple[str, float]]:
         """Return sorted list of (category, confidence) for all categories.

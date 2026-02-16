@@ -1,13 +1,16 @@
 <script lang="ts">
-  import type { GraphNode } from "../../api/types";
+  import type { GraphNode, KnowledgeNode } from "../../api/types";
 
   interface Props {
-    node: GraphNode;
+    node: GraphNode | KnowledgeNode;
     x: number;
     y: number;
   }
 
   let { node, x, y }: Props = $props();
+  
+  // Check if this is a knowledge graph entity node
+  let isEntity = $derived('node_type' in node && node.node_type === 'entity');
 
   let tooltipEl = $state<HTMLDivElement | null>(null);
 
@@ -54,7 +57,7 @@
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   }
 
-  let sentiment = $derived(formatSentiment(node.sentiment_score));
+  let sentiment = $derived(!isEntity ? formatSentiment((node as GraphNode).sentiment_score) : { text: "", color: "" });
 </script>
 
 <div class="tooltip" style={tooltipStyle} bind:this={tooltipEl}>
@@ -64,50 +67,69 @@
   </div>
 
   <div class="tooltip-content">
-    <div class="stat-row">
-      <span class="stat-label">Relationship</span>
-      <span class="stat-value capitalize">{node.relationship_type}</span>
-    </div>
-
-    <div class="stat-row">
-      <span class="stat-label">Messages</span>
-      <span class="stat-value">{node.message_count.toLocaleString()}</span>
-    </div>
-
-    <div class="stat-row">
-      <span class="stat-label">Sentiment</span>
-      <span class="stat-value" style="color: {sentiment.color}">
-        {(node.sentiment_score * 100).toFixed(0)}% ({sentiment.text})
-      </span>
-    </div>
-
-    {#if node.response_time_avg !== null}
+    {#if isEntity}
+      <!-- Entity node (knowledge graph) -->
       <div class="stat-row">
-        <span class="stat-label">Avg Response</span>
-        <span class="stat-value">{formatResponseTime(node.response_time_avg)}</span>
+        <span class="stat-label">Type</span>
+        <span class="stat-value capitalize">{('category' in node && node.category) || 'Entity'}</span>
       </div>
-    {/if}
-
-    <div class="stat-row">
-      <span class="stat-label">Last Contact</span>
-      <span class="stat-value">{formatDate(node.last_contact)}</span>
-    </div>
-
-    {#if node.cluster_id !== null}
+      {#if 'metadata' in node && node.metadata.edge_type}
+        <div class="stat-row">
+          <span class="stat-label">Relationship</span>
+          <span class="stat-value capitalize">{String(node.metadata.edge_type).replace(/_/g, ' ')}</span>
+        </div>
+      {/if}
+    {:else}
+      <!-- Contact node -->
+      {@const contactNode = node as GraphNode}
       <div class="stat-row">
-        <span class="stat-label">Cluster</span>
-        <span class="stat-value">#{node.cluster_id + 1}</span>
+        <span class="stat-label">Relationship</span>
+        <span class="stat-value capitalize">{contactNode.relationship_type}</span>
       </div>
+
+      <div class="stat-row">
+        <span class="stat-label">Messages</span>
+        <span class="stat-value">{contactNode.message_count.toLocaleString()}</span>
+      </div>
+
+      <div class="stat-row">
+        <span class="stat-label">Sentiment</span>
+        <span class="stat-value" style="color: {sentiment.color}">
+          {(contactNode.sentiment_score * 100).toFixed(0)}% ({sentiment.text})
+        </span>
+      </div>
+
+      {#if contactNode.response_time_avg !== null}
+        <div class="stat-row">
+          <span class="stat-label">Avg Response</span>
+          <span class="stat-value">{formatResponseTime(contactNode.response_time_avg)}</span>
+        </div>
+      {/if}
+
+      <div class="stat-row">
+        <span class="stat-label">Last Contact</span>
+        <span class="stat-value">{formatDate(contactNode.last_contact)}</span>
+      </div>
+
+      {#if contactNode.cluster_id !== null}
+        <div class="stat-row">
+          <span class="stat-label">Cluster</span>
+          <span class="stat-value">#{contactNode.cluster_id + 1}</span>
+        </div>
+      {/if}
     {/if}
   </div>
 
-  {#if node.metadata.sent !== undefined || node.metadata.received !== undefined}
-    <div class="tooltip-footer">
-      <div class="message-breakdown">
-        <span class="sent">Sent: {node.metadata.sent ?? 0}</span>
-        <span class="received">Received: {node.metadata.received ?? 0}</span>
+  {#if !isEntity}
+    {@const contactNode = node as GraphNode}
+    {#if contactNode.metadata.sent !== undefined || contactNode.metadata.received !== undefined}
+      <div class="tooltip-footer">
+        <div class="message-breakdown">
+          <span class="sent">Sent: {contactNode.metadata.sent ?? 0}</span>
+          <span class="received">Received: {contactNode.metadata.received ?? 0}</span>
+        </div>
       </div>
-    </div>
+    {/if}
   {/if}
 </div>
 

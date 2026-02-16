@@ -15,6 +15,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
+from jarvis.utils.backoff import AsyncConsecutiveErrorTracker
+from jarvis.utils.datetime_utils import APPLE_EPOCH_OFFSET, parse_apple_timestamp
+from jarvis.utils.async_utils import log_task_exception
+from jarvis.utils.locks import PerKeyLockManager
+from jarvis.utils.resources import safe_close
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,9 +49,6 @@ DEBOUNCE_INTERVAL = 0.05  # 50ms - very fast with FSEvents
 
 # Polling interval (fallback when FSEvents unavailable)
 POLL_INTERVAL = 2.0  # seconds
-
-# Apple epoch offset (2001-01-01 in Unix timestamp)
-APPLE_EPOCH_OFFSET = 978307200
 
 # Check if watchfiles is available
 try:
@@ -104,9 +107,7 @@ class ChatDBWatcher:
         self._chat_msg_counts: dict[str, int] = {}
         self._segment_threshold = 15
         self._segment_window = 50
-        self._resegment_locks: OrderedDict[str, asyncio.Lock] = OrderedDict()
-        self._max_resegment_locks = 100  # LRU eviction limit
-        self._resegment_locks_mutex = asyncio.Lock()  # Protect OrderedDict mutations
+        self._resegment_locks = PerKeyLockManager(max_locks=100)
         # Persistent read-only connection for rowid polling (avoids 10-50ms connect overhead)
         self._poll_conn: sqlite3.Connection | None = None
         self._poll_conn_lock = threading.Lock()  # Protects _poll_conn from stop()/query race
@@ -199,7 +200,12 @@ class ChatDBWatcher:
 
     async def _watch_fsevents(self) -> None:
         """Watch using FSEvents via watchfiles (macOS native, <100ms latency)."""
-        consecutive_errors = 0
+        tracker = AsyncConsecutiveErrorTracker(
+            base_delay=1.0,
+            max_delay=30.0,
+            max_consecutive=5,
+            name="watcher-fsevents"
+        )
 
         try:
             # Watch the Messages directory (parent of chat.db)
@@ -216,25 +222,19 @@ class ChatDBWatcher:
                         try:
                             # Debounce rapid changes
                             await self._debounced_check()
-                            consecutive_errors = 0
+                            tracker.reset()
                         except (OSError, sqlite3.OperationalError) as check_error:
-                            consecutive_errors += 1
                             logger.warning(
-                                "Transient error processing DB change (consecutive: %d): %s",
-                                consecutive_errors,
+                                "Transient error processing DB change: %s",
                                 TransientWatcherError(str(check_error)),
                             )
+                            await tracker.sleep(tracker.on_error(log_level=logging.DEBUG))
                         except Exception as check_error:
-                            consecutive_errors += 1
                             logger.warning(
-                                "Error processing DB change (consecutive: %d): %s",
-                                consecutive_errors,
+                                "Error processing DB change: %s",
                                 check_error,
                             )
-                            # Backoff on consecutive errors
-                            if consecutive_errors >= 5:
-                                backoff = min(consecutive_errors - 4, 30)
-                                await asyncio.sleep(backoff)
+                            await tracker.sleep(tracker.on_error(log_level=logging.DEBUG))
                         break
 
         except asyncio.CancelledError:
@@ -282,19 +282,23 @@ class ChatDBWatcher:
 
     async def _watch_polling(self) -> None:
         """Watch using polling (fallback method)."""
-        consecutive_errors = 0
-        backoff_delay = self._poll_interval
+        tracker = AsyncConsecutiveErrorTracker(
+            base_delay=self._poll_interval,
+            max_delay=30.0,
+            max_consecutive=1,  # Back off immediately on poll error
+            name="watcher-polling"
+        )
 
         while self._running:
             try:
-                await asyncio.sleep(backoff_delay)
-
                 if not CHAT_DB_PATH.exists():
+                    await asyncio.sleep(self._poll_interval)
                     continue
 
                 # Check if file was modified
                 current_mtime = CHAT_DB_PATH.stat().st_mtime
                 if self._last_mtime is not None and current_mtime <= self._last_mtime:
+                    await asyncio.sleep(self._poll_interval)
                     continue
 
                 self._last_mtime = current_mtime
@@ -303,28 +307,20 @@ class ChatDBWatcher:
                 await self._check_new_messages()
 
                 # Reset error counter on success
-                consecutive_errors = 0
-                backoff_delay = self._poll_interval
+                tracker.reset()
+                await asyncio.sleep(self._poll_interval)
 
             except asyncio.CancelledError:
                 break
             except (OSError, sqlite3.OperationalError) as e:
-                consecutive_errors += 1
                 logger.warning(
-                    "Transient watcher error (consecutive: %d): %s",
-                    consecutive_errors,
+                    "Transient watcher error: %s",
                     TransientWatcherError(str(e)),
                 )
-
-                # Exponential backoff: 2s, 4s, 8s, max 30s
-                backoff_delay = min(self._poll_interval * (2**consecutive_errors), 30.0)
-                await asyncio.sleep(backoff_delay)
+                await tracker.sleep(tracker.on_error())
             except Exception as e:
-                consecutive_errors += 1
-                logger.warning("Watcher error (consecutive: %d): %s", consecutive_errors, e)
-
-                backoff_delay = min(self._poll_interval * (2**consecutive_errors), 30.0)
-                await asyncio.sleep(backoff_delay)
+                logger.warning("Watcher error: %s", e)
+                await tracker.sleep(tracker.on_error())
 
     async def _check_new_messages(self) -> None:
         """Check for new messages and broadcast notifications."""
@@ -335,7 +331,7 @@ class ChatDBWatcher:
                 # Pre-index messages for semantic search in the background
                 # This ensures near-instant availability for RAG
                 task = asyncio.create_task(self._index_new_messages(new_messages))
-                task.add_done_callback(self._log_task_exception)
+                task.add_done_callback(log_task_exception)
 
             # Pre-build all payloads, then broadcast (avoids dict creation inside loop)
             for msg in new_messages:
@@ -374,7 +370,8 @@ class ChatDBWatcher:
                 for chat_id in chats:
                     queue.enqueue(
                         TaskType.FACT_EXTRACTION,
-                        # TODO: Implement adaptive sliding window that respects sentence/turn boundaries
+                        # TODO: Implement adaptive sliding window that respects
+                        # sentence/turn boundaries
                         # instead of hard 25-msg slice. See docs/design/fact_extraction_strategy.md
                         {"chat_id": chat_id, "limit": 25},  # Process small window for real-time
                     )
@@ -400,24 +397,15 @@ class ChatDBWatcher:
 
             if chats_to_resegment:
                 task = asyncio.create_task(self._resegment_chats(chats_to_resegment))
-                task.add_done_callback(self._log_task_exception)
+                task.add_done_callback(log_task_exception)
 
             # Passive feedback detection (background, non-blocking)
             if new_messages:
                 task = asyncio.create_task(self._detect_passive_feedback(new_messages))
-                task.add_done_callback(self._log_task_exception)
+                task.add_done_callback(log_task_exception)
 
         except Exception as e:
             logger.warning("Error checking new messages: %s", e)
-
-    def _log_task_exception(self, task: asyncio.Task[Any]) -> None:
-        """Log exceptions from background tasks."""
-        try:
-            task.result()
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            logger.warning("Background task failed: %s", e)
 
     async def _index_new_messages(self, messages: list[dict[str, Any]]) -> None:
         """Index new messages into vec_messages for semantic search.
@@ -605,29 +593,6 @@ class ChatDBWatcher:
         except Exception as e:
             logger.error(f"Live fact extraction pipeline failed: {e}")
 
-    async def _get_resegment_lock(self, chat_id: str) -> asyncio.Lock:
-        """Get or create a per-chat lock for serializing resegmentation.
-
-        Uses LRU eviction to prevent unbounded memory growth.
-        Thread-safe via _resegment_locks_mutex.
-        """
-        async with self._resegment_locks_mutex:
-            # Move to end if exists (LRU update)
-            if chat_id in self._resegment_locks:
-                self._resegment_locks.move_to_end(chat_id)
-                return self._resegment_locks[chat_id]
-
-            # Create new lock
-            lock = asyncio.Lock()
-            self._resegment_locks[chat_id] = lock
-
-            # Evict oldest if over limit
-            if len(self._resegment_locks) > self._max_resegment_locks:
-                oldest_key = next(iter(self._resegment_locks))
-                del self._resegment_locks[oldest_key]
-
-            return lock
-
     async def _resegment_chats(self, chat_ids: list[str]) -> None:
         """Re-segment recent messages for chats that hit the threshold.
 
@@ -636,8 +601,7 @@ class ChatDBWatcher:
         operations that corrupt the vector index.
         """
         for chat_id in chat_ids:
-            lock = await self._get_resegment_lock(chat_id)
-            async with lock:
+            async with self._resegment_locks.lock(chat_id):
                 try:
                     await asyncio.to_thread(self._do_resegment_one, chat_id)
                 except Exception as e:
@@ -655,7 +619,7 @@ class ChatDBWatcher:
         from jarvis.topics.topic_segmenter import segment_conversation
 
         try:
-            searcher = get_vec_searcher()
+            get_vec_searcher()
         except Exception as e:
             logger.debug("Cannot get vec_searcher for re-segmentation: %s", e)
             return
@@ -675,8 +639,8 @@ class ChatDBWatcher:
             if db is not None:
                 with db.connection() as conn:
                     row = conn.execute(
-                        """SELECT MAX(end_time) as last_time 
-                           FROM conversation_segments 
+                        """SELECT MAX(end_time) as last_time
+                           FROM conversation_segments
                            WHERE chat_id = ?""",
                         (chat_id,),
                     ).fetchone()
@@ -740,8 +704,8 @@ class ChatDBWatcher:
                     # Get the last segment from previous run
                     last_seg_row = conn.execute(
                         """SELECT id, segment_id, message_count, preview, end_time
-                           FROM conversation_segments 
-                           WHERE chat_id = ? 
+                           FROM conversation_segments
+                           WHERE chat_id = ?
                            ORDER BY end_time DESC LIMIT 1""",
                         (chat_id,),
                     ).fetchone()
@@ -951,8 +915,7 @@ class ChatDBWatcher:
                 # Parse Apple timestamp
                 date = None
                 if row["date"]:
-                    unix_ts = (row["date"] / 1_000_000_000) + APPLE_EPOCH_OFFSET
-                    date = datetime.fromtimestamp(unix_ts, tz=UTC).isoformat()
+                    date = parse_apple_timestamp(row["date"]).isoformat()
 
                 messages.append(
                     {

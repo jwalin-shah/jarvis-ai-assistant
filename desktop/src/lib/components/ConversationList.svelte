@@ -7,7 +7,6 @@
     togglePinChat,
     toggleArchiveChat,
   } from '../stores/conversations.svelte';
-  import { api } from '../api/client';
   import type { Conversation } from '../types';
   import ConversationSkeleton from './ConversationSkeleton.svelte';
   import {
@@ -46,6 +45,19 @@
 
   // Show archived section
   let showArchived = $state(false);
+
+  // Virtual scrolling configuration for conversation list
+  const ESTIMATED_CONVERSATION_HEIGHT = 72; // Height of each conversation item
+  const CONVERSATION_BUFFER_SIZE = 5; // Extra items to render above/below viewport
+  const MIN_VISIBLE_CONVERSATIONS = 10; // Minimum items to render
+
+  // Virtual scrolling state
+  let visibleStartIndex = $state(0);
+  let visibleEndIndex = $state(MIN_VISIBLE_CONVERSATIONS);
+  let virtualTopPadding = $state(0);
+  let virtualBottomPadding = $state(0);
+  let listContainerRef = $state<HTMLDivElement | null>(null);
+  let rafPending = $state(false);
 
   // Filter helper: matches conversation against search query
   function matchesSearch(conv: Conversation, query: string): boolean {
@@ -140,22 +152,48 @@
     };
   });
 
-  // Avatar loading with concurrency limit
+  // Avatar loading with concurrency limit and rate limiting
   const MAX_CONCURRENT_AVATARS = 3;
+  const AVATAR_LOAD_RATE_LIMIT = 10; // Max 10 avatars per second
   let activeAvatarLoads = 0;
   let avatarQueue: string[] = [];
   let avatarQueueSet = new Set<string>();
+  let avatarLoadTimestamps: number[] = []; // Track load times for rate limiting
+  
+  // Avatar cache metrics
+  let avatarCacheMetrics = $state({
+    hits: 0,
+    misses: 0,
+    errors: 0,
+    lastReset: Date.now(),
+  });
+
+  function checkRateLimit(): boolean {
+    const now = Date.now();
+    // Remove timestamps older than 1 second
+    avatarLoadTimestamps = avatarLoadTimestamps.filter(ts => now - ts < 1000);
+    return avatarLoadTimestamps.length < AVATAR_LOAD_RATE_LIMIT;
+  }
 
   async function loadAvatar(identifier: string) {
     if (avatarStates.get(identifier) === 'loading') return;
 
-    // If already cached, just mark as loaded (LRU will update recency)
+    // If already cached, count as hit and return
     if (avatarUrls.has(identifier)) {
       avatarStates.set(identifier, 'loaded');
       avatarStates = avatarStates;
       // Touch the cache to update LRU order
       const url = avatarUrls.get(identifier);
       if (url) avatarUrls.set(identifier, url);
+      // Update metrics
+      avatarCacheMetrics.hits++;
+      return;
+    }
+
+    // Check rate limit
+    if (!checkRateLimit()) {
+      // Delay and retry
+      setTimeout(() => loadAvatar(identifier), 100);
       return;
     }
 
@@ -170,6 +208,8 @@
     activeAvatarLoads++;
     avatarStates.set(identifier, 'loading');
     avatarStates = avatarStates;
+    avatarCacheMetrics.misses++;
+    avatarLoadTimestamps.push(Date.now());
 
     try {
       const response = await fetch(
@@ -193,6 +233,7 @@
       // Trigger reactivity for avatarUrls
       avatarUrls = avatarUrls;
     } catch (error) {
+      avatarCacheMetrics.errors++;
       avatarUrls.delete(identifier);
       avatarStates.set(identifier, 'error');
       avatarStates = avatarStates;
@@ -266,21 +307,87 @@
     announce(`${getDisplayName(conversations[newIndex]!)}, ${newIndex + 1} of ${conversations.length}`);
   }
 
-  let listContainerRef = $state<HTMLDivElement | null>(null);
-
   function scrollToItem(index: number) {
     tick().then(() => {
-      const item = itemRefs[index];
-      if (!item || !listContainerRef) return;
-      const containerRect = listContainerRef.getBoundingClientRect();
-      const itemRect = item.getBoundingClientRect();
-      if (itemRect.bottom > containerRect.bottom) {
-        listContainerRef.scrollTop += itemRect.bottom - containerRect.bottom;
-      } else if (itemRect.top < containerRect.top) {
-        listContainerRef.scrollTop -= containerRect.top - itemRect.top;
-      }
+      // For virtual scrolling, calculate position based on estimated height
+      if (!listContainerRef) return;
+      
+      const itemTop = index * ESTIMATED_CONVERSATION_HEIGHT;
+      const containerHeight = listContainerRef.clientHeight;
+      
+      // Update virtual scroll to include this item
+      visibleStartIndex = Math.max(0, index - CONVERSATION_BUFFER_SIZE);
+      visibleEndIndex = Math.min(
+        sortedConversations.length,
+        index + MIN_VISIBLE_CONVERSATIONS + CONVERSATION_BUFFER_SIZE
+      );
+      updateVirtualPadding();
+      
+      // Scroll to position
+      listContainerRef.scrollTo({
+        top: itemTop - containerHeight / 2 + ESTIMATED_CONVERSATION_HEIGHT / 2,
+        behavior: 'smooth'
+      });
     });
   }
+
+  function updateVirtualPadding() {
+    virtualTopPadding = visibleStartIndex * ESTIMATED_CONVERSATION_HEIGHT;
+    const totalHeight = sortedConversations.length * ESTIMATED_CONVERSATION_HEIGHT;
+    const visibleHeight = (visibleEndIndex - visibleStartIndex) * ESTIMATED_CONVERSATION_HEIGHT;
+    virtualBottomPadding = Math.max(0, totalHeight - virtualTopPadding - visibleHeight);
+  }
+
+  function calculateVisibleRange() {
+    if (!listContainerRef) return;
+    
+    const { scrollTop, clientHeight } = listContainerRef;
+    const totalConversations = sortedConversations.length;
+    
+    if (totalConversations === 0) {
+      visibleStartIndex = 0;
+      visibleEndIndex = 0;
+      virtualTopPadding = 0;
+      virtualBottomPadding = 0;
+      return;
+    }
+
+    // Calculate which items should be visible
+    const startIdx = Math.max(0, Math.floor(scrollTop / ESTIMATED_CONVERSATION_HEIGHT) - CONVERSATION_BUFFER_SIZE);
+    const visibleCount = Math.ceil(clientHeight / ESTIMATED_CONVERSATION_HEIGHT);
+    const endIdx = Math.min(
+      totalConversations,
+      startIdx + visibleCount + CONVERSATION_BUFFER_SIZE * 2
+    );
+
+    visibleStartIndex = startIdx;
+    visibleEndIndex = Math.max(endIdx, startIdx + MIN_VISIBLE_CONVERSATIONS);
+    updateVirtualPadding();
+  }
+
+  function handleScroll() {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => {
+      rafPending = false;
+      calculateVisibleRange();
+    });
+  }
+
+  // Get visible conversations slice
+  let visibleConversations = $derived(
+    sortedConversations.slice(visibleStartIndex, visibleEndIndex)
+  );
+
+  // Reset virtual scroll when conversations change significantly
+  $effect(() => {
+    // Access sortedConversations to track changes
+    const count = sortedConversations.length;
+    if (count > 0 && visibleEndIndex > count) {
+      visibleEndIndex = Math.min(MIN_VISIBLE_CONVERSATIONS, count);
+      updateVirtualPadding();
+    }
+  });
 
   function getDisplayName(conv: Conversation): string {
     if (conv.display_name) return conv.display_name;
@@ -363,8 +470,12 @@
   {:else if conversationsStore.conversations.length === 0}
     <div class="empty">No conversations found</div>
   {:else}
-    <div class="list" role="listbox" aria-label="Conversations" bind:this={listContainerRef}>
-      {#each sortedConversations as conv, index (conv.chat_id)}
+    <div class="list" role="listbox" aria-label="Conversations" bind:this={listContainerRef} onscroll={handleScroll}>
+      <!-- Virtual scroll spacer for conversations above viewport -->
+      <div class="virtual-spacer-top" style="height: {virtualTopPadding}px;"></div>
+      
+      {#each visibleConversations as conv, visibleIdx (conv.chat_id)}
+        {@const index = visibleStartIndex + visibleIdx}
         {@const identifier = getPrimaryIdentifier(conv)}
         {@const avatarUrl = identifier ? avatarUrls.get(identifier) : null}
         {@const avatarState = identifier ? avatarStates.get(identifier) : null}
@@ -433,6 +544,9 @@
           </div>
         </button>
       {/each}
+      
+      <!-- Virtual scroll spacer for conversations below viewport -->
+      <div class="virtual-spacer-bottom" style="height: {virtualBottomPadding}px;"></div>
 
       {#if archivedConversations.length > 0}
         <button class="archived-toggle" onclick={() => showArchived = !showArchived}>
@@ -571,6 +685,11 @@
   .list {
     flex: 1;
     overflow-y: auto;
+  }
+
+  .virtual-spacer-top,
+  .virtual-spacer-bottom {
+    flex-shrink: 0;
   }
 
   .conversation {

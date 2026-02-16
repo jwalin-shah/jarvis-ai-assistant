@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-import time
 from collections.abc import Callable
-from functools import wraps
 from typing import Any, TypeVar, cast
+
+from .backoff import BackoffConfig, with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -36,37 +36,27 @@ def sqlite_retry(
     Returns:
         Decorated function.
     """
+    config = BackoffConfig(
+        base_delay=base_delay,
+        max_delay=max_delay,
+        backoff_factor=backoff_factor
+    )
 
-    def decorator(func: F) -> F:
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            delay = base_delay
-            last_error: Exception | None = None
+    def is_lock_error(e: Exception) -> bool:
+        error_str = str(e).lower()
+        return "database is locked" in error_str or "busy" in error_str
 
-            for attempt in range(max_attempts):
-                try:
-                    return func(*args, **kwargs)
-                except (sqlite3.OperationalError, sqlite3.InterfaceError) as e:
-                    error_str = str(e).lower()
-                    if "database is locked" in error_str or "busy" in error_str:
-                        last_error = e
-                        if attempt < max_attempts - 1:
-                            sleep_time = min(delay, max_delay)
-                            logger.debug(
-                                f"SQLite locked/busy (attempt {attempt + 1}/{max_attempts}). "
-                                f"Retrying in {sleep_time:.2f}s..."
-                            )
-                            time.sleep(sleep_time)
-                            delay *= backoff_factor
-                            continue
-                    raise  # Re-raise if not a locking error or max attempts reached
+    def on_retry(attempt: int, e: Exception) -> None:
+        logger.debug(
+            f"SQLite locked/busy (attempt {attempt}/{max_attempts}). "
+            f"Retrying..."
+        )
 
-            # If we exhausted attempts
-            if last_error:
-                logger.error(f"SQLite operation failed after {max_attempts} attempts: {last_error}")
-                raise last_error
-            return None  # Should not be reached
+    return cast(Callable[[F], F], with_retry(
+        max_attempts=max_attempts,
+        exceptions=(sqlite3.OperationalError, sqlite3.InterfaceError),
+        config=config,
+        on_retry=on_retry,
+        predicate=is_lock_error
+    ))
 
-        return cast(F, wrapper)
-
-    return decorator

@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from starlette.concurrency import run_in_threadpool
 
 from api.dependencies import get_imessage_reader
@@ -45,19 +45,8 @@ def get_calendar_reader_dep() -> CalendarReaderImpl:
     """Get calendar reader with access check."""
     reader = get_calendar_reader()
     if not reader.check_access():
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "error": "Permission denied",
-                "message": "Calendar access is required.",
-                "instructions": [
-                    "Open System Settings",
-                    "Go to Privacy & Security > Calendars",
-                    "Enable access for your terminal application",
-                    "Restart the JARVIS API server",
-                ],
-            },
-        )
+        from jarvis.errors import calendar_permission_denied
+        raise calendar_permission_denied()
     return reader
 
 
@@ -66,19 +55,8 @@ def get_calendar_writer_dep() -> CalendarWriterImpl:
     """Get calendar writer with access check."""
     writer = get_calendar_writer()
     if not writer.check_access():
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "error": "Permission denied",
-                "message": "Calendar write access is required.",
-                "instructions": [
-                    "Open System Settings",
-                    "Go to Privacy & Security > Calendars",
-                    "Enable access for your terminal application",
-                    "Restart the JARVIS API server",
-                ],
-            },
-        )
+        from jarvis.errors import calendar_permission_denied
+        raise calendar_permission_denied()
     return writer
 
 

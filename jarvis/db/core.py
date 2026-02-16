@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from jarvis.utils.resources import safe_close
 from jarvis.cache import TTLCache
 from jarvis.db.models import JARVIS_DB_PATH
 from jarvis.db.schema import (
@@ -164,10 +165,7 @@ class JarvisDBBase:
                 except sqlite3.DatabaseError as e:
                     # Connection is stale or broken, close it
                     logger.debug("Stale connection detected, closing: %s", e)
-                    try:
-                        conn.close()
-                    except sqlite3.Error as close_err:
-                        logger.debug("Error closing stale connection: %s", close_err)
+                    safe_close(conn, name="stale db connection")
 
             self._all_connections = active_connections
 
@@ -176,16 +174,13 @@ class JarvisDBBase:
         # Close all tracked connections from all threads
         with self._connections_lock:
             for conn in self._all_connections:
+                safe_close(conn, name="db connection shutdown")
+                # Release semaphore for each closed connection
                 try:
-                    conn.close()
-                    # Release semaphore for each closed connection
-                    try:
-                        self._connection_semaphore.release()
-                    except ValueError:
-                        # Semaphore already at max value
-                        pass
-                except sqlite3.Error as e:
-                    logger.debug("Error closing connection during shutdown: %s", e)
+                    self._connection_semaphore.release()
+                except ValueError:
+                    # Semaphore already at max value
+                    pass
             self._all_connections.clear()
 
         # Clear current thread's reference

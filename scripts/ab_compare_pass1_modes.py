@@ -311,7 +311,8 @@ def _run_compare(limit: int, window: int, tier: str) -> None:
         f"{pct(strict.inferred, strict.claims):21.2f}%"
     )
     print(
-        f"{'prefilter msgs skipped':28} {legacy.prefilter_messages_skipped:22d} {strict.prefilter_messages_skipped:22d}"
+        f"{'prefilter msgs skipped':28} {legacy.prefilter_messages_skipped:22d} "
+        f"{strict.prefilter_messages_skipped:22d}"
     )
 
 

@@ -34,42 +34,86 @@
     }
   });
 
-  // Lazy loaded components
-  const Dashboard = $derived(
-    currentView === 'dashboard'
-      ? import('./lib/components/Dashboard.svelte').then((m) => m.default)
-      : null
-  );
-
-  const HealthStatus = $derived(
-    currentView === 'health'
-      ? import('./lib/components/HealthStatus.svelte').then((m) => m.default)
-      : null
-  );
-
-  const Settings = $derived(
-    currentView === 'settings'
-      ? import('./lib/components/Settings.svelte').then((m) => m.default)
-      : null
-  );
-
-  const TemplateBuilder = $derived(
-    currentView === 'templates'
-      ? import('./lib/components/TemplateBuilder.svelte').then((m) => m.default)
-      : null
-  );
-
-  const RelationshipGraph = $derived(
-    currentView === 'network'
-      ? import('./lib/components/graph/RelationshipGraph.svelte').then((m) => m.default)
-      : null
-  );
-
-  const ChatView = $derived(
-    currentView === 'chat'
-      ? import('./lib/components/ChatView.svelte').then((m) => m.default)
-      : null
-  );
+  // Lazy loaded components with error handling
+  type LazyComponent = typeof import('./lib/components/Dashboard.svelte').default;
+  
+  interface LoadState {
+    component: LazyComponent | null;
+    loading: boolean;
+    error: Error | null;
+  }
+  
+  function createLazyLoader(importFn: () => Promise<{ default: LazyComponent }>) {
+    let state: LoadState = $state({ component: null, loading: false, error: null });
+    let loaded = false;
+    
+    return {
+      get state() { return state; },
+      load: async () => {
+        if (loaded) return;
+        state.loading = true;
+        state.error = null;
+        try {
+          const module = await importFn();
+          state.component = module.default;
+          loaded = true;
+        } catch (err) {
+          state.error = err instanceof Error ? err : new Error(String(err));
+          console.error('Failed to load component:', err);
+        } finally {
+          state.loading = false;
+        }
+      },
+      reset: () => {
+        state = { component: null, loading: false, error: null };
+        loaded = false;
+      }
+    };
+  }
+  
+  const lazyLoaders = {
+    dashboard: createLazyLoader(() => import('./lib/components/Dashboard.svelte')),
+    health: createLazyLoader(() => import('./lib/components/HealthStatus.svelte')),
+    settings: createLazyLoader(() => import('./lib/components/Settings.svelte')),
+    templates: createLazyLoader(() => import('./lib/components/TemplateBuilder.svelte')),
+    network: createLazyLoader(() => import('./lib/components/graph/RelationshipGraph.svelte')),
+    chat: createLazyLoader(() => import('./lib/components/ChatView.svelte')),
+  };
+  
+  // Trigger load when view changes
+  $effect(() => {
+    if (currentView === 'dashboard') lazyLoaders.dashboard.load();
+    else if (currentView === 'health') lazyLoaders.health.load();
+    else if (currentView === 'settings') lazyLoaders.settings.load();
+    else if (currentView === 'templates') lazyLoaders.templates.load();
+    else if (currentView === 'network') lazyLoaders.network.load();
+    else if (currentView === 'chat') lazyLoaders.chat.load();
+  });
+  
+  // Derived states for templates
+  const Dashboard = $derived(lazyLoaders.dashboard.state.component);
+  const dashboardLoading = $derived(lazyLoaders.dashboard.state.loading);
+  const dashboardError = $derived(lazyLoaders.dashboard.state.error);
+  
+  const HealthStatus = $derived(lazyLoaders.health.state.component);
+  const healthLoading = $derived(lazyLoaders.health.state.loading);
+  const healthError = $derived(lazyLoaders.health.state.error);
+  
+  const Settings = $derived(lazyLoaders.settings.state.component);
+  const settingsLoading = $derived(lazyLoaders.settings.state.loading);
+  const settingsError = $derived(lazyLoaders.settings.state.error);
+  
+  const TemplateBuilder = $derived(lazyLoaders.templates.state.component);
+  const templatesLoading = $derived(lazyLoaders.templates.state.loading);
+  const templatesError = $derived(lazyLoaders.templates.state.error);
+  
+  const RelationshipGraph = $derived(lazyLoaders.network.state.component);
+  const networkLoading = $derived(lazyLoaders.network.state.loading);
+  const networkError = $derived(lazyLoaders.network.state.error);
+  
+  const ChatView = $derived(lazyLoaders.chat.state.component);
+  const chatLoading = $derived(lazyLoaders.chat.state.loading);
+  const chatError = $derived(lazyLoaders.chat.state.error);
 
   function goToNextUnread() {
     const unread = conversationsStore.unreadCounts;
@@ -319,43 +363,85 @@
 
   <ErrorBoundary>
     {#if currentView === 'dashboard'}
-      {#await Dashboard then Component}
-        <Component onNavigate={(view) => (currentView = view)} />
-      {:catch}
-        <div class="error-fallback">Failed to load Dashboard</div>
-      {/await}
+      {#if dashboardLoading}
+        <div class="loading-fallback">
+          <div class="spinner"></div>
+          <span>Loading Dashboard...</span>
+        </div>
+      {:else if dashboardError}
+        <ErrorBoundary context="dashboard" onReset={() => lazyLoaders.dashboard.reset()}>
+          <div class="error-fallback">Failed to load Dashboard</div>
+        </ErrorBoundary>
+      {:else if Dashboard}
+        <Dashboard onNavigate={(view) => (currentView = view)} />
+      {/if}
     {:else if currentView === 'health'}
-      {#await HealthStatus then Component}
-        <Component />
-      {:catch}
-        <div class="error-fallback">Failed to load Health Status</div>
-      {/await}
+      {#if healthLoading}
+        <div class="loading-fallback">
+          <div class="spinner"></div>
+          <span>Loading Health Status...</span>
+        </div>
+      {:else if healthError}
+        <ErrorBoundary context="health" onReset={() => lazyLoaders.health.reset()}>
+          <div class="error-fallback">Failed to load Health Status</div>
+        </ErrorBoundary>
+      {:else if HealthStatus}
+        <HealthStatus />
+      {/if}
     {:else if currentView === 'settings'}
-      {#await Settings then Component}
-        <Component />
-      {:catch}
-        <div class="error-fallback">Failed to load Settings</div>
-      {/await}
+      {#if settingsLoading}
+        <div class="loading-fallback">
+          <div class="spinner"></div>
+          <span>Loading Settings...</span>
+        </div>
+      {:else if settingsError}
+        <ErrorBoundary context="settings" onReset={() => lazyLoaders.settings.reset()}>
+          <div class="error-fallback">Failed to load Settings</div>
+        </ErrorBoundary>
+      {:else if Settings}
+        <Settings />
+      {/if}
     {:else if currentView === 'templates'}
-      {#await TemplateBuilder then Component}
-        <Component />
-      {:catch}
-        <div class="error-fallback">Failed to load Template Builder</div>
-      {/await}
+      {#if templatesLoading}
+        <div class="loading-fallback">
+          <div class="spinner"></div>
+          <span>Loading Templates...</span>
+        </div>
+      {:else if templatesError}
+        <ErrorBoundary context="templates" onReset={() => lazyLoaders.templates.reset()}>
+          <div class="error-fallback">Failed to load Template Builder</div>
+        </ErrorBoundary>
+      {:else if TemplateBuilder}
+        <TemplateBuilder />
+      {/if}
     {:else if currentView === 'network'}
       <div class="network-container">
-        {#await RelationshipGraph then Component}
-          <Component />
-        {:catch}
-          <div class="error-fallback">Failed to load Network Graph</div>
-        {/await}
+        {#if networkLoading}
+          <div class="loading-fallback">
+            <div class="spinner"></div>
+            <span>Loading Network Graph...</span>
+          </div>
+        {:else if networkError}
+          <ErrorBoundary context="network" onReset={() => lazyLoaders.network.reset()}>
+            <div class="error-fallback">Failed to load Network Graph</div>
+          </ErrorBoundary>
+        {:else if RelationshipGraph}
+          <RelationshipGraph />
+        {/if}
       </div>
     {:else if currentView === 'chat'}
-      {#await ChatView then Component}
-        <Component />
-      {:catch}
-        <div class="error-fallback">Failed to load Chat</div>
-      {/await}
+      {#if chatLoading}
+        <div class="loading-fallback">
+          <div class="spinner"></div>
+          <span>Loading Chat...</span>
+        </div>
+      {:else if chatError}
+        <ErrorBoundary context="chat" onReset={() => lazyLoaders.chat.reset()}>
+          <div class="error-fallback">Failed to load Chat</div>
+        </ErrorBoundary>
+      {:else if ChatView}
+        <ChatView />
+      {/if}
     {:else}
       <div class="messages-container">
         <div class="search-bar">
@@ -585,6 +671,32 @@
     }
     to {
       transform: translateX(0);
+    }
+  }
+
+  .loading-fallback {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-4);
+    color: var(--text-secondary);
+    font-size: var(--text-base);
+  }
+
+  .loading-fallback .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border-default);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
     }
   }
 

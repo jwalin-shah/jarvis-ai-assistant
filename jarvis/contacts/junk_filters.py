@@ -116,7 +116,8 @@ def is_professional_message(text: str) -> bool:
 
 
 _TAPBACK_RE = re.compile(
-    r"^(Loved|Liked|Disliked|Laughed at|Emphasized|Questioned|Reacted with a sticker to)\s+(?:\u201c|an attachment\b)",
+    r"^(Loved|Liked|Disliked|Laughed at|Emphasized|Questioned|Reacted with a sticker to)"
+    r"\s+(?:\u201c|an attachment\b)",
 )
 
 # Code snippet markers

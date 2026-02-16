@@ -38,6 +38,11 @@ class CacheBackend(ABC):
         pass
 
     @abstractmethod
+    def get_or_set(self, key: str, factory: Any, ttl: float | None = None) -> Any:
+        """Get from cache or compute via factory with single-flight protection."""
+        pass
+
+    @abstractmethod
     def stats(self) -> dict[str, Any]:
         """Get statistics for the cache backend."""
         pass

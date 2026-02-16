@@ -57,29 +57,37 @@ class ContextService:
             return self.db.get_contact_by_chat_id(chat_id)
         return None
 
-    def fetch_conversation_context(self, chat_id: str, limit: int = 10) -> list[str]:
-        """Fetch recent conversation history from iMessage."""
+    def fetch_conversation_context(
+        self, chat_id: str, limit: int = 10
+    ) -> tuple[list[str], set[str]]:
+        """Fetch recent conversation history from iMessage.
+
+        Returns:
+            Tuple of (list of formatted message strings, set of participant names).
+        """
         if not self._imessage_reader:
-            return []
+            return [], set()
 
         try:
             messages = self._imessage_reader.get_messages(chat_id, limit=limit)
             if not messages:
-                return []
+                return [], set()
 
             # Format messages for context (newest first, so reverse for chronological)
             context_messages = []
+            participants: set[str] = set()
             for msg in reversed(messages):
                 sender = "You" if msg.is_from_me else (msg.sender_name or msg.sender or "Them")
+                participants.add(sender)
                 text = msg.text or ""
                 if text:
-                    context_messages.append(f"[{sender}]: {text}")
+                    context_messages.append(f"{sender}: {text}")
 
-            return context_messages
+            return context_messages, participants
 
         except Exception as e:
             logger.warning("Failed to fetch conversation context: %s", e)
-            return []
+            return [], set()
 
     def _get_vec_searcher(self) -> VecSearcher | None:
         """Get or lazily initialize the VecSearcher."""

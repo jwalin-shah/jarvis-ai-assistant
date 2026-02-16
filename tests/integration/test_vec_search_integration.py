@@ -281,7 +281,8 @@ class TestSearchWithPairs:
             conn.execute(
                 """
                 INSERT INTO vec_chunks(
-                    embedding, contact_id, chat_id, source_timestamp, context_text, reply_text, topic_label, message_count
+                    embedding, contact_id, chat_id, source_timestamp, context_text,
+                    reply_text, topic_label, message_count
                 ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -526,7 +527,8 @@ class TestDeleteChunksForChat:
             conn.execute(
                 """
                 INSERT INTO vec_chunks(
-                    embedding, contact_id, chat_id, source_timestamp, context_text, reply_text, topic_label, message_count
+                    embedding, contact_id, chat_id, source_timestamp, context_text,
+                    reply_text, topic_label, message_count
                 ) VALUES (vec_int8(?), 0, ?, 1000.0, ?, ?, ?, 1)
                 """,
                 (int8_blob, chat_id, context_text, "reply", "general"),

@@ -30,20 +30,6 @@ _INT8_SCALE = 127.0
 _MIN_SIMILARITY = 0.3
 
 
-def _fact_to_text(fact: Fact) -> str:
-    """Convert a fact to a searchable text string.
-
-    Examples:
-        "likes_food: sushi"
-        "works_at: Google (software engineer)"
-        "is_family_of: Sarah (sister)"
-    """
-    text = f"{fact.predicate}: {fact.subject}"
-    if fact.value:
-        text += f" ({fact.value})"
-    return text
-
-
 def _quantize(embedding: np.ndarray) -> bytes:
     """Quantize float32 embedding to int8 bytes for sqlite-vec."""
     return (embedding * _INT8_SCALE).astype(np.int8).tobytes()
@@ -103,7 +89,7 @@ def index_facts(
     db = get_db()
 
     # Build searchable text for each fact
-    fact_texts = [_fact_to_text(f) for f in facts]
+    fact_texts = [f.to_searchable_text() for f in facts]
 
     # Use provided embeddings or encode fresh
     if embeddings is None:
@@ -207,7 +193,7 @@ def reindex_all_facts() -> int:
             predicate=row["predicate"],
             value=row["value"] or "",
         )
-        text = _fact_to_text(fact)
+        text = fact.to_searchable_text()
         texts.append(text)
         fact_data.append((row["id"], row["contact_id"], text))
 

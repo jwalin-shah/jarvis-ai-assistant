@@ -20,7 +20,8 @@ def evaluate_segmentation():
 
     for chat in target_chats[:3]:
         print(
-            f"\n{'=' * 80}\nSEGMENTATION CHECK: {chat.display_name} ({chat.message_count} msgs)\n{'=' * 80}"
+            f"\n{'=' * 80}\nSEGMENTATION CHECK: {chat.display_name} "
+            f"({chat.message_count} msgs)\n{'=' * 80}"
         )
 
         messages = reader.get_messages(chat.chat_id, limit=100)

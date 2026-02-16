@@ -55,6 +55,16 @@ class Fact:
     valid_until: str | None = None  # When this fact stopped being true (ISO timestamp)
     attribution: str = "contact"  # "contact", "user", or "third_party"
 
+    def to_searchable_text(self) -> str:
+        """Convert fact to a searchable text string for embedding.
+
+        Format: "{predicate}: {subject} ({value})"
+        """
+        text = f"{self.predicate}: {self.subject}"
+        if self.value:
+            text += f" ({self.value})"
+        return text
+
 
 logger = logging.getLogger(__name__)
 
@@ -587,7 +597,9 @@ class ContactProfileBuilder:
             db = get_db()
             with db.connection() as conn:
                 rows = conn.execute(
-                    "SELECT category, subject, predicate, value, confidence, extracted_at FROM contact_facts WHERE contact_id = ? ORDER BY extracted_at DESC",
+                    """SELECT category, subject, predicate, value, confidence,
+                        extracted_at FROM contact_facts WHERE contact_id = ?
+                        ORDER BY extracted_at DESC""",
                     (contact_id,),
                 ).fetchall()
                 return [dict(row) for row in rows]
@@ -627,7 +639,8 @@ class ContactProfileBuilder:
                 turns.append(f"{curr_sender}: {' '.join(curr_msgs)}")
             chat_text = "\n".join(turns)
 
-            prompt = f"""Analyze this chat and determine the relationship between User and {contact_name}.
+            prompt = f"""Analyze this chat and determine the relationship between
+User and {contact_name}.
 Categories: family, close friend, coworker, acquaintance, romantic partner.
 
 Chat:

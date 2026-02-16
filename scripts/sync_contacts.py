@@ -59,8 +59,9 @@ def main():
                     existing_name = row["display_name"]
                     if existing_name != display_name and not args.dry_run:
                         conn.execute(
-                            """UPDATE contacts 
-                               SET display_name = ?, phone_or_email = ?, updated_at = CURRENT_TIMESTAMP
+                            """UPDATE contacts
+                               SET display_name = ?, phone_or_email = ?,
+                                   updated_at = CURRENT_TIMESTAMP
                                WHERE chat_id = ?""",
                             (display_name, phone_or_email, chat_id),
                         )
@@ -73,7 +74,7 @@ def main():
                     # New contact
                     if not args.dry_run:
                         conn.execute(
-                            """INSERT INTO contacts 
+                            """INSERT INTO contacts
                                (chat_id, display_name, phone_or_email, created_at, updated_at)
                                VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
                             (chat_id, display_name, phone_or_email),

@@ -3,14 +3,77 @@ from __future__ import annotations
 import functools
 import logging
 from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Any, TypeVar
-
-if TYPE_CHECKING:
-    from jarvis.socket_server import JarvisSocketServer
-
-logger = logging.getLogger(__name__)
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from jarvis.errors import ErrorCode, JarvisError
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
+
+class PrefetchManagerProtocol(Protocol):
+    def get_draft(self, chat_id: str) -> dict[str, Any] | None: ...
+    def get_stats(self) -> dict[str, Any]: ...
+    def invalidate(self, chat_id: str | None = None) -> None: ...
+    def record_event(self, event_type: str, chat_id: str) -> None: ...
+    def pause(self) -> None: ...
+    def resume(self) -> None: ...
+
+
+class ContextServiceProtocol(Protocol):
+    def fetch_conversation_context(
+        self,
+        chat_id: str,
+        limit: int = 20,
+    ) -> tuple[list[str], set[str]]: ...
+
+
+class ReplyServiceProtocol(Protocol):
+    context_service: ContextServiceProtocol
+    generator: Any
+
+    def prepare_streaming_context(
+        self,
+        incoming: str,
+        thread: list[str] | None = None,
+        chat_id: str | None = None,
+        instruction: str | None = None,
+    ) -> tuple[Any, dict[str, Any]]: ...
+
+
+class HandlerServerProtocol(Protocol):
+    models_ready: bool
+
+    def register(
+        self,
+        name: str,
+        handler: Callable[..., Coroutine[Any, Any, Any]],
+        streaming: bool = False,
+    ) -> None: ...
+
+    def get_rpc_handler(self, name: str) -> Callable[..., Awaitable[Any]] | None: ...
+    def get_prefetch_manager(self) -> PrefetchManagerProtocol | None: ...
+    def get_reply_service(self) -> ReplyServiceProtocol: ...
+    def pause_prefetch(self) -> None: ...
+    def resume_prefetch(self) -> None: ...
+
+    async def send_stream_token(
+        self,
+        writer: Any,
+        token: str,
+        token_index: int,
+        is_final: bool = False,
+        request_id: Any = None,
+    ) -> None: ...
+
+    async def send_stream_response(
+        self,
+        writer: Any,
+        request_id: Any,
+        result: dict[str, Any],
+    ) -> None: ...
+
+logger = logging.getLogger(__name__)
 
 # Standard JSON-RPC error codes
 PARSE_ERROR = -32700
@@ -73,13 +136,13 @@ class BaseHandler:
     modular.
     """
 
-    def __init__(self, server: JarvisSocketServer) -> None:
+    def __init__(self, server: HandlerServerProtocol) -> None:
         """Initialize the handler.
 
         Args:
             server: The JarvisSocketServer instance.
         """
-        self.server = server
+        self.server: HandlerServerProtocol = server
 
     def register(self) -> None:
         """Register the handler's methods with the server.
@@ -88,3 +151,33 @@ class BaseHandler:
         for each RPC method they provide.
         """
         raise NotImplementedError("Subclasses must implement register()")
+
+    async def send_stream_token(
+        self,
+        writer: Any,
+        token: str,
+        token_index: int,
+        is_final: bool = False,
+        request_id: Any = None,
+    ) -> None:
+        """Helper to send a streaming token to the client."""
+        await self.server.send_stream_token(
+            writer=writer,
+            token=token,
+            token_index=token_index,
+            is_final=is_final,
+            request_id=request_id,
+        )
+
+    async def send_stream_response(
+        self,
+        writer: Any,
+        request_id: Any,
+        result: dict[str, Any],
+    ) -> None:
+        """Helper to send the final streaming response to the client."""
+        await self.server.send_stream_response(
+            writer=writer,
+            request_id=request_id,
+            result=result,
+        )

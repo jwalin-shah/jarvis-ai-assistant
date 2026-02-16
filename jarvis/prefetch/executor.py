@@ -29,6 +29,9 @@ from typing import Any
 from jarvis.observability.logging import log_event
 from jarvis.prefetch.cache import CacheTier, MultiTierCache, get_cache
 from jarvis.prefetch.predictor import Prediction, PredictionPriority, PredictionType
+from jarvis.utils.backoff import ConsecutiveErrorTracker
+from jarvis.utils.error_handling import silence_exceptions
+from jarvis.prefetch.handlers import PrefetchHandler as BasePrefetchHandler
 
 logger = logging.getLogger(__name__)
 
@@ -280,12 +283,21 @@ class PrefetchExecutor:
 
     def _register_default_handlers(self) -> None:
         """Register default prefetch handlers."""
-        self.register_handler(PredictionType.DRAFT_REPLY, self._handle_draft_reply)
-        self.register_handler(PredictionType.EMBEDDING, self._handle_embedding)
-        self.register_handler(PredictionType.CONTACT_PROFILE, self._handle_contact_profile)
-        self.register_handler(PredictionType.MODEL_WARM, self._handle_model_warm)
-        self.register_handler(PredictionType.SEARCH_RESULTS, self._handle_search_results)
-        self.register_handler(PredictionType.VEC_INDEX, self._handle_vec_index)
+        from .handlers_impl import (
+            ContactProfileHandler,
+            DraftReplyHandler,
+            EmbeddingHandler,
+            ModelWarmHandler,
+            SearchResultsHandler,
+            VecIndexHandler,
+        )
+
+        self.register_handler(PredictionType.DRAFT_REPLY, DraftReplyHandler())
+        self.register_handler(PredictionType.EMBEDDING, EmbeddingHandler())
+        self.register_handler(PredictionType.CONTACT_PROFILE, ContactProfileHandler())
+        self.register_handler(PredictionType.MODEL_WARM, ModelWarmHandler())
+        self.register_handler(PredictionType.SEARCH_RESULTS, SearchResultsHandler())
+        self.register_handler(PredictionType.VEC_INDEX, VecIndexHandler())
 
     def _get_reader(self) -> Any:
         """Get or create the shared ChatDBReader instance.
@@ -535,7 +547,12 @@ class PrefetchExecutor:
 
     def _worker_loop(self) -> None:
         """Main worker loop that processes tasks."""
-        consecutive_errors = 0
+        tracker = ConsecutiveErrorTracker(
+            base_delay=self._tick_interval,
+            max_delay=5.0,
+            max_consecutive=5,
+            name="prefetch-worker"
+        )
 
         while not self._shutdown_event.is_set():
             try:
@@ -568,20 +585,13 @@ class PrefetchExecutor:
                     self._executor.submit(self._execute_task, task)
 
                 # Reset error counter on success
-                consecutive_errors = 0
+                tracker.reset()
 
             except (KeyboardInterrupt, SystemExit):
                 raise
             except Exception as e:
-                consecutive_errors += 1
-                logger.exception(f"Worker loop error (consecutive: {consecutive_errors}): {e}")
-
-                # Add backoff delay if consecutive errors exceed threshold
-                if consecutive_errors >= 5:
-                    backoff_delay = min((consecutive_errors - 4) * self._tick_interval, 5.0)
-                    time.sleep(backoff_delay)
-                else:
-                    time.sleep(self._tick_interval)
+                logger.exception(f"Worker loop error: {e}")
+                time.sleep(tracker.on_error(log_level=logging.DEBUG))
 
     def _execute_task(self, task: PrefetchTask) -> None:
         """Execute a single prefetch task.
@@ -684,268 +694,6 @@ class PrefetchExecutor:
         # Low priority to L3
         return CacheTier.L3
 
-    # ========== Default Handlers ==========
-
-    def _handle_draft_reply(self, prediction: Prediction) -> dict[str, Any] | None:
-        """Generate and cache a draft reply.
-
-        Args:
-            prediction: Prediction with chat_id in params.
-
-        Returns:
-            Draft reply data or None.
-        """
-        chat_id = prediction.params.get("chat_id")
-        if not chat_id:
-            return None
-
-        try:
-            # Import router lazily to avoid circular imports
-            from jarvis.router import get_reply_router
-
-            router = get_reply_router()
-
-            # Get recent messages using shared reader (thread-safe via connection pool)
-            reader = self._get_reader()
-            messages = reader.get_messages(chat_id, limit=10)
-
-            if not messages:
-                return None
-
-            # Find last incoming message
-            last_incoming = None
-            for msg in messages:
-                if not msg.is_from_me and msg.text:
-                    last_incoming = msg.text
-                    break
-
-            if not last_incoming:
-                return None
-
-            # Route and generate reply draft.
-            # GPU operations (embedding encode, LLM generate) acquire
-            # MLXModelLoader._mlx_load_lock internally, so no outer lock needed.
-            # Holding the lock here would block ALL GPU ops for the entire
-            # route() duration (1-5s), including CPU-only work (classification,
-            # contact lookup, RAG search, prompt building).
-            result = router.route(
-                incoming=last_incoming,
-                chat_id=chat_id,
-                conversation_messages=messages,
-            )
-
-            confidence = float(result.get("confidence_score", 0.6))
-
-            # GATING DISABLED for testing - always show prefetch drafts
-            # from jarvis.socket_server import DRAFT_CONFIDENCE_THRESHOLD
-            #
-            # if confidence < DRAFT_CONFIDENCE_THRESHOLD:
-            #     logger.debug(
-            #         f"Prefetch draft gated for {chat_id}: "
-            #         f"confidence {confidence:.2f} < {DRAFT_CONFIDENCE_THRESHOLD}"
-            #     )
-            #     return {
-            #         "suggestions": [],
-            #         "gated": True,
-            #         "gated_confidence": confidence,
-            #         "prefetched": True,
-            #         "prefetch_time": time.time(),
-            #     }
-
-            return {
-                "suggestions": [
-                    {
-                        "text": result.get("response", ""),
-                        "confidence": confidence,
-                    }
-                ],
-                "prefetched": True,
-                "prefetch_time": time.time(),
-            }
-
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except Exception as e:
-            logger.debug(f"Draft reply prefetch failed for {chat_id}: {e}")
-            return None
-
-    def _handle_embedding(self, prediction: Prediction) -> dict[str, Any] | None:
-        """Pre-compute embeddings.
-
-        Args:
-            prediction: Prediction with texts in params.
-
-        Returns:
-            Embedding data or None.
-        """
-        texts = prediction.params.get("texts", [])
-        if not texts:
-            return None
-
-        try:
-            from jarvis.embedding_adapter import get_embedder
-
-            embedder = get_embedder()
-            # encode() acquires MLXModelLoader._mlx_load_lock internally
-            embeddings = embedder.encode(texts)
-
-            return {
-                "embeddings": embeddings,
-                "texts": texts,
-                "prefetched": True,
-                "prefetch_time": time.time(),
-            }
-
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except Exception as e:
-            logger.debug(f"Embedding prefetch failed: {e}")
-            return None
-
-    def _handle_contact_profile(self, prediction: Prediction) -> dict[str, Any] | None:
-        """Pre-load contact profile.
-
-        Args:
-            prediction: Prediction with chat_id in params.
-
-        Returns:
-            Contact data or None.
-        """
-        chat_id = prediction.params.get("chat_id")
-        if not chat_id:
-            return None
-
-        try:
-            from jarvis.db import get_db
-
-            db = get_db()
-            contact = db.get_contact_by_chat_id(chat_id)
-
-            if contact:
-                return {
-                    "contact": {
-                        "id": contact.id,
-                        "display_name": contact.display_name,
-                        "relationship": contact.relationship,
-                        "style_notes": contact.style_notes,
-                    },
-                    "prefetched": True,
-                    "prefetch_time": time.time(),
-                }
-            return None
-
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except Exception as e:
-            logger.debug(f"Contact profile prefetch failed for {chat_id}: {e}")
-            return None
-
-    def _handle_model_warm(self, prediction: Prediction) -> dict[str, Any] | None:
-        """Warm up model weights.
-
-        Args:
-            prediction: Prediction with model_type in params.
-
-        Returns:
-            Warming status or None.
-        """
-        model_type = prediction.params.get("model_type")
-        if not model_type:
-            return None
-
-        try:
-            if model_type == "llm":
-                from models.loader import get_model
-
-                model = get_model()
-                # load() acquires MLXModelLoader._mlx_load_lock internally
-                if model and not model.is_loaded():
-                    model.load()
-                return {"model": "llm", "warm": True, "prefetch_time": time.time()}
-
-            elif model_type == "embeddings":
-                from jarvis.embedding_adapter import get_embedder
-
-                embedder = get_embedder()
-                # encode() acquires MLXModelLoader._mlx_load_lock internally
-                embedder.encode(["warmup test"])
-                return {"model": "embeddings", "warm": True, "prefetch_time": time.time()}
-
-            return None
-
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except Exception as e:
-            logger.debug(f"Model warming failed for {model_type}: {e}")
-            return None
-
-    def _handle_search_results(self, prediction: Prediction) -> dict[str, Any] | None:
-        """Pre-compute search results.
-
-        Args:
-            prediction: Prediction with query in params.
-
-        Returns:
-            Search results or None.
-        """
-        query = prediction.params.get("query")
-        if not query:
-            return None
-
-        try:
-            from jarvis.db import get_db
-            from jarvis.search.vec_search import get_vec_searcher
-
-            db = get_db()
-            searcher = get_vec_searcher(db)
-            results = searcher.search(query=query, k=10)
-
-            return {
-                "query": query,
-                "results": [
-                    {"trigger": r.last_trigger, "response": r.last_response, "sim": r.similarity}
-                    for r in results
-                    if r.last_trigger
-                ],
-                "prefetched": True,
-                "prefetch_time": time.time(),
-            }
-
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except Exception as e:
-            logger.debug(f"Search prefetch failed for '{query}': {e}")
-            return None
-
-    def _handle_vec_index(self, prediction: Prediction) -> dict[str, Any] | None:
-        """Pre-load sqlite-vec index.
-
-        Args:
-            prediction: Prediction for index loading.
-
-        Returns:
-            Index status or None.
-        """
-        try:
-            from jarvis.db import get_db
-            from jarvis.search.vec_search import get_vec_searcher
-
-            db = get_db()
-            searcher = get_vec_searcher(db)
-            if searcher._vec_tables_exist():
-                return {
-                    "loaded": True,
-                    "prefetch_time": time.time(),
-                }
-
-            return None
-
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except Exception as e:
-            logger.debug(f"Vec index prefetch failed: {e}")
-            return None
-
 
 from jarvis.utils.singleton import thread_safe_singleton  # noqa: E402
 
@@ -958,7 +706,7 @@ def get_executor() -> PrefetchExecutor:
 
 def reset_executor() -> None:
     """Reset singleton executor (stops if running)."""
-    instance = get_executor.peek()  # type: ignore[attr-defined]
+    instance = get_executor.peek()
     if instance is not None:
         instance.stop()
-    get_executor.reset()  # type: ignore[attr-defined]
+    get_executor.reset()

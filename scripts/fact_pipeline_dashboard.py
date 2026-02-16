@@ -94,7 +94,8 @@ def main() -> None:
         saved_precision = (saved / kept_after_quality) if kept_after_quality else 0.0
         save_rate = (saved / raw) if raw else 0.0
         print(
-            f"raw={raw} saved={saved} save_rate={save_rate:.3f} saved_precision={saved_precision:.3f}"
+            f"raw={raw} saved={saved} save_rate={save_rate:.3f} "
+            f"saved_precision={saved_precision:.3f}"
         )
         print(
             f"reject_reason: prefilter={prefilter} verifier={verifier} "
@@ -139,7 +140,8 @@ def main() -> None:
             sp = (saved_c / kept) if kept else 0.0
             print(
                 f"{(r['chat_id'] or '')[:45]:45} {(r['stage'] or '')[:16]:16} "
-                f"{raw_c:5d} {saved_c:5d} {sr:9.3f} {sp:11.3f} {pref_c:6d} {ver_c:6d} {sem_c:6d} {uniq_c:6d}"
+                f"{raw_c:5d} {saved_c:5d} {sr:9.3f} {sp:11.3f} "
+                f"{pref_c:6d} {ver_c:6d} {sem_c:6d} {uniq_c:6d}"
             )
     finally:
         conn.close()

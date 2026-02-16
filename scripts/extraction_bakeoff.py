@@ -35,15 +35,19 @@ def parse_raw(raw: str):
 
 STRATEGIES = {
     "Zero-Shot-Strict": {
-        "system": "You extract personal facts from iMessage chats. RULES: 1. ONLY extract facts EXPLICITLY stated. 2. USE FORMAT: - [Name]: [fact]. 3. NO OTHER TEXT.",
+        "system": "You extract personal facts from iMessage chats. RULES: 1. ONLY "
+        "extract facts EXPLICITLY stated. 2. USE FORMAT: - [Name]: [fact]. 3. NO OTHER TEXT.",
         "user": "Chat:\n{text}\n\nFacts:",
     },
     "Few-Shot-NoHallucinate": {
-        "system": "You extract facts in format '- [Name]: [fact]'. EXAMPLES (FORMAT ONLY): - Alice: lives in NY - Bob: has a cat. DO NOT COPY EXAMPLES. EXTRACT FROM CHAT ONLY.",
+        "system": "You extract facts in format '- [Name]: [fact]'. "
+        "EXAMPLES (FORMAT ONLY): - Alice: lives in NY - Bob: has a cat. "
+        "DO NOT COPY EXAMPLES. EXTRACT FROM CHAT ONLY.",
         "user": "Chat:\n{text}\n\nFacts:",
     },
     "Turn-Based-JSON": {
-        "system": "You are a chat analyzer. Extract facts as a list of strings in format 'Name: Fact'.",
+        "system": "You are a chat analyzer. Extract facts as a list of strings "
+        "in format 'Name: Fact'.",
         "user": "Analyze turns and list facts learned about each person:\n\n{text}\n\nFacts:",
     },
 }

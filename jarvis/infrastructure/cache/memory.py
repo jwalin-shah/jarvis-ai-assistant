@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeVar
 
 from jarvis.infrastructure.cache.base import CacheBackend
+
+T = TypeVar("T")
+
+# Sentinel for cache misses to allow caching None values
+_SENTINEL = object()
 
 
 @dataclass
@@ -18,28 +25,33 @@ class _Entry:
 
 
 class MemoryBackend(CacheBackend):
-    """In-memory cache backend with TTL and tag support."""
+    """In-memory cache backend with TTL, tag support, and single-flight protection."""
 
     def __init__(self, ttl: float = 300.0, maxsize: int = 1000) -> None:
-        self._data: dict[str, _Entry] = {}
+        self._data: OrderedDict[str, _Entry] = OrderedDict()
         self._maxsize = maxsize
         self._default_ttl = ttl
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._hits = 0
         self._misses = 0
         self._evictions = 0
+        # Single-flight: maps key -> Event for in-progress computations
+        self._inflight: dict[str, threading.Event] = {}
+        self._inflight_lock = threading.Lock()
 
     def get(self, key: str) -> Any | None:
+        """Get a value from the cache. Returns _SENTINEL on miss."""
         with self._lock:
             entry = self._data.get(key)
             if entry is None:
                 self._misses += 1
-                return None
+                return _SENTINEL
             if time.time() > entry.expires_at:
                 del self._data[key]
                 self._misses += 1
-                return None
+                return _SENTINEL
             self._hits += 1
+            self._data.move_to_end(key)
             return entry.value
 
     def set(
@@ -47,12 +59,17 @@ class MemoryBackend(CacheBackend):
     ) -> None:
         ttl = ttl if ttl is not None else self._default_ttl
         with self._lock:
+            if key in self._data:
+                del self._data[key]
+            elif len(self._data) >= self._maxsize:
+                self._data.popitem(last=False)
+                self._evictions += 1
+
             self._data[key] = _Entry(
                 value=value,
                 expires_at=time.time() + ttl,
                 tags=tags or [],
             )
-            self._evict_if_full()
 
     def delete(self, key: str) -> bool:
         with self._lock:
@@ -82,21 +99,44 @@ class MemoryBackend(CacheBackend):
             self._misses = 0
             self._evictions = 0
 
+    def get_or_set(self, key: str, factory: Callable[[], T], ttl: float | None = None) -> T:
+        val = self.get(key)
+        if val is not _SENTINEL:
+            return val
+
+        with self._inflight_lock:
+            if key in self._inflight:
+                event = self._inflight[key]
+            else:
+                event = threading.Event()
+                self._inflight[key] = event
+                event = None
+
+        if event is not None:
+            event.wait(timeout=60.0)
+            val = self.get(key)
+            if val is not _SENTINEL:
+                return val
+
+        try:
+            result = factory()
+            self.set(key, result, ttl=ttl)
+            return result
+        finally:
+            with self._inflight_lock:
+                evt = self._inflight.pop(key, None)
+                if evt is not None:
+                    evt.set()
+
     def stats(self) -> dict[str, Any]:
         with self._lock:
             total = self._hits + self._misses
             return {
                 "entries": len(self._data),
                 "maxsize": self._maxsize,
+                "ttl_seconds": self._default_ttl,
                 "hits": self._hits,
                 "misses": self._misses,
                 "evictions": self._evictions,
                 "hit_rate": self._hits / total if total > 0 else 0.0,
             }
-
-    def _evict_if_full(self) -> None:
-        while len(self._data) > self._maxsize:
-            # Remove the entry that expires soonest
-            oldest_key = min(self._data, key=lambda k: self._data[k].expires_at)
-            del self._data[oldest_key]
-            self._evictions += 1

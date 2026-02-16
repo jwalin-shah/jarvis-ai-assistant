@@ -11,6 +11,9 @@ Usage:
     uv run python scripts/backfill_complete.py
     uv run python scripts/backfill_complete.py --limit 50    # only top 50 chats
     uv run python scripts/backfill_complete.py --window 100  # messages per chat
+
+    # Resume partial contacts (window-level progress tracking)
+    uv run python scripts/backfill_complete.py --resume-partial
 """
 
 import argparse
@@ -25,7 +28,13 @@ sys.path.insert(0, ".")
 def main() -> None:
     parser = argparse.ArgumentParser(description="Complete backfill (segments + facts)")
     parser.add_argument("--limit", type=int, default=0, help="Max chats to process (0=all)")
+    parser.add_argument("--offset", type=int, default=0, help="Skip first N chats (for resuming)")
     parser.add_argument("--window", type=int, default=0, help="Messages per chat (0=all)")
+    parser.add_argument(
+        "--resume-partial",
+        action="store_true",
+        help="Resume contacts with partial window progress (skips fully completed)"
+    )
     parser.add_argument(
         "--force", action="store_true", help="Force re-processing of already completed chats"
     )
@@ -123,96 +132,137 @@ def main() -> None:
             print(f"  Warning: Could not sync contact {chat_id}: {e}")
 
     print(
-        f"✓ Synced {contacts_synced} contacts from {len(active_chats)} active chats (user: {user_name})"
+        f"✓ Synced {contacts_synced} contacts from {len(active_chats)} "
+        f"active chats (user: {user_name})"
     )
+
+    if args.offset > 0:
+        skipped = min(args.offset, len(active_chats))
+        active_chats = active_chats[args.offset :]
+        print(
+            f"Skipped first {skipped} chats (offset={args.offset}), "
+            f"{len(active_chats)} remaining"
+        )
 
     if args.limit > 0:
         active_chats = active_chats[: args.limit]
         print(f"Limited to {len(active_chats)} chats for processing")
 
-        import threading
-        from concurrent.futures import ThreadPoolExecutor
+    # Handle --resume-partial: prioritize contacts with partial window progress
+    if args.resume_partial:
+        from jarvis.db.window_progress import get_contacts_with_partial_progress
 
-        total_stats = {"chats": 0, "segments": 0, "indexed": 0, "facts": 0, "errors": 0}
+        with db.connection() as conn:
+            partial_contacts = get_contacts_with_partial_progress(conn, min_windows=1)
 
-        t0 = time.time()
-        extraction_semaphore = threading.Semaphore(max(1, args.extract_slots))
+        if partial_contacts:
+            # Get chat_ids of partial contacts
+            partial_chat_ids = {c[0] for c in partial_contacts}
 
-        def process_chat(chat_data: tuple[int, Any]) -> dict[str, int] | str | None:
-            i, conv = chat_data
-            chat_id = conv.chat_id
-            contact_name = _resolve_display_name(chat_id, conv.display_name)
+            # Reorder: partial contacts first, then remaining unprocessed
+            partial_chats = [c for c in active_chats if c.chat_id in partial_chat_ids]
+            other_chats = [c for c in active_chats if c.chat_id not in partial_chat_ids]
+
+            # Filter out completed contacts (have last_extracted_rowid)
+            with db.connection() as conn:
+                cursor = conn.execute(
+                    "SELECT chat_id FROM contacts WHERE last_extracted_rowid IS NOT NULL"
+                )
+                completed_chat_ids = {row[0] for row in cursor.fetchall()}
+
+            other_chats = [c for c in other_chats if c.chat_id not in completed_chat_ids]
+            active_chats = partial_chats + other_chats
+
             print(
-                f"\n[{i + 1}/{len(active_chats)}] Processing {contact_name} "
-                f"({chat_id[:50]})..."
+                f"Resume partial: {len(partial_chats)} partial + {len(other_chats)} "
+                f"new = {len(active_chats)} to process"
+            )
+            for pc, pw, pf in partial_contacts[:5]:
+                print(f"  - {pc[:50]}: {pw} windows, {pf} facts")
+            if len(partial_contacts) > 5:
+                print(f"  ... and {len(partial_contacts) - 5} more")
+
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    total_stats = {"chats": 0, "segments": 0, "indexed": 0, "facts": 0, "errors": 0}
+
+    t0 = time.time()
+    extraction_semaphore = threading.Semaphore(max(1, args.extract_slots))
+
+    def process_chat(chat_data: tuple[int, Any]) -> dict[str, int] | str | None:
+        i, conv = chat_data
+        chat_id = conv.chat_id
+        contact_name = _resolve_display_name(chat_id, conv.display_name)
+        print(
+            f"\n[{i + 1}/{len(active_chats)}] Processing {contact_name} "
+            f"({chat_id[:50]})..."
+        )
+
+        try:
+            with ChatDBReader() as reader:
+                limit = args.window if args.window > 0 else 1000000  # Practical uncap
+
+                messages = reader.get_messages(chat_id, limit=limit)
+
+                messages.reverse()  # chronological
+
+            if not messages:
+                return None
+
+            # Step 1: Create/update contact
+
+            db.add_contact(
+                display_name=contact_name,
+                chat_id=chat_id,
+                phone_or_email=chat_id.split(";")[-1] if ";" in chat_id else chat_id,
             )
 
-            try:
-                with ChatDBReader() as reader:
-                    limit = args.window if args.window > 0 else 1000000  # Practical uncap
+            # Step 2: Unified Pipeline (Segment + Embed + Extract Facts)
 
-                    messages = reader.get_messages(chat_id, limit=limit)
+            if not args.skip_segments or not args.skip_facts:
 
-                    messages.reverse()  # chronological
+                from jarvis.contacts.fact_storage import log_pass1_claims, save_facts
+                from jarvis.contacts.instruction_extractor import get_instruction_extractor
+                from jarvis.topics.segment_pipeline import process_segments
+                from jarvis.topics.segment_storage import delete_segments_for_chat
+                from jarvis.topics.topic_segmenter import segment_conversation
 
-                if not messages:
-                    return None
+                # Check if already done (unless --force)
 
-                # Step 1: Create/update contact
+                already_done = False
 
-                db.add_contact(
-                    display_name=contact_name,
-                    chat_id=chat_id,
-                    phone_or_email=chat_id.split(";")[-1] if ";" in chat_id else chat_id,
-                )
+                if not args.force:
+                    with db.connection() as conn:
+                        row = conn.execute(
+                            "SELECT last_extracted_rowid FROM contacts WHERE chat_id = ?",
+                            (chat_id,),
+                        ).fetchone()
 
-                # Step 2: Unified Pipeline (Segment + Embed + Extract Facts)
+                        if row and row[0]:
+                            already_done = True
 
-                if not args.skip_segments or not args.skip_facts:
-                    import uuid
+                if already_done:
+                    print(f"  ⊘ {contact_name}: Already processed, skipping")
 
-                    from jarvis.contacts.fact_storage import log_pass1_claims, save_facts
-                    from jarvis.contacts.instruction_extractor import get_instruction_extractor
-                    from jarvis.topics.segment_pipeline import process_segments
-                    from jarvis.topics.segment_storage import delete_segments_for_chat
-                    from jarvis.topics.topic_segmenter import segment_conversation
+                    return {"segments": 0, "indexed": 0, "facts": 0}
 
-                    # Check if already done (unless --force)
+                # Ensure messages are sorted chronologically
+                messages = sorted(messages, key=lambda m: m.date)
 
-                    already_done = False
+                stats = {"persisted": 0, "indexed": 0}
+                msg_to_seg: dict[int, int] = {}
 
-                    if not args.force:
-                        with db.connection() as conn:
-                            row = conn.execute(
-                                "SELECT last_extracted_rowid FROM contacts WHERE chat_id = ?",
-                                (chat_id,),
-                            ).fetchone()
-
-                            if row and row[0]:
-                                already_done = True
-
-                    if already_done:
-                        print(f"  ⊘ {contact_name}: Already processed, skipping")
-
-                        return {"segments": 0, "indexed": 0, "facts": 0}
-
-                    # 1. Build semantic topic segments for persistence/indexing.
-                    messages = sorted(messages, key=lambda m: m.date)
+                # 1. Build semantic topic segments for persistence/indexing.
+                if not args.skip_segments:
                     segments_to_process = segment_conversation(messages, contact_id=chat_id)
 
                     if segments_to_process:
-                        # Clear existing segments/facts for this chat if re-running
-
+                        # Clear existing segments for this chat if re-running
                         with db.connection() as conn:
                             delete_segments_for_chat(conn, chat_id)
 
-                            if args.force:
-                                conn.execute(
-                                    "DELETE FROM contact_facts WHERE contact_id = ?", (chat_id,)
-                                )
-
                         # 2. Persist/index semantic segments (no fact extraction here).
-
                         with extraction_semaphore:
                             stats = process_segments(
                                 segments_to_process,
@@ -239,130 +289,186 @@ def main() -> None:
                                 segment_db_ids.append(seg_db_id)
 
                         # Build source_message_id -> segment_db_id lookup.
-                        msg_to_seg: dict[int, int] = {}
                         for seg, seg_db_id in zip(segments_to_process, segment_db_ids):
                             for msg in getattr(seg, "messages", []):
                                 msg_id = getattr(msg, "id", None)
                                 if msg_id is not None:
                                     msg_to_seg[msg_id] = seg_db_id
 
-                        # 3. Extract facts from overlapping fixed windows.
-                        facts_extracted = 0
-                        if not args.skip_facts:
-                            from dataclasses import dataclass
-
-                            @dataclass
-                            class ExtractionWindow:
-                                messages: list[Any]
-                                text: str
-
-                            extraction_windows: list[ExtractionWindow] = []
-                            for j in range(0, len(messages), args.segment_window_stride):
-                                window_msgs = messages[j : j + args.segment_window_size]
-                                if len(window_msgs) < 5:
-                                    break
-                                window_text = "\n".join([m.text or "" for m in window_msgs])
-                                extraction_windows.append(
-                                    ExtractionWindow(messages=window_msgs, text=window_text)
-                                )
-
-                            if extraction_windows:
-                                extractor = get_instruction_extractor(
-                                    tier=os.getenv("FACT_EXTRACT_TIER", "0.7b")
-                                )
-                                all_facts: list[Any] = []
-                                total_windows = len(extraction_windows)
-                                for w_idx, extraction_window in enumerate(
-                                    extraction_windows, start=1
-                                ):
-                                    print(
-                                        f"    - Extracting facts windows {w_idx}/{total_windows}...",
-                                        flush=True,
-                                    )
-                                    window_results = extractor.extract_facts_from_batch(
-                                        [extraction_window],
-                                        contact_id=chat_id,
-                                        contact_name=contact_name,
-                                        user_name=user_name,
-                                    )
-                                    claims_by_segment = extractor.get_last_batch_pass1_claims()
-                                    if claims_by_segment:
-                                        log_pass1_claims(
-                                            contact_id=chat_id,
-                                            chat_id=chat_id,
-                                            segment_db_ids=[None],
-                                            claims_by_segment=claims_by_segment,
-                                            stage=f"backfill_window_{w_idx}",
-                                        )
-                                    if window_results and window_results[0]:
-                                        window_facts = window_results[0]
-                                        for fact in window_facts:
-                                            msg_id = getattr(fact, "source_message_id", None)
-                                            if msg_id is not None and msg_id in msg_to_seg:
-                                                setattr(fact, "_segment_db_id", msg_to_seg[msg_id])
-                                        all_facts.extend(window_facts)
-                                        facts_extracted += save_facts(
-                                            window_facts,
-                                            chat_id,
-                                            log_raw_facts=True,
-                                            log_chat_id=chat_id,
-                                            log_stage=f"backfill_window_{w_idx}",
-                                        )
-
-                        print(
-                            f"  ✓ {contact_name}: {len(messages)} messages -> {stats['persisted']} segments, {facts_extracted} facts"
-                        )
-
-                        # Track progress
-
-                        last_msg_id = max(m.id for m in messages if m.id)
-
+                # 3. Extract facts from overlapping fixed windows.
+                facts_extracted = 0
+                if not args.skip_facts:
+                    # Clear existing facts for this chat if re-running
+                    if args.force:
                         with db.connection() as conn:
                             conn.execute(
-                                """UPDATE contacts 
-
-                                   SET last_extracted_rowid = ?,
-
-                                       last_extracted_at = CURRENT_TIMESTAMP
-
-                                   WHERE chat_id = ?""",
-                                (last_msg_id, chat_id),
+                                "DELETE FROM contact_facts WHERE contact_id = ?", (chat_id,)
                             )
 
-                        return {
-                            "segments": stats["persisted"],
-                            "indexed": stats["indexed"],
-                            "facts": facts_extracted,
-                        }
+                    from dataclasses import dataclass
 
-                return {"segments": 0, "indexed": 0, "facts": 0}
+                    @dataclass
+                    class ExtractionWindow:
+                        messages: list[Any]
+                        text: str
 
-            except Exception as e:
-                print(f"  ✗ {chat_id[:20]} ERROR: {e}")
+                    extraction_windows: list[ExtractionWindow] = []
+                    for j in range(0, len(messages), args.segment_window_stride):
+                        window_msgs = messages[j : j + args.segment_window_size]
+                        if len(window_msgs) < 5:
+                            break
+                        window_text = "\n".join([m.text or "" for m in window_msgs])
+                        extraction_windows.append(
+                            ExtractionWindow(messages=window_msgs, text=window_text)
+                        )
 
-                return "error"
+                    if extraction_windows:
+                        from jarvis.db.window_progress import (
+                            get_completed_windows,
+                            init_window_progress_table,
+                            record_window_progress,
+                        )
 
-        # Run chats in parallel (2-4 at a time balances CPU vs RAM)
+                        # Initialize window progress tracking
+                        with db.connection() as conn:
+                            init_window_progress_table(conn)
+                            completed_windows = get_completed_windows(conn, chat_id)
 
-        max_workers = max(1, min(args.workers, 4))
-        print(f"Using {max_workers} worker(s) for chat processing")
-        print("Segmentation mode: semantic topic boundaries")
-        print(
-            f"Fact extraction windows: size={args.segment_window_size}, "
-            f"overlap={args.segment_overlap}, stride={args.segment_window_stride}"
-        )
+                        extractor = get_instruction_extractor(
+                            tier=os.getenv("FACT_EXTRACT_TIER", "0.7b")
+                        )
+                        total_windows = len(extraction_windows)
+                        windows_to_skip = len(completed_windows)
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(process_chat, enumerate(active_chats)))
+                        # BATCH: Collect all facts first, save once at the end
+                        # RAM usage: ~1KB per fact, ~5 facts/window = ~5KB/window
+                        # For 127 windows = ~635KB - totally negligible
+                        all_facts: list[Any] = []
+                        total_raw_claims = 0
+                        windows_actually_processed = 0
 
-        for res in results:
-            if res == "error":
-                total_stats["errors"] += 1
-            elif isinstance(res, dict):
-                total_stats["chats"] += 1
-                total_stats["segments"] += res.get("segments", 0)
-                total_stats["indexed"] += res.get("indexed", 0)
-                total_stats["facts"] += res.get("facts", 0)
+                        for w_idx, extraction_window in enumerate(
+                            extraction_windows, start=1
+                        ):
+                            # Skip already-completed windows (resume capability)
+                            if w_idx in completed_windows:
+                                continue
+
+                            print(
+                                f"    - Extracting facts windows {w_idx}/{total_windows}...",
+                                flush=True,
+                            )
+                            window_results = extractor.extract_facts_from_batch(
+                                [extraction_window],
+                                contact_id=chat_id,
+                                contact_name=contact_name,
+                                user_name=user_name,
+                            )
+                            windows_actually_processed += 1
+
+                            claims_by_segment = extractor.get_last_batch_pass1_claims()
+                            facts_in_window = 0
+                            if claims_by_segment:
+                                total_raw_claims += sum(len(c) for c in claims_by_segment)
+                                log_pass1_claims(
+                                    contact_id=chat_id,
+                                    chat_id=chat_id,
+                                    segment_db_ids=[None],
+                                    claims_by_segment=claims_by_segment,
+                                    stage=f"backfill_window_{w_idx}",
+                                )
+                            if window_results and window_results[0]:
+                                window_facts = window_results[0]
+                                facts_in_window = len(window_facts)
+                                for fact in window_facts:
+                                    msg_id = getattr(fact, "source_message_id", None)
+                                    if msg_id is not None and msg_id in msg_to_seg:
+                                        setattr(fact, "_segment_db_id", msg_to_seg[msg_id])
+                                all_facts.extend(window_facts)
+
+                            # Record progress after each window (for resume capability)
+                            with db.connection() as conn:
+                                record_window_progress(
+                                    conn,
+                                    contact_id=chat_id,
+                                    window_number=w_idx,
+                                    facts_found=facts_in_window,
+                                    messages_in_window=len(extraction_window.messages),
+                                )
+
+                        if windows_to_skip > 0:
+                            print(f"    - Skipped {windows_to_skip} already-processed windows")
+
+                        # Single batch save at the end - one transaction, no lock contention
+                        if all_facts:
+                            print(
+                                f"    - Saving {len(all_facts)} facts in single batch...",
+                                flush=True,
+                            )
+                            facts_extracted = save_facts(
+                                all_facts,
+                                chat_id,
+                                log_raw_facts=True,
+                                log_chat_id=chat_id,
+                                log_stage="backfill_batched",
+                                raw_count=total_raw_claims,
+                            )
+
+                print(
+                    f"  ✓ {contact_name}: {len(messages)} messages -> "
+                    f"{stats['persisted']} segments, {facts_extracted} facts"
+                )
+
+                # Track progress
+
+                last_msg_id = max(m.id for m in messages if m.id)
+
+                with db.connection() as conn:
+                    conn.execute(
+                        """UPDATE contacts
+
+                           SET last_extracted_rowid = ?,
+
+                               last_extracted_at = CURRENT_TIMESTAMP
+
+                           WHERE chat_id = ?""",
+                        (last_msg_id, chat_id),
+                    )
+
+                return {
+                    "segments": stats["persisted"],
+                    "indexed": stats["indexed"],
+                    "facts": facts_extracted,
+                }
+
+            return {"segments": 0, "indexed": 0, "facts": 0}
+
+        except Exception as e:
+            print(f"  ✗ {chat_id[:20]} ERROR: {e}")
+
+            return "error"
+
+    # Run chats in parallel (2-4 at a time balances CPU vs RAM)
+
+    max_workers = max(1, min(args.workers, 4))
+    print(f"Using {max_workers} worker(s) for chat processing")
+    print("Segmentation mode: semantic topic boundaries")
+    print(
+        f"Fact extraction windows: size={args.segment_window_size}, "
+        f"overlap={args.segment_overlap}, stride={args.segment_window_stride}"
+    )
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        results = list(executor.map(process_chat, enumerate(active_chats)))
+
+    for res in results:
+        if res == "error":
+            total_stats["errors"] += 1
+        elif isinstance(res, dict):
+            total_stats["chats"] += 1
+            total_stats["segments"] += res.get("segments", 0)
+            total_stats["indexed"] += res.get("indexed", 0)
+            total_stats["facts"] += res.get("facts", 0)
 
     elapsed = time.time() - t0
 

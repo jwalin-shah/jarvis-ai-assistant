@@ -35,7 +35,8 @@ def check_profiles():
             print("  (No facts found in DB yet - run backfill script first)")
         for f in profile.extracted_facts[:10]:
             print(
-                f"  ✓ [{f['category']}] {f['subject']} {f['predicate']} {f['value']} (Conf: {f['confidence']:.2f})"
+                f"  ✓ [{f['category']}] {f['subject']} {f['predicate']} "
+                f"{f['value']} (Conf: {f['confidence']:.2f})"
             )
 
         # Check topic labels

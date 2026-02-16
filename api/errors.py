@@ -60,6 +60,7 @@ ERROR_CODE_STATUS_CODES: dict[ErrorCode, int] = {
     # 404 Not Found
     ErrorCode.MDL_NOT_FOUND: 404,
     ErrorCode.MSG_DB_NOT_FOUND: 404,
+    ErrorCode.MSG_NOT_FOUND: 404,
     ErrorCode.CFG_MISSING: 404,
     ErrorCode.GRF_CONTACT_NOT_FOUND: 404,
     # 408 Request Timeout
