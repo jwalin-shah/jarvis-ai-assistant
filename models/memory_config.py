@@ -18,12 +18,13 @@ _total_ram = psutil.virtual_memory().total
 
 # Memory limits for different model types (in bytes)
 # Scale with available RAM, capped at reasonable maximums
-LLM_MEMORY_LIMIT = min(2 * 1024 * 1024 * 1024, int(_total_ram * 0.25))
-LLM_CACHE_LIMIT = min(1 * 1024 * 1024 * 1024, int(_total_ram * 0.125))
+# On 8GB systems, this targets ~1.5GB for weights and ~512MB for cache
+LLM_MEMORY_LIMIT = min(1536 * 1024 * 1024, int(_total_ram * 0.20))
+LLM_CACHE_LIMIT = min(512 * 1024 * 1024, int(_total_ram * 0.08))
 
 # Embedders, cross-encoders, and utility models are smaller
-EMBEDDER_MEMORY_LIMIT = min(1 * 1024 * 1024 * 1024, int(_total_ram * 0.125))
-EMBEDDER_CACHE_LIMIT = min(512 * 1024 * 1024, int(_total_ram * 0.0625))
+EMBEDDER_MEMORY_LIMIT = min(512 * 1024 * 1024, int(_total_ram * 0.10))
+EMBEDDER_CACHE_LIMIT = min(256 * 1024 * 1024, int(_total_ram * 0.05))
 
 
 def _get_gpu_lock() -> threading.Lock:
