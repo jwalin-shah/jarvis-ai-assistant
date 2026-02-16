@@ -84,7 +84,6 @@ from jarvis.prompts.examples import (
     SUMMARY_EXAMPLES,
     THREAD_EXAMPLES,
 )
-from jarvis.prompts.rag import _format_relationship_context, _format_similar_exchanges
 
 # --- registry.py ---
 from jarvis.prompts.registry import (
@@ -97,13 +96,6 @@ from jarvis.prompts.registry import (
     reset_optimized_programs,
     reset_prompt_registry,
 )
-from jarvis.prompts.reply import (
-    _format_thread_context,
-    _get_additional_instructions,
-    _get_length_guidance,
-    _get_thread_examples,
-)
-from jarvis.prompts.search import build_search_prompt as build_search_answer_prompt
 
 __all__ = [
     # Constants

@@ -103,7 +103,8 @@ FEW_SHOT_TURNS = [
     ),
     (
         "I work at Google as an engineer",
-        '{"facts": [{"text": "Google", "label": "org"}, {"text": "engineer", "label": "job_role"}]}',
+        '{"facts": [{"text": "Google", "label": "org"}, '
+        '{"text": "engineer", "label": "job_role"}]}',
     ),
     (
         "allergic to peanuts and it sucks",
@@ -111,7 +112,8 @@ FEW_SHOT_TURNS = [
     ),
     (
         "Also my dad leaves the 22nd for India",
-        '{"facts": [{"text": "dad", "label": "family_member"}, {"text": "India", "label": "place"}]}',
+        '{"facts": [{"text": "dad", "label": "family_member"}, '
+        '{"text": "India", "label": "place"}]}',
     ),
     (
         "My mom actually texted me this morning saying my acceptance letter went to the house",

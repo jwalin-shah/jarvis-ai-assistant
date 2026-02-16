@@ -31,6 +31,71 @@
   let messageElement: HTMLElement | null = $state(null);
   let resizeObserver: ResizeObserver | null = null;
 
+  // Image lazy loading with IntersectionObserver
+  let imageObserver: IntersectionObserver | null = null;
+  let lazyImages = $state(new Map<string, boolean>()); // track which images should load
+
+  $effect(() => {
+    // Setup IntersectionObserver for image lazy loading
+    if (typeof window !== 'undefined' && 'IntersectionObserver' in window) {
+      imageObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              const img = entry.target as HTMLImageElement;
+              const src = img.dataset.src;
+              if (src) {
+                img.src = src;
+                img.removeAttribute('data-src');
+                lazyImages.set(src, true);
+                lazyImages = lazyImages;
+              }
+              imageObserver?.unobserve(img);
+            }
+          });
+        },
+        {
+          root: null,
+          rootMargin: '100px', // Start loading 100px before visible
+          threshold: 0.01,
+        }
+      );
+    }
+
+    return () => {
+      imageObserver?.disconnect();
+    };
+  });
+
+  function lazyImage(node: HTMLImageElement, src: string) {
+    // Store actual src in data-src and use a tiny placeholder
+    node.dataset.src = src;
+    node.style.opacity = '0';
+    node.style.transition = 'opacity 0.2s ease';
+    
+    // Handle load event for fade-in
+    const handleLoad = () => {
+      node.style.opacity = '1';
+    };
+    node.addEventListener('load', handleLoad);
+    
+    // Observe for lazy loading
+    if (imageObserver) {
+      imageObserver.observe(node);
+    } else {
+      // Fallback: load immediately if no IntersectionObserver
+      node.src = src;
+      node.removeAttribute('data-src');
+    }
+
+    return {
+      destroy() {
+        node.removeEventListener('load', handleLoad);
+        imageObserver?.unobserve(node);
+      },
+    };
+  }
+
   $effect(() => {
     if (!messageElement || !onHeightChange) return;
 
@@ -142,9 +207,8 @@
             {#if attachment.mime_type?.startsWith('image/') && attachment.file_path}
               <img
                 class="attachment-thumbnail"
-                src="{WS_HTTP_BASE}/attachments/thumbnail?file_path={encodeURIComponent(attachment.file_path)}"
+                use:lazyImage={`${WS_HTTP_BASE}/attachments/thumbnail?file_path=${encodeURIComponent(attachment.file_path)}`}
                 alt={attachment.filename}
-                loading="lazy"
                 onerror={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }}
               />
               <div class="attachment hidden">

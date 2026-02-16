@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import re
 import sqlite3
@@ -38,11 +39,16 @@ from jarvis.contracts.pipeline import Relationship as ContractRelationship
 
 # Cache TTL for classification results (5 minutes)
 _CLASSIFICATION_CACHE_TTL_SECONDS = 300
-_classification_cache: dict[str, tuple[float, ClassificationResult]] = {}
+_classification_cache: dict[str, tuple[float, RelationshipClassificationResult]] = {}
 _cache_lock = threading.Lock()
 _CLASSIFICATION_CACHE_MAX_SIZE = 500
 
 logger = logging.getLogger(__name__)
+
+# Load relationship categories from JSON file
+_CATEGORIES_PATH = Path(__file__).parent / "relationship_categories.json"
+with open(_CATEGORIES_PATH) as f:
+    RELATIONSHIP_CATEGORIES = json.load(f)
 
 # Pre-compiled pattern for display name tokenization
 _NAME_SPLIT_RE = re.compile(r"[\s\-_]+")
@@ -76,188 +82,12 @@ def _is_emoji(text: str) -> bool:
 
 
 # =============================================================================
-# Relationship Categories
-# =============================================================================
-
-RELATIONSHIP_CATEGORIES = {
-    "family": {
-        "label": "family",
-        "keywords": [
-            "mom",
-            "dad",
-            "mother",
-            "father",
-            "sister",
-            "brother",
-            "grandma",
-            "grandpa",
-            "aunt",
-            "uncle",
-            "cousin",
-            "family",
-            "love you",
-            "miss you",
-            "thanksgiving",
-            "christmas",
-            "birthday",
-            "come home",
-            "dinner at home",
-            "parents",
-            "son",
-            "daughter",
-            "kid",
-            "kids",
-        ],
-        "anti_keywords": [  # Keywords that suggest NOT this category
-            "meeting",
-            "deadline",
-            "project",
-            "sprint",
-            "standup",
-        ],
-        "patterns": {
-            "time_any_hour": True,  # Family texts at any hour
-            "high_emoji_rate": True,  # Lots of hearts, etc.
-            "medium_frequency": True,  # Regular but not constant
-        },
-    },
-    "close friend": {
-        "label": "close friend",
-        "keywords": [
-            "dude",
-            "bro",
-            "lol",
-            "lmao",
-            "haha",
-            "omg",
-            "hangout",
-            "drinks",
-            "party",
-            "weekend",
-            "chill",
-            "wanna",
-            "gonna",
-            "miss you",
-            "bestie",
-            "squad",
-            "crew",
-            "yo",
-            "bruh",
-            "bar",
-            "club",
-            "concert",
-            "game",
-            "watch the game",
-        ],
-        "anti_keywords": [
-            "deadline",
-            "sprint",
-            "standup",
-            "sync",
-            "meeting",
-        ],
-        "patterns": {
-            "casual_language": True,
-            "late_night_messages": True,
-            "high_emoji_rate": True,
-        },
-    },
-    "romantic partner": {
-        "label": "romantic partner",
-        "keywords": [
-            "love you",
-            "miss you so much",
-            "baby",
-            "babe",
-            "honey",
-            "sweetheart",
-            "date night",
-            "can't wait to see you",
-            "thinking of you",
-            "good morning",
-            "good night",
-            "sleep well",
-            "dream of me",
-            "❤️",
-            "😘",
-            "💕",
-            "💗",
-            "💞",
-            "xoxo",
-            "kisses",
-        ],
-        "anti_keywords": [],
-        "patterns": {
-            "very_high_frequency": True,
-            "time_any_hour": True,
-            "high_emoji_rate": True,
-            "long_messages": True,
-        },
-    },
-    "coworker": {
-        "label": "coworker",
-        "keywords": [
-            "meeting",
-            "deadline",
-            "project",
-            "office",
-            "presentation",
-            "client",
-            "slack",
-            "zoom",
-            "standup",
-            "sprint",
-            "manager",
-            "boss",
-            "team",
-            "eod",
-            "eow",
-            "fyi",
-            "asap",
-            "sync",
-            "review",
-            "pr",
-            "merge",
-            "deploy",
-        ],
-        "anti_keywords": [
-            "love you",
-            "miss you",
-            "party",
-            "drinks",
-            "hangout",
-        ],
-        "patterns": {
-            "work_hours_only": True,
-            "formal_language": True,
-            "low_emoji_rate": True,
-        },
-    },
-    "acquaintance": {
-        "label": "acquaintance",
-        "keywords": [
-            "long time",
-            "nice to meet",
-            "good seeing you",
-            "let's catch up",
-        ],
-        "anti_keywords": [],
-        "patterns": {
-            "low_frequency": True,
-            "short_messages": True,
-            "formal_language": True,
-        },
-    },
-}
-
-
-# =============================================================================
 # Data Classes
 # =============================================================================
 
 
 @dataclass
-class ClassificationResult:
+class RelationshipClassificationResult:
     """Result of relationship classification."""
 
     chat_id: str
@@ -822,7 +652,7 @@ class RelationshipClassifier:
         messages: list[ChatMessage],
         chat_id: str = "",
         display_name: str = "",
-    ) -> ClassificationResult:
+    ) -> RelationshipClassificationResult:
         """Classify relationship from a list of messages.
 
         Args:
@@ -831,10 +661,10 @@ class RelationshipClassifier:
             display_name: Optional display name.
 
         Returns:
-            ClassificationResult with relationship type and confidence.
+            RelationshipClassificationResult with relationship type and confidence.
         """
         if len(messages) < self.min_messages:
-            return ClassificationResult(
+            return RelationshipClassificationResult(
                 chat_id=chat_id,
                 display_name=display_name,
                 relationship="unknown",
@@ -858,7 +688,7 @@ class RelationshipClassifier:
         # Normalize confidence (0-1)
         confidence = min(best_score / 0.6, 1.0)
 
-        return ClassificationResult(
+        return RelationshipClassificationResult(
             chat_id=chat_id,
             display_name=display_name,
             relationship=best_category,
@@ -874,7 +704,9 @@ class RelationshipClassifier:
             },
         )
 
-    def classify_contact(self, chat_id: str, display_name: str = "") -> ClassificationResult:
+    def classify_contact(
+        self, chat_id: str, display_name: str = ""
+    ) -> RelationshipClassificationResult:
         """Classify a specific contact by chat_id.
 
         Uses TTL-based caching to avoid recomputing classification for the same contact.
@@ -884,7 +716,7 @@ class RelationshipClassifier:
             display_name: Optional display name.
 
         Returns:
-            ClassificationResult with relationship type and confidence.
+            RelationshipClassificationResult with relationship type and confidence.
         """
         # Check cache first
         now = time.time()
@@ -912,7 +744,7 @@ class RelationshipClassifier:
         self,
         limit: int = 100,
         min_confidence: float = 0.3,
-    ) -> list[ClassificationResult]:
+    ) -> list[RelationshipClassificationResult]:
         """Classify all 1:1 contacts (not groups).
 
         Args:
@@ -920,7 +752,7 @@ class RelationshipClassifier:
             min_confidence: Minimum confidence to include.
 
         Returns:
-            List of ClassificationResult objects.
+            List of RelationshipClassificationResult objects.
         """
         chats = self._get_non_group_chats()[:limit]
         return self.classify_contacts_batch(chats, min_confidence=min_confidence)
@@ -929,7 +761,7 @@ class RelationshipClassifier:
         self,
         chat_ids: list[tuple[str, str]],
         min_confidence: float = 0.3,
-    ) -> list[ClassificationResult]:
+    ) -> list[RelationshipClassificationResult]:
         """Classify multiple contacts with a single batched DB query.
 
         Fetches all messages for all chat_ids in ONE query, then classifies
@@ -940,14 +772,14 @@ class RelationshipClassifier:
             min_confidence: Minimum confidence to include in results.
 
         Returns:
-            List of ClassificationResult objects (filtered by confidence).
+            List of RelationshipClassificationResult objects (filtered by confidence).
         """
         if not chat_ids:
             return []
 
         # Check cache for already-classified contacts, collect uncached ones
         now = time.time()
-        results: list[ClassificationResult] = []
+        results: list[RelationshipClassificationResult] = []
         uncached: list[tuple[str, str]] = []
 
         with _cache_lock:

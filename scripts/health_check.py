@@ -122,7 +122,8 @@ def check_applescript() -> list[HealthCheckError]:
                 HealthCheckError(
                     component="applescript.messages",
                     message=f"Cannot access Messages app: {result.stderr}",
-                    fix="Grant Automation permission to Terminal/your app in System Settings > Privacy & Security > Automation",
+                    fix="Grant Automation permission to Terminal/your app in "
+                    "System Settings > Privacy & Security > Automation",
                 )
             )
     except subprocess.TimeoutExpired:
@@ -163,7 +164,8 @@ def check_chat_db() -> list[HealthCheckError]:
             HealthCheckError(
                 component="database.chatdb",
                 message=f"chat.db is not readable at {chat_db}",
-                fix="Grant Full Disk Access permission in System Settings > Privacy & Security > Full Disk Access",
+                fix="Grant Full Disk Access permission in System Settings > "
+                "Privacy & Security > Full Disk Access",
             )
         )
 

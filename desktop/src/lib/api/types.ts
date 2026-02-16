@@ -1570,3 +1570,39 @@ export interface GraphStats {
   most_active_messages: number;
   generated_at: string;
 }
+
+// =============================================================================
+// Knowledge Graph types (facts as entity nodes)
+// =============================================================================
+
+export interface KnowledgeNode {
+  id: string;
+  label: string;
+  node_type: "contact" | "entity";
+  category: string;
+  color: string;
+  size: number;
+  relationship_type?: string;
+  message_count?: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface KnowledgeEdge {
+  source: string;
+  target: string;
+  edge_type: string;
+  label: string;
+  weight: number;
+  category: string;
+}
+
+export interface KnowledgeGraphData {
+  nodes: KnowledgeNode[];
+  edges: KnowledgeEdge[];
+  metadata: {
+    total_nodes?: number;
+    total_edges?: number;
+    contact_count?: number;
+    entity_count?: number;
+  };
+}

@@ -5,6 +5,8 @@ Contains schemas for sending messages, generating draft replies, and summaries.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -442,4 +444,60 @@ class DraftSummaryResponse(BaseModel):
     date_range: DateRange = Field(
         ...,
         description="Date range of messages included in the summary",
+    )
+
+
+class RoutedReplyRequest(BaseModel):
+    """Request for smart routed reply generation."""
+
+    chat_id: str = Field(
+        ...,
+        description="Conversation ID to generate reply for",
+    )
+    last_message: str | None = Field(
+        default=None,
+        description="Override last message (uses latest from chat if not provided)",
+    )
+    instruction: str | None = Field(
+        default=None,
+        description="Reserved for future use. Currently ignored by /drafts/smart-reply.",
+    )
+    context_messages: int = Field(
+        default=10,
+        ge=1,
+        le=30,
+        description="Number of previous messages for context (1-30)",
+    )
+
+
+class RoutedReplyResponse(BaseModel):
+    """Response from smart routed reply generation."""
+
+    response: str = Field(
+        ...,
+        description="The generated response text",
+    )
+    response_type: Literal["generated", "clarify"] = Field(
+        ...,
+        description="How the response was produced: 'generated' or 'clarify'",
+    )
+    confidence: str = Field(
+        ...,
+        description="Confidence level: 'high', 'medium', or 'low'",
+    )
+    similarity_score: float = Field(
+        default=0.0,
+        description="Top similarity score from retrieved historical exchanges (0-1)",
+    )
+    cluster_name: str | None = Field(
+        default=None,
+        description="Legacy field retained for backward compatibility",
+    )
+    similar_triggers: list[str] | None = Field(
+        default=None,
+        description="Similar past triggers found during routing",
+    )
+    context_used: ContextInfo | None = Field(
+        default=None,
+        description="Information about the context used",
     )

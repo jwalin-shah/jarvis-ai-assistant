@@ -50,7 +50,7 @@ class BatchHandler(BaseHandler):
                 }
 
             # Get the handler from the server
-            handler = self.server._methods.get(method_name)
+            handler = self.server.get_rpc_handler(method_name)
             if not handler:
                 return {
                     "id": req_id,
@@ -61,8 +61,18 @@ class BatchHandler(BaseHandler):
                 }
 
             try:
-                # Call the handler
-                result = await handler(**params)
+                # Match single-request dispatch semantics.
+                if isinstance(params, dict):
+                    result = await handler(**params)
+                elif isinstance(params, list):
+                    result = await handler(*params)
+                elif params is None:
+                    result = await handler()
+                else:
+                    raise JsonRpcError(
+                        INVALID_PARAMS,
+                        f"Invalid params type for {method_name}: {type(params).__name__}",
+                    )
                 return {"id": req_id, "result": result}
             except JsonRpcError as e:
                 return {

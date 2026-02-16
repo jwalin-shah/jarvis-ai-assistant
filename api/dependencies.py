@@ -6,8 +6,6 @@ Uses a connection pool for thread-safe database access.
 
 from collections.abc import Iterator
 
-from fastapi import HTTPException
-
 from integrations.imessage import ChatDBReader, reset_connection_pool
 from jarvis.cache import TTLCache
 
@@ -41,14 +39,8 @@ def get_imessage_reader() -> Iterator[ChatDBReader]:
 
     if not has_access:
         reader.close()
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "Full Disk Access is required to read iMessages. "
-                "Open System Settings > Privacy & Security > Full Disk Access, "
-                "add and enable your terminal application, then restart the JARVIS API server."
-            ),
-        )
+        from jarvis.errors import imessage_permission_denied
+        raise imessage_permission_denied()
 
     try:
         yield reader

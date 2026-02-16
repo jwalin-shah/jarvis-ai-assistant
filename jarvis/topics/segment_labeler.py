@@ -61,7 +61,11 @@ class SegmentLabeler:
 
             chat_text = "\n".join(turns)
 
-            prompt = f"Chat:\n{chat_text}\n\nWhat is the main topic of this chat? (2-4 words maximum). Examples: 'Weekend Plans', 'Job Interview', 'Moving to SF'.\nTopic:"
+            prompt = (
+                f"Chat:\n{chat_text}\n\nWhat is the main topic of this chat? "
+                f"(2-4 words maximum). Examples: 'Weekend Plans', 'Job Interview', "
+                f"'Moving to SF'.\nTopic:"
+            )
 
             res = loader.generate_sync(
                 prompt=prompt, max_tokens=15, temperature=0.0, stop_sequences=["\n", ".", "Chat:"]

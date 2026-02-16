@@ -22,7 +22,8 @@ TEST_CASES = [
     {
         "id": "ochos_group",
         "chat_text": """
-Jwalin: I'm good with mid summer to late summer! Maybe 4 or 5 days pto paired with a long weekend or just the weekend potentially!
+Jwalin: I'm good with mid summer to late summer! Maybe 4 or 5 days pto paired with
+a long weekend or just the weekend potentially!
 Fantasy Ball Chat: I'm down for whatever.
 Bob: Yeah same.
 Jwalin: Also I finally got that promotion at Google!

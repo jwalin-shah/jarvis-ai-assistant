@@ -2,29 +2,34 @@
   import { onMount, onDestroy } from "svelte";
   import * as d3 from "d3";
   import { api } from "../../api/client";
-  import type { GraphData, GraphNode, LayoutType } from "../../api/types";
+  import type { GraphData, GraphNode, KnowledgeGraphData, KnowledgeNode, LayoutType } from "../../api/types";
   import GraphControls from "./GraphControls.svelte";
   import NodeTooltip from "./NodeTooltip.svelte";
   import ClusterLegend from "./ClusterLegend.svelte";
+  import ContactDetailPanel from "./ContactDetailPanel.svelte";
 
   // Props
   export let width: number = 800;
   export let height: number = 600;
-  export let onNodeClick: ((node: GraphNode) => void) | null = null;
-  export let onNodeDoubleClick: ((node: GraphNode) => void) | null = null;
 
   // State
   let loading = true;
   let error: string | null = null;
   let graphData: GraphData | null = null;
+  let knowledgeGraphData: KnowledgeGraphData | null = null;
   let svgElement: SVGSVGElement;
   // @ts-expect-error - used in bind:this
   let _containerElement: HTMLDivElement;
   let showLabels = true;
+  let showFacts = false;
   let currentLayout: LayoutType = "force";
-  let tooltipNode: GraphNode | null = null;
+  let tooltipNode: GraphNode | KnowledgeNode | null = null;
   let tooltipX = 0;
   let tooltipY = 0;
+  
+  // Contact detail panel state
+  let selectedNode: GraphNode | KnowledgeNode | null = null;
+  let showDetailPanel = false;
 
   // D3 references
   let simulation: d3.Simulation<d3.SimulationNodeDatum, undefined> | null = null;
@@ -36,21 +41,23 @@
   let adjacencyMap: Map<string, Set<string>> = new Map();
 
   // Pre-computed node map for O(1) node lookups
-  let nodeMap: Map<string, GraphNode> = new Map();
+  let nodeMap: Map<string, GraphNode | KnowledgeNode> = new Map();
 
   function buildAdjacencyMap(edges: { source: string; target: string }[]) {
     const map = new Map<string, Set<string>>();
     for (const e of edges) {
-      if (!map.has(e.source)) map.set(e.source, new Set());
-      if (!map.has(e.target)) map.set(e.target, new Set());
-      map.get(e.source)!.add(e.target);
-      map.get(e.target)!.add(e.source);
+      const source = typeof e.source === 'object' ? (e.source as any).id : e.source;
+      const target = typeof e.target === 'object' ? (e.target as any).id : e.target;
+      if (!map.has(source)) map.set(source, new Set());
+      if (!map.has(target)) map.set(target, new Set());
+      map.get(source)!.add(target);
+      map.get(target)!.add(source);
     }
     return map;
   }
 
-  function buildNodeMap(nodes: GraphNode[]) {
-    const map = new Map<string, GraphNode>();
+  function buildNodeMap(nodes: (GraphNode | KnowledgeNode)[]) {
+    const map = new Map<string, GraphNode | KnowledgeNode>();
     for (const node of nodes) {
       map.set(node.id, node);
     }
@@ -69,18 +76,37 @@
     self: "#007AFF",
   };
 
+  // Entity category colors for knowledge graph
+  const entityCategoryColors: Record<string, string> = {
+    relationship: "#DDA0DD",
+    location: "#4ECDC4",
+    work: "#45B7D1",
+    preference: "#F7DC6F",
+    event: "#FF7F50",
+    default: "#8E8E93",
+  };
+
   async function loadGraph() {
     loading = true;
     error = null;
 
     try {
-      graphData = await api.getNetworkGraph({
-        layout: currentLayout,
-        maxNodes: 100,
-        includeClusters: true,
-        width,
-        height,
-      });
+      if (showFacts) {
+        // Load knowledge graph with entities
+        knowledgeGraphData = await api.getKnowledgeGraph();
+        // Convert to GraphData format for rendering
+        graphData = convertKnowledgeToGraphData(knowledgeGraphData);
+      } else {
+        // Load network graph
+        graphData = await api.getNetworkGraph({
+          layout: currentLayout,
+          maxNodes: 100,
+          includeClusters: true,
+          width,
+          height,
+        });
+      }
+      
       adjacencyMap = buildAdjacencyMap(graphData.edges);
       nodeMap = buildNodeMap(graphData.nodes);
       renderGraph();
@@ -91,12 +117,52 @@
     }
   }
 
+  function convertKnowledgeToGraphData(kd: KnowledgeGraphData): GraphData {
+    return {
+      nodes: kd.nodes.map(n => ({
+        id: n.id,
+        label: n.label,
+        size: n.size,
+        color: n.color,
+        relationship_type: n.node_type === "contact" ? (n.relationship_type || "unknown") : n.category,
+        message_count: n.message_count || 0,
+        last_contact: null,
+        sentiment_score: 0,
+        response_time_avg: null,
+        x: null,
+        y: null,
+        cluster_id: null,
+        metadata: { 
+          ...n.metadata, 
+          node_type: n.node_type,
+          category: n.category 
+        },
+      })),
+      edges: kd.edges.map(e => ({
+        source: e.source,
+        target: e.target,
+        weight: e.weight,
+        message_count: 0,
+        sentiment: 0,
+        last_interaction: null,
+        bidirectional: false,
+        metadata: {
+          edge_type: e.edge_type,
+          label: e.label,
+          category: e.category,
+        },
+      })),
+      metadata: kd.metadata,
+    };
+  }
+
   // Track if this is first render for incremental updates
   let isFirstRender = true;
   // Store references to D3 selections for updates
   let linkSelection: d3.Selection<any, any, any, unknown> | null = null;
   let nodeSelection: d3.Selection<any, any, any, unknown> | null = null;
   let labelSelection: d3.Selection<any, any, any, unknown> | null = null;
+  let edgeLabelSelection: d3.Selection<any, any, any, unknown> | null = null;
 
   function renderGraph() {
     if (!graphData || !svgElement) return;
@@ -144,17 +210,34 @@
 
     svg.call(zoom);
 
-    // Create simulation
-    simulation = d3.forceSimulation(nodes as d3.SimulationNodeDatum[])
-      .force("link", d3.forceLink(links)
-        .id((d: any) => d.id)
-        .distance((d: any) => 100 / (d.weight + 0.1))
-        .strength((d: any) => d.weight * 0.3))
-      .force("charge", d3.forceManyBody()
-        .strength((d: any) => -200 - d.size * 5))
-      .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collision", d3.forceCollide()
-        .radius((d: any) => d.size + 5));
+    // Create simulation with different forces for knowledge graph
+    simulation = d3.forceSimulation(nodes as d3.SimulationNodeDatum[]);
+    
+    if (showFacts) {
+      // Knowledge graph: stronger link force, more repulsion for small entity nodes
+      simulation
+        .force("link", d3.forceLink(links)
+          .id((d: any) => d.id)
+          .distance(() => 80)
+          .strength(0.5))
+        .force("charge", d3.forceManyBody()
+          .strength((d: any) => d.metadata?.node_type === "entity" ? -100 : -300))
+        .force("center", d3.forceCenter(width / 2, height / 2))
+        .force("collision", d3.forceCollide()
+          .radius((d: any) => d.size + 3));
+    } else {
+      // Network graph: standard force layout
+      simulation
+        .force("link", d3.forceLink(links)
+          .id((d: any) => d.id)
+          .distance((d: any) => 100 / (d.weight + 0.1))
+          .strength((d: any) => d.weight * 0.3))
+        .force("charge", d3.forceManyBody()
+          .strength((d: any) => -200 - d.size * 5))
+        .force("center", d3.forceCenter(width / 2, height / 2))
+        .force("collision", d3.forceCollide()
+          .radius((d: any) => d.size + 5));
+    }
 
     // Draw links
     linkSelection = g!.append("g")
@@ -162,9 +245,25 @@
       .selectAll("line")
       .data(links)
       .join("line")
-      .attr("stroke", "#666")
+      .attr("stroke", () => showFacts ? "#4a5568" : "#666")
       .attr("stroke-opacity", 0.6)
-      .attr("stroke-width", (d: any) => Math.max(1, d.weight * 3));
+      .attr("stroke-width", (d: any) => showFacts ? 1.5 : Math.max(1, d.weight * 3));
+
+    // Draw edge labels for knowledge graph
+    if (showFacts) {
+      edgeLabelSelection = g!.append("g")
+        .attr("class", "edge-labels")
+        .selectAll("text")
+        .data(links)
+        .join("text")
+        .attr("font-size", "9px")
+        .attr("fill", "#888")
+        .attr("text-anchor", "middle")
+        .attr("dy", -3)
+        .style("pointer-events", "none")
+        .style("opacity", 0.8)
+        .text((d: any) => d.metadata?.label || "");
+    }
 
     // Draw nodes
     nodeSelection = g!.append("g")
@@ -174,8 +273,8 @@
       .join("circle")
       .attr("r", (d: any) => d.size)
       .attr("fill", (d: any) => d.color)
-      .attr("stroke", "#fff")
-      .attr("stroke-width", 2)
+      .attr("stroke", (d: any) => d.metadata?.node_type === "entity" ? "#fff" : "#fff")
+      .attr("stroke-width", (d: any) => d.metadata?.node_type === "entity" ? 1 : 2)
       .attr("cursor", "pointer")
       .call(drag(simulation) as any);
 
@@ -187,7 +286,7 @@
       .join("text")
       .attr("text-anchor", "middle")
       .attr("dy", (d: any) => d.size + 14)
-      .attr("font-size", "11px")
+      .attr("font-size", (d: any) => d.metadata?.node_type === "entity" ? "9px" : "11px")
       .attr("fill", "#fff")
       .attr("pointer-events", "none")
       .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
@@ -212,6 +311,12 @@
       labelSelection!
         .attr("x", (d: any) => d.x)
         .attr("y", (d: any) => d.y);
+
+      if (edgeLabelSelection) {
+        edgeLabelSelection
+          .attr("x", (d: any) => (d.source.x + d.target.x) / 2)
+          .attr("y", (d: any) => (d.source.y + d.target.y) / 2);
+      }
     });
   }
 
@@ -228,13 +333,40 @@
       .data(links, (d: any) => `${d.source.id || d.source}-${d.target.id || d.target}`)
       .join(
         enter => enter.append("line")
-          .attr("stroke", "#666")
+          .attr("stroke", () => showFacts ? "#4a5568" : "#666")
           .attr("stroke-opacity", 0.6)
-          .attr("stroke-width", (d: any) => Math.max(1, d.weight * 3)),
+          .attr("stroke-width", (d: any) => showFacts ? 1.5 : Math.max(1, d.weight * 3)),
         update => update
-          .attr("stroke-width", (d: any) => Math.max(1, d.weight * 3)),
+          .attr("stroke-width", (d: any) => showFacts ? 1.5 : Math.max(1, d.weight * 3)),
         exit => exit.remove()
       );
+
+    // Update edge labels for knowledge graph
+    if (showFacts) {
+      if (!edgeLabelSelection) {
+        edgeLabelSelection = g.append("g")
+          .attr("class", "edge-labels")
+          .selectAll("text");
+      }
+      edgeLabelSelection = g.select(".edge-labels")
+        .selectAll("text")
+        .data(links, (d: any) => `${d.source.id || d.source}-${d.target.id || d.target}`)
+        .join(
+          enter => enter.append("text")
+            .attr("font-size", "9px")
+            .attr("fill", "#888")
+            .attr("text-anchor", "middle")
+            .attr("dy", -3)
+            .style("pointer-events", "none")
+            .style("opacity", 0.8)
+            .text((d: any) => d.metadata?.label || ""),
+          update => update.text((d: any) => d.metadata?.label || ""),
+          exit => exit.remove()
+        );
+    } else if (edgeLabelSelection) {
+      edgeLabelSelection.remove();
+      edgeLabelSelection = null;
+    }
 
     // Update nodes using data join
     nodeSelection = g.select(".nodes")
@@ -244,13 +376,14 @@
         enter => enter.append("circle")
           .attr("r", (d: any) => d.size)
           .attr("fill", (d: any) => d.color)
-          .attr("stroke", "#fff")
-          .attr("stroke-width", 2)
+          .attr("stroke", (d: any) => d.metadata?.node_type === "entity" ? "#fff" : "#fff")
+          .attr("stroke-width", (d: any) => d.metadata?.node_type === "entity" ? 1 : 2)
           .attr("cursor", "pointer")
           .call(drag(simulation!) as any),
         update => update
           .attr("r", (d: any) => d.size)
-          .attr("fill", (d: any) => d.color),
+          .attr("fill", (d: any) => d.color)
+          .attr("stroke-width", (d: any) => d.metadata?.node_type === "entity" ? 1 : 2),
         exit => exit.remove()
       );
 
@@ -262,7 +395,7 @@
         enter => enter.append("text")
           .attr("text-anchor", "middle")
           .attr("dy", (d: any) => d.size + 14)
-          .attr("font-size", "11px")
+          .attr("font-size", (d: any) => d.metadata?.node_type === "entity" ? "9px" : "11px")
           .attr("fill", "#fff")
           .attr("pointer-events", "none")
           .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)")
@@ -270,6 +403,7 @@
           .text((d: any) => d.label),
         update => update
           .attr("dy", (d: any) => d.size + 14)
+          .attr("font-size", (d: any) => d.metadata?.node_type === "entity" ? "9px" : "11px")
           .style("display", showLabels ? "block" : "none")
           .text((d: any) => d.label),
         exit => exit.remove()
@@ -284,7 +418,7 @@
 
   function bindEventHandlers(node: d3.Selection<any, any, any, unknown>) {
     node.on("mouseover", (event: MouseEvent, d: any) => {
-      tooltipNode = d as GraphNode;
+      tooltipNode = d as GraphNode | KnowledgeNode;
       tooltipX = event.pageX;
       tooltipY = event.pageY;
     })
@@ -297,10 +431,13 @@
     })
     .on("click", (_event: MouseEvent, d: any) => {
       highlightNode(d.id);
-      if (onNodeClick) onNodeClick(d as GraphNode);
+      // Show detail panel for contact nodes
+      if (d.metadata?.node_type !== "entity") {
+        selectedNode = d;
+        showDetailPanel = true;
+      }
     })
     .on("dblclick", (_event: MouseEvent, d: any) => {
-      if (onNodeDoubleClick) onNodeDoubleClick(d as GraphNode);
       zoomToNode(d);
     });
   }
@@ -328,8 +465,8 @@
 
     // Reset all nodes
     g.selectAll("circle")
-      .attr("stroke", "#fff")
-      .attr("stroke-width", 2)
+      .attr("stroke", (nodeData: any) => nodeData.metadata?.node_type === "entity" ? "#fff" : "#fff")
+      .attr("stroke-width", (nodeData: any) => nodeData.metadata?.node_type === "entity" ? 1 : 2)
       .attr("opacity", 1);
 
     // Reset all links
@@ -344,9 +481,11 @@
 
     // Highlight connected edges
     g.selectAll("line")
-      .attr("opacity", (d: any) =>
-        d.source.id === nodeId || d.target.id === nodeId ? 1 : 0.2
-      );
+      .attr("opacity", (d: any) => {
+        const sourceId = d.source.id || d.source;
+        const targetId = d.target.id || d.target;
+        return sourceId === nodeId || targetId === nodeId ? 1 : 0.2;
+      });
 
     // Dim unconnected nodes (O(1) lookup via adjacency map)
     const neighbors = adjacencyMap.get(nodeId) ?? new Set();
@@ -383,6 +522,12 @@
       g.selectAll(".labels text")
         .style("display", showLabels ? "block" : "none");
     }
+  }
+
+  async function toggleFacts() {
+    showFacts = !showFacts;
+    isFirstRender = true; // Force full re-render
+    await loadGraph();
   }
 
   function reheat() {
@@ -469,8 +614,8 @@
         const sourceNode = nodeMap.get(sourceId);
         const targetNode = nodeMap.get(targetId);
         if (types.length === 0) return 0.6;
-        const sourceMatch = sourceNode && typeSet.has(sourceNode.relationship_type);
-        const targetMatch = targetNode && typeSet.has(targetNode.relationship_type);
+        const sourceMatch = sourceNode ? typeSet.has(sourceNode.relationship_type || 'unknown') : false;
+        const targetMatch = targetNode ? typeSet.has(targetNode.relationship_type || 'unknown') : false;
         return sourceMatch && targetMatch ? 0.6 : 0.1;
       });
   }
@@ -495,6 +640,19 @@
       .attr("opacity", (d: any) => matchingIds.has(d.id) ? 1 : 0.2);
   }
 
+  function handleCloseDetailPanel() {
+    showDetailPanel = false;
+    selectedNode = null;
+    // Reset highlighting
+    if (g) {
+      g.selectAll("circle")
+        .attr("stroke", (nodeData: any) => nodeData.metadata?.node_type === "entity" ? "#fff" : "#fff")
+        .attr("stroke-width", (nodeData: any) => nodeData.metadata?.node_type === "entity" ? 1 : 2)
+        .attr("opacity", 1);
+      g.selectAll("line").attr("opacity", 0.6);
+    }
+  }
+
   onMount(() => {
     loadGraph();
   });
@@ -510,8 +668,10 @@
   <GraphControls
     {showLabels}
     {currentLayout}
+    {showFacts}
     on:resetZoom={resetZoom}
     on:toggleLabels={toggleLabels}
+    on:toggleFacts={toggleFacts}
     on:reheat={reheat}
     on:changeLayout={(e) => changeLayout(e.detail)}
     on:search={(e) => searchNodes(e.detail)}
@@ -523,7 +683,7 @@
     {#if loading}
       <div class="loading-state">
         <div class="loading-spinner"></div>
-        <p>Loading relationship graph...</p>
+        <p>Loading {showFacts ? "knowledge" : "relationship"} graph...</p>
       </div>
     {:else if error}
       <div class="error-state">
@@ -533,12 +693,24 @@
     {:else}
       <svg bind:this={svgElement}></svg>
 
-      {#if graphData}
+      {#if graphData && !showFacts}
         <ClusterLegend
           nodes={graphData.nodes}
           colors={relationshipColors}
           onfilter={filterByRelationship}
         />
+      {/if}
+      
+      {#if showFacts && graphData}
+        <div class="knowledge-legend">
+          <h4>Entity Types</h4>
+          {#each Object.entries(entityCategoryColors) as [category, color]}
+            <div class="legend-item">
+              <span class="color-dot" style="background-color: {color}"></span>
+              <span class="label">{category}</span>
+            </div>
+          {/each}
+        </div>
       {/if}
     {/if}
   </div>
@@ -548,6 +720,14 @@
       node={tooltipNode}
       x={tooltipX}
       y={tooltipY}
+    />
+  {/if}
+  
+  {#if selectedNode}
+    <ContactDetailPanel
+      node={selectedNode}
+      visible={showDetailPanel}
+      onClose={handleCloseDetailPanel}
     />
   {/if}
 </div>
@@ -626,5 +806,42 @@
 
   .retry-btn:hover {
     background: var(--bg-active);
+  }
+
+  .knowledge-legend {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 12px;
+    border-radius: 8px;
+    color: white;
+    font-size: 12px;
+    backdrop-filter: blur(4px);
+  }
+
+  .knowledge-legend h4 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.8;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+  }
+
+  .color-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .label {
+    text-transform: capitalize;
   }
 </style>

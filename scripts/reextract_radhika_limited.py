@@ -47,7 +47,8 @@ def reextract_limited():
             print(f"  Verified {len(facts)} facts.")
             for f in facts:
                 print(
-                    f"    - {f.category}: {f.subject} {f.predicate} {f.value} (NLI Score: {f.confidence:.2f})"
+                    f"    - {f.category}: {f.subject} {f.predicate} {f.value} "
+                    f"(NLI Score: {f.confidence:.2f})"
                 )
             all_facts.extend(facts)
             save_facts(facts, CHAT_ID)

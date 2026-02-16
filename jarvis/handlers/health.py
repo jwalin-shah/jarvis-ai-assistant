@@ -26,5 +26,5 @@ class HealthHandler(BaseHandler):
         return {
             "status": "healthy",
             "timestamp": time.time(),
-            "models_ready": self.server._models_ready,
+            "models_ready": self.server.models_ready,
         }

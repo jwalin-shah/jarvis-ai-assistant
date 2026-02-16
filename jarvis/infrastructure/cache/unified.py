@@ -79,6 +79,17 @@ class UnifiedCache(CacheBackend):
         if self.l2:
             self.l2.clear()
 
+    def get_or_set(self, key: str, factory: Any, ttl: float | None = None) -> Any:
+        """Get from cache or compute via factory with tiered logic."""
+        val = self.get(key)
+        if val is not None:
+            return val
+
+        # If not in either tier, compute and set in both
+        result = factory()
+        self.set(key, result, ttl=ttl)
+        return result
+
     def stats(self) -> dict[str, Any]:
         total = self._hits + self._misses
         s = {

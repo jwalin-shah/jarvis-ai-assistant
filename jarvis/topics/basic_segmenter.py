@@ -77,7 +77,10 @@ def segment_conversation_basic(
         return []
 
     # Use shared preparation logic (sorting, junk filtering)
-    from jarvis.topics.utils import get_embeddings_for_segmentation, prepare_messages_for_segmentation
+    from jarvis.topics.utils import (
+        get_embeddings_for_segmentation,
+        prepare_messages_for_segmentation,
+    )
 
     messages, norm_texts = prepare_messages_for_segmentation(messages)
 

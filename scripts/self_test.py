@@ -98,7 +98,7 @@ async def test_contact_resolution() -> bool:
         print_check(
             "Contact Resolution",
             True,
-            f"{'Resolved test contact' if resolved else 'No contacts found (ok if AddressBook empty)'}",
+            "Resolved test contact" if resolved else "No contacts found (ok if AddressBook empty)",
         )
         return True
     except Exception as e:

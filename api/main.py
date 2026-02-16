@@ -159,9 +159,9 @@ API_TAGS_METADATA = [
         "trends, and relationship health scores.",
     },
     {
-        "name": "template-analytics",
-        "description": "Template matching analytics and optimization. "
-        "Monitor template hit rates, view top templates, and identify optimization opportunities.",
+        "name": "analytics",
+        "description": "Comprehensive conversation and template analytics. "
+        "Dashboard metrics, time-series data, and template matching optimization.",
     },
     {
         "name": "websocket",
@@ -213,6 +213,11 @@ API_TAGS_METADATA = [
         "description": "Relationship learning and communication profiling. "
         "Build and manage profiles that capture communication patterns with each contact "
         "for personalized reply generation.",
+    },
+    {
+        "name": "debug",
+        "description": "Debug and tracing endpoints for development observability. "
+        "Request traces, generation logs, and system status for troubleshooting.",
     },
 ]
 
@@ -336,7 +341,6 @@ def _register_routers(app_instance: FastAPI) -> None:
     from api.routers.contacts import router as contacts_router
     from api.routers.conversations import router as conversations_router
     from api.routers.custom_templates import router as custom_templates_router
-    from api.routers.debug import router as debug_router
     from api.routers.drafts import router as drafts_router
 
     # from api.routers.embeddings import router as embeddings_router  # Missing
@@ -346,7 +350,6 @@ def _register_routers(app_instance: FastAPI) -> None:
     from api.routers.graph import router as graph_router
     from api.routers.health import router as health_router
     from api.routers.metrics import router as metrics_router
-    from api.routers.pdf_export import router as pdf_export_router
     from api.routers.priority import router as priority_router
 
     # from api.routers.relationships import router as relationships_router  # Missing
@@ -355,7 +358,6 @@ def _register_routers(app_instance: FastAPI) -> None:
     from api.routers.stats import router as stats_router
     from api.routers.suggestions import router as suggestions_router
     from api.routers.tasks import router as tasks_router
-    from api.routers.template_analytics import router as template_analytics_router
     from api.routers.threads import router as threads_router
 
     # from api.routers.topics import router as topics_router  # Missing
@@ -363,7 +365,6 @@ def _register_routers(app_instance: FastAPI) -> None:
 
     # Register routers in logical order
     app_instance.include_router(health_router)
-    app_instance.include_router(debug_router)
     app_instance.include_router(attachments_router)
     app_instance.include_router(calendar_router)
     app_instance.include_router(contacts_router)
@@ -372,13 +373,11 @@ def _register_routers(app_instance: FastAPI) -> None:
     app_instance.include_router(drafts_router)
     # app_instance.include_router(embeddings_router)  # Missing
     app_instance.include_router(export_router)
-    app_instance.include_router(pdf_export_router)
     app_instance.include_router(search_router)
     app_instance.include_router(suggestions_router)
     app_instance.include_router(settings_router)
     app_instance.include_router(stats_router)
     app_instance.include_router(metrics_router)
-    app_instance.include_router(template_analytics_router)
     app_instance.include_router(threads_router)
     # app_instance.include_router(topics_router)  # Missing
     app_instance.include_router(websocket_router)

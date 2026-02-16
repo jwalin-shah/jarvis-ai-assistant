@@ -30,9 +30,8 @@ class ContactHandler(BaseHandler):
     @rpc_handler("Failed to get contacts")
     async def _get_contacts(self, limit: int = 100, offset: int = 0) -> dict[str, Any]:
         """Get list of contacts."""
-        from jarvis.contacts.resolver import get_contact_resolver
 
-        resolver = get_contact_resolver()
+        # Note: resolver available via get_contact_resolver() if needed
         # This is a placeholder as the actual implementation might vary
         # based on what's available in the resolver
         return {"contacts": [], "total_count": 0}

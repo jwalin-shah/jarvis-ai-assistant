@@ -192,7 +192,8 @@ def main():
     final_facts = get_all_facts()
     with_predicates = sum(1 for f in final_facts if f.predicate)
     print(
-        f"   Facts with predicates: {with_predicates}/{len(final_facts)} ({100 * with_predicates // len(final_facts)}%)"
+        f"   Facts with predicates: {with_predicates}/{len(final_facts)} "
+        f"({100 * with_predicates // len(final_facts)}%)"
     )
 
 

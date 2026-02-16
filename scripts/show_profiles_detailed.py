@@ -27,7 +27,8 @@ def show_profiles():
 
         print("\n[IDENTITY & RELATIONSHIP]")
         print(
-            f"  Relationship: {profile.relationship} ({profile.relationship_confidence * 100:.1f}% confidence)"
+            f"  Relationship: {profile.relationship} "
+            f"({profile.relationship_confidence * 100:.1f}% confidence)"
         )
         if profile.relationship_reasoning:
             print(f"  Reasoning:    {profile.relationship_reasoning}")

@@ -28,7 +28,8 @@ def batch_process_knowledge(force_historical: bool = False, limit: int | None = 
                 ORDER BY last_extracted_rowid NULLS FIRST
             """
         else:
-            # Only queue contacts that have new messages (have last_extracted_rowid set but may have new messages)
+            # Only queue contacts that have new messages
+            # (have last_extracted_rowid set but may have new messages)
             # or contacts never extracted
             query = """
                 SELECT chat_id, display_name, last_extracted_rowid

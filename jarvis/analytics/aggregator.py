@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 # Optional pandas import for vectorized operations
 try:
-    import pandas as pd
+    import pandas as pd  # noqa: F401
 
     PANDAS_AVAILABLE = True
 except ImportError:

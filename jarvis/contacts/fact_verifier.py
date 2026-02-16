@@ -30,6 +30,43 @@ class FactVerifier:
         """
         self.threshold = threshold
 
+    def verify_facts_batch(
+        self,
+        candidate_data: list[tuple[Fact, str]],
+    ) -> tuple[list[Fact], int]:
+        """Verify multiple facts against their respective source segments in one batch.
+
+        Args:
+            candidate_data: List of (Fact object, source_segment_text) pairs.
+
+        Returns:
+            Tuple of (verified_facts, rejection_count).
+        """
+        if not candidate_data:
+            return [], 0
+
+        # Prepare all pairs for NLI in one go
+        pairs = [(text, fact.value) for fact, text in candidate_data]
+
+        try:
+            results = verify_entailment_batch(pairs, threshold=self.threshold)
+        except Exception as e:
+            logger.error(f"Batch NLI verification failed: {e}")
+            return [f for f, _ in candidate_data], 0
+
+        verified_facts = []
+        rejection_count = 0
+        for (fact, _), (is_entailed, score) in zip(candidate_data, results):
+            if is_entailed:
+                nli_multiplier = 0.3 + (0.7 * score)
+                fact.confidence = round(fact.confidence * nli_multiplier, 3)
+                verified_facts.append(fact)
+            else:
+                rejection_count += 1
+                logger.debug("Fact rejected by NLI (score=%.3f): %s", score, fact.value)
+
+        return verified_facts, rejection_count
+
     def verify_facts(
         self,
         facts: list[Fact],

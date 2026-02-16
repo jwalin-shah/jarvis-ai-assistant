@@ -257,7 +257,7 @@ class TestBuildReplyPromptAssembly:
         assert "Be very brief, max 3 words" in result
 
     def test_examples_section_has_context_reply_format(self):
-        result = build_reply_prompt(context="Test", last_message="Test")
+        _result = build_reply_prompt(context="Test", last_message="Test")
         # Check examples are in the result
         # Examples formatted in the style section
 
@@ -913,7 +913,7 @@ class TestExampleFormatting:
             FewShotExample(context="Hey there", output="Hi!"),
             FewShotExample(context="What's up?", output="Not much"),
         ]
-        result = format_examples(examples)
+        _result = format_examples(examples)
         # Examples formatted in the style section
 
     def testformat_summary_examples(self):

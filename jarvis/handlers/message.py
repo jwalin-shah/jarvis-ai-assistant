@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -12,7 +11,6 @@ from jarvis.handlers.base import (
     JsonRpcError,
     rpc_handler,
 )
-from jarvis.utils.latency_tracker import track_latency
 
 if TYPE_CHECKING:
     pass
@@ -34,60 +32,6 @@ class MessageHandler(BaseHandler):
         self.server.register("get_smart_replies", self._get_smart_replies)
         self.server.register("list_conversations", self._list_conversations)
         self.server.register("chat", self._chat, streaming=True)
-
-    @staticmethod
-    def _build_message_context(messages: list) -> tuple[list[str], set[str]]:
-        """Build context lines and participant set from messages."""
-        context = []
-        participants: set[str] = set()
-        for msg in reversed(messages):
-            sender = msg.sender_name or msg.sender
-            participants.add(sender)
-            prefix = "Me" if msg.is_from_me else sender
-            if msg.text:
-                context.append(f"{prefix}: {msg.text}")
-        return context, participants
-
-    async def _send_stream_token(
-        self,
-        writer: Any,
-        token: str,
-        token_index: int,
-        is_final: bool = False,
-        request_id: Any = None,
-    ) -> None:
-        """Helper to send a streaming token."""
-        notification = json.dumps(
-            {
-                "jsonrpc": "2.0",
-                "method": "stream.token",
-                "params": {
-                    "token": token,
-                    "index": token_index,
-                    "final": is_final,
-                    "request_id": request_id,
-                },
-            }
-        )
-        writer.write(notification.encode() + b"\n")
-        await writer.drain()
-
-    async def _send_stream_response(
-        self,
-        writer: Any,
-        request_id: Any,
-        result: dict[str, Any],
-    ) -> None:
-        """Helper to send the final streaming response."""
-        response = json.dumps(
-            {
-                "jsonrpc": "2.0",
-                "result": result,
-                "id": request_id,
-            }
-        )
-        writer.write(response.encode() + b"\n")
-        await writer.drain()
 
     @rpc_handler("Chat failed")
     async def _chat(
@@ -170,7 +114,7 @@ class MessageHandler(BaseHandler):
                 is_final = token_data["is_final"]
                 response_tokens.append(token_text)
 
-                await self._send_stream_token(
+                await self.send_stream_token(
                     writer, token_text, token_index, is_final, request_id=request_id
                 )
 
@@ -193,27 +137,31 @@ class MessageHandler(BaseHandler):
         skip_cache: bool = False,
     ) -> dict[str, Any]:
         """Generate draft replies."""
-        if not skip_cache and _writer is None and self.server._prefetch_manager:
-            cached_draft = self.server._prefetch_manager.get_draft(chat_id)
+        prefetch_manager = self.server.get_prefetch_manager()
+        if not skip_cache and _writer is None and prefetch_manager:
+            cached_draft = prefetch_manager.get_draft(chat_id)
             if cached_draft and "suggestions" in cached_draft:
                 logger.debug(f"Serving prefetched draft for {chat_id}")
                 cached_draft["from_cache"] = True
                 return cached_draft
 
         from jarvis.model_warmer import get_model_warmer
-
         get_model_warmer().touch()
 
-        from integrations.imessage import ChatDBReader
+        reply_service = self.server.get_reply_service()
 
-        with track_latency("socket_get_messages", chat_id=chat_id, limit=context_messages):
-            with ChatDBReader() as reader:
-                messages = reader.get_messages(chat_id, limit=context_messages)
+        # Use context service to fetch messages and build context strings
+        context, participants = reply_service.context_service.fetch_conversation_context(
+            chat_id, limit=context_messages
+        )
 
-        if not messages:
+        if not context:
             raise JsonRpcError(INVALID_PARAMS, "No messages found in conversation")
 
-        context, participants = self._build_message_context(messages)
+        # Get last incoming message
+        from integrations.imessage import ChatDBReader
+        with ChatDBReader() as reader:
+            messages = reader.get_messages(chat_id, limit=context_messages)
 
         last_incoming = None
         for msg in messages:
@@ -227,7 +175,7 @@ class MessageHandler(BaseHandler):
         context_used = {
             "num_messages": len(messages),
             "participants": list(participants),
-            "last_message": messages[0].text if messages else None,
+            "last_message": last_incoming,
         }
 
         if _writer is not None:
@@ -241,21 +189,20 @@ class MessageHandler(BaseHandler):
                 context_used=context_used,
             )
 
-        from jarvis.router import get_reply_router
-
-        router = get_reply_router()
-        if self.server._prefetch_manager:
-            self.server._prefetch_manager.pause()
+        if prefetch_manager:
+            self.server.pause_prefetch()
         try:
+            from jarvis.router import get_reply_router
+            router = get_reply_router()
             result = await asyncio.to_thread(
                 router.route,
                 incoming=last_incoming,
-                thread=context[-10:] if context else None,
+                thread=context[-10:],
                 chat_id=chat_id,
             )
         finally:
-            if self.server._prefetch_manager:
-                self.server._prefetch_manager.resume()
+            if prefetch_manager:
+                self.server.resume_prefetch()
 
         return result
 
@@ -270,12 +217,11 @@ class MessageHandler(BaseHandler):
         context_used: dict[str, Any],
     ) -> dict[str, Any]:
         """Stream draft tokens."""
-        from jarvis.reply_service import get_reply_service
+        reply_service = self.server.get_reply_service()
 
-        reply_service = get_reply_service()
-
-        if self.server._prefetch_manager:
-            self.server._prefetch_manager.pause()
+        prefetch_manager = self.server.get_prefetch_manager()
+        if prefetch_manager:
+            self.server.pause_prefetch()
         try:
             try:
                 request, metadata = await asyncio.to_thread(
@@ -299,15 +245,15 @@ class MessageHandler(BaseHandler):
                     is_final = token_data["is_final"]
                     response_tokens.append(token_text)
 
-                    await self._send_stream_token(
+                    await self.send_stream_token(
                         writer, token_text, token_index, is_final, request_id=request_id
                     )
             except Exception:
                 logger.exception("Streaming generation failed")
                 raise JsonRpcError(INTERNAL_ERROR, "Streaming failed")
         finally:
-            if self.server._prefetch_manager:
-                self.server._prefetch_manager.resume()
+            if prefetch_manager:
+                self.server.resume_prefetch()
 
         full_response = "".join(response_tokens)
         result = {
@@ -316,7 +262,7 @@ class MessageHandler(BaseHandler):
             "streamed": True,
             "tokens_generated": len(response_tokens),
         }
-        await self._send_stream_response(writer, request_id, result)
+        await self.send_stream_response(writer, request_id, result)
         return result
 
     @rpc_handler("Summarization failed")
@@ -328,40 +274,34 @@ class MessageHandler(BaseHandler):
         _request_id: Any = None,
     ) -> dict[str, Any]:
         """Summarize a conversation."""
-        from integrations.imessage import ChatDBReader
+        reply_service = self.server.get_reply_service()
 
-        with ChatDBReader() as reader:
-            messages = reader.get_messages(chat_id, limit=num_messages)
+        conversation, _ = reply_service.context_service.fetch_conversation_context(
+            chat_id, limit=num_messages
+        )
 
-        if not messages:
+        if not conversation:
             raise JsonRpcError(INVALID_PARAMS, "No messages found")
 
         from jarvis.model_warmer import get_model_warmer
-
         get_model_warmer().touch()
 
-        conversation, _ = self._build_message_context(messages)
-        if not conversation:
-            return {
-                "summary": "No text messages found in conversation",
-                "key_points": [],
-                "message_count": len(messages),
-            }
-
         from models.loader import get_model
-
         model = get_model()
         if not model:
             raise JsonRpcError(INTERNAL_ERROR, "Model not available")
 
         conversation_text = "\n".join(conversation[-30:])
-        prompt = f"Summarize this conversation in 2-3 sentences, then list key points:\n\n{conversation_text}\n\nSummary:"
+        prompt = (
+            f"Summarize this conversation in 2-3 sentences, then list key points:\n\n"
+            f"{conversation_text}\n\nSummary:"
+        )
 
         if _writer is not None:
             return await self._summarize_streaming(
                 model=model,
                 prompt=prompt,
-                message_count=len(messages),
+                message_count=len(conversation),
                 writer=_writer,
                 request_id=_request_id,
             )
@@ -385,7 +325,7 @@ class MessageHandler(BaseHandler):
         return {
             "summary": summary,
             "key_points": key_points or ["See full conversation for details"],
-            "message_count": len(messages),
+            "message_count": len(conversation),
         }
 
     async def _summarize_streaming(
@@ -418,7 +358,7 @@ class MessageHandler(BaseHandler):
                 is_final = token_data["is_final"]
                 response_tokens.append(token_text)
 
-                await self._send_stream_token(
+                await self.send_stream_token(
                     writer, token_text, token_index, is_final, request_id=request_id
                 )
         except Exception:
@@ -441,7 +381,7 @@ class MessageHandler(BaseHandler):
             "streamed": True,
             "tokens_generated": len(response_tokens),
         }
-        await self._send_stream_response(writer, request_id, result)
+        await self.send_stream_response(writer, request_id, result)
         return result
 
     @rpc_handler("Smart replies failed")

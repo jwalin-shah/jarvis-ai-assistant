@@ -63,9 +63,11 @@ Do NOT extract:
 Output format:
 - Output JSONL only: one JSON object per line, no markdown.
 - If multiple [Segment N] blocks are provided, each line MUST use this schema:
-  {"segment_id": <int>, "subject": "<person>", "speaker": "<speaker>", "claim": "<durable fact>", "evidence_quote": "<exact quote from conversation>"}
+  {"segment_id": <int>, "subject": "<person>", "speaker": "<speaker>",
+  "claim": "<durable fact>", "evidence_quote": "<exact quote from conversation>"}
 - If only one segment is provided, `segment_id` is optional:
-  {"subject": "<person>", "speaker": "<speaker>", "claim": "<durable fact>", "evidence_quote": "<exact quote from conversation>"}
+  {"subject": "<person>", "speaker": "<speaker>",
+  "claim": "<durable fact>", "evidence_quote": "<exact quote from conversation>"}
 - Max 3 claims per segment.
 - If no claims at all, output exactly: NONE
 
@@ -77,7 +79,10 @@ Hard rules:
 - Do not use placeholders, brackets, or variables (no "[City]", "[Job Title]", "<unknown>").
 - No headings, markdown, commentary, or extra labels."""
     if seg_count > 1:
-        base += "\n\nBatch constraint:\n- Multiple segments are present.\n- `segment_id` is REQUIRED on every JSON line."
+        base += (
+            "\n\nBatch constraint:\n- Multiple segments are present.\n"
+            "- `segment_id` is REQUIRED on every JSON line."
+        )
     return base
 
 
@@ -94,7 +99,8 @@ Allowed claims: identity, relationship, work, school, location, durable preferen
 Do NOT extract: logistics, jokes, reactions, greetings, speculative claims.
 
 Output JSONL — one JSON object per line, no markdown:
-{"segment_id": <int>, "subject": "<person>", "claim": "<durable fact in 3rd person>", "verbatim_quote": "<EXACT text from conversation>"}
+{"segment_id": <int>, "subject": "<person>", "claim": "<durable fact in 3rd person>",
+ "verbatim_quote": "<EXACT text from conversation>"}
 
 Max 3 claims per segment. If no durable facts exist, output exactly: NONE"""
     if seg_count > 1:
@@ -107,14 +113,16 @@ def _prompt_empty_safe(user_name: str, contact_name: str, seg_count: int) -> str
     base = """You extract durable personal facts from chat turns.
 
 FIRST RULE — EMPTY INPUT HANDLING:
-- If the conversation text is empty, blank, or contains only greetings/reactions with no personal facts, output EXACTLY the word: NONE
+If the conversation text is empty, blank, or contains only greetings/reactions "
+            "with no personal facts, output EXACTLY the word: NONE
 - Do NOT generate example facts. Do NOT output fictional people. Do NOT use placeholder data.
 
 Allowed claims: identity, relationship, work, school, location, durable preferences/habits.
 Do NOT extract: logistics, meetups, jokes, reactions, tapbacks, news, speculative claims.
 
 Output format — JSONL only (one JSON object per line, no markdown):
-{"segment_id": <int>, "subject": "<person>", "speaker": "<who said it>", "claim": "<durable fact>", "evidence_quote": "<exact quote>"}
+{"segment_id": <int>, "subject": "<person>", "speaker": "<who said it>",
+ "claim": "<durable fact>", "evidence_quote": "<exact quote>"}
 
 Max 3 claims per segment. Subject must be a person's name, never a group.
 Only extract facts EXPLICITLY stated. No inference. Use 3rd-person wording.
@@ -138,7 +146,8 @@ Allowed claims: identity, relationship, work, school, location, preferences, hab
 Do NOT extract: logistics, meetups, jokes, reactions, greetings, speculative claims.
 
 Output JSONL — one JSON per line, no markdown:
-{{"segment_id": <int>, "subject": "<EXACT person name>", "speaker": "<who actually said it>", "claim": "<durable fact in 3rd person>", "evidence_quote": "<exact quote from conversation>"}}
+{{"segment_id": <int>, "subject": "<EXACT person name>", "speaker": "<who actually said it>",
+ "claim": "<durable fact in 3rd person>", "evidence_quote": "<exact quote from conversation>"}}
 
 Hard rules:
 - Max 3 claims per segment. If none, output: NONE
@@ -170,7 +179,9 @@ WHAT TO EXTRACT: stable facts useful for a long-lived profile:
 WHAT TO SKIP: logistics, meetups, jokes, reactions, tapbacks, greetings, speculation.
 
 OUTPUT FORMAT: JSONL only — one JSON object per line. No markdown, no commentary.
-{{"segment_id": <int>, "subject": "<person name>", "speaker": "<who said it>", "claim": "<durable fact, 3rd person>", "verbatim_quote": "<EXACT substring copied from the conversation>"}}
+{{"segment_id": <int>, "subject": "<person name>", "speaker": "<who said it>",
+ "claim": "<durable fact, 3rd person>",
+ "verbatim_quote": "<EXACT substring copied from the conversation>"}}
 
 HARD RULES:
 1. Max 3 claims per segment.
@@ -209,7 +220,8 @@ WHAT TO EXTRACT: stable facts useful for a long-lived profile:
 WHAT TO SKIP: logistics, meetups, jokes, reactions, tapbacks, greetings, speculation.
 
 OUTPUT FORMAT: JSONL only — one JSON object per line. No markdown, no commentary.
-{{"subject": "<person name>", "claim": "<durable fact, 3rd person>", "quote": "<EXACT substring from the conversation>"}}
+{{"subject": "<person name>", "claim": "<durable fact, 3rd person>",
+ "quote": "<EXACT substring from the conversation>"}}
 
 HARD RULES:
 1. Max 3 claims per segment.
@@ -241,7 +253,8 @@ WHAT TO EXTRACT: stable facts useful for a long-lived profile:
 WHAT TO SKIP: logistics, meetups, jokes, reactions, tapbacks, greetings, speculation.
 
 OUTPUT FORMAT: JSONL only — one JSON object per line. No markdown, no commentary.
-{{"subject": "<person name>", "claim": "<durable fact, 3rd person>", "quote": "<EXACT substring from the conversation>"}}
+{{"subject": "<person name>", "claim": "<durable fact, 3rd person>",
+ "quote": "<EXACT substring from the conversation>"}}
 
 HARD RULES:
 1. Max 3 claims per segment.

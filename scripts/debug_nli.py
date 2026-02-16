@@ -27,7 +27,8 @@ def test_nli():
     results = nli.predict_batch(pairs)
     for (p, h), scores in zip(pairs, results):
         print(
-            f"{p:<40} | {h:<40} | {scores['entailment']:.3f} | {scores['contradiction']:.3f} | {scores['neutral']:.3f}"
+            f"{p:<40} | {h:<40} | {scores['entailment']:.3f} | "
+            f"{scores['contradiction']:.3f} | {scores['neutral']:.3f}"
         )
 
 

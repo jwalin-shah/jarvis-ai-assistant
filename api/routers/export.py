@@ -1,12 +1,16 @@
 """Export API endpoints.
 
-Provides endpoints for exporting conversations, search results, and backups.
+Provides endpoints for exporting conversations, search results, backups, and PDFs.
 """
 
 import asyncio
+import base64
 import logging
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from api.dependencies import get_imessage_reader
@@ -28,10 +32,55 @@ from jarvis.export import (
     export_search_results,
     get_export_filename,
 )
+from jarvis.pdf_generator import PDFExportOptions, generate_pdf
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/export", tags=["export"])
+
+
+# =============================================================================
+# PDF Export Models
+# =============================================================================
+
+class PDFExportDateRange(BaseModel):
+    """Date range filter for PDF exports."""
+
+    start: datetime | None = Field(default=None, description="Start date (inclusive)")
+    end: datetime | None = Field(default=None, description="End date (inclusive)")
+
+
+class PDFExportRequest(BaseModel):
+    """Request to export a conversation to PDF."""
+
+    include_attachments: bool = Field(
+        default=True,
+        description="Include attachment thumbnails in PDF",
+    )
+    include_reactions: bool = Field(
+        default=True,
+        description="Include message reactions in PDF",
+    )
+    date_range: PDFExportDateRange | None = Field(
+        default=None,
+        description="Optional date range filter",
+    )
+    limit: int = Field(
+        default=1000,
+        ge=1,
+        le=10000,
+        description="Maximum messages to export",
+    )
+
+
+class PDFExportResponse(BaseModel):
+    """Response containing PDF export data."""
+
+    success: bool = Field(..., description="Whether the export succeeded")
+    filename: str = Field(..., description="Suggested filename for the PDF")
+    data: str = Field(..., description="Base64-encoded PDF data")
+    message_count: int = Field(..., description="Number of messages in the PDF")
+    size_bytes: int = Field(..., description="Size of the PDF in bytes")
 
 
 def _to_export_format(format_enum: ExportFormatEnum) -> ExportFormat:
@@ -322,4 +371,174 @@ async def export_full_backup(
         raise ExportError(
             "Failed to create backup",
             cause=e,
+        ) from e
+
+
+# =============================================================================
+# PDF Export Endpoints
+# =============================================================================
+
+
+@router.post("/pdf/{chat_id}", response_model=PDFExportResponse)
+async def export_conversation_pdf(
+    chat_id: str,
+    request: PDFExportRequest,
+    reader: ChatDBReader = Depends(get_imessage_reader),
+) -> PDFExportResponse:
+    """Export a conversation to PDF format.
+
+    Generates a beautifully formatted PDF document with:
+    - Header with conversation name, participants, and date range
+    - Messages with styled bubbles (grayscale for printing)
+    - Inline image attachment thumbnails
+    - Message reactions
+    - Page numbers in footer
+
+    Args:
+        chat_id: The conversation ID to export.
+        request: Export options including attachments, reactions, and date range.
+
+    Returns:
+        PDFExportResponse with base64-encoded PDF data.
+
+    Raises:
+        HTTPException: If conversation not found or export fails.
+    """
+    try:
+        # Get conversation metadata via direct lookup (avoids N+1)
+        conversation = await run_in_threadpool(reader.get_conversation, chat_id)
+
+        if conversation is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Conversation not found: {chat_id}",
+            )
+
+        # Get messages with optional date filtering
+        before = request.date_range.end if request.date_range else None
+        after = request.date_range.start if request.date_range else None
+        messages = await run_in_threadpool(
+            reader.get_messages,
+            chat_id=chat_id,
+            limit=request.limit,
+            before=before,
+            after=after,
+        )
+
+        if not messages:
+            raise HTTPException(
+                status_code=404,
+                detail="No messages found in the specified range",
+            )
+
+        # Create export options
+        options = PDFExportOptions(
+            include_attachments=request.include_attachments,
+            include_reactions=request.include_reactions,
+            start_date=request.date_range.start if request.date_range else None,
+            end_date=request.date_range.end if request.date_range else None,
+        )
+
+        # Generate PDF
+        pdf_bytes = await run_in_threadpool(generate_pdf, messages, conversation, options)
+        pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+
+        # Generate filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_chat_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in chat_id)
+        safe_chat_id = safe_chat_id[:30]
+        filename = f"conversation_{safe_chat_id}_{timestamp}.pdf"
+
+        return PDFExportResponse(
+            success=True,
+            filename=filename,
+            data=pdf_base64,
+            message_count=len(messages),
+            size_bytes=len(pdf_bytes),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate PDF: {e}",
+        ) from e
+
+
+@router.post("/pdf/{chat_id}/download")
+async def download_conversation_pdf(
+    chat_id: str,
+    request: PDFExportRequest,
+    reader: ChatDBReader = Depends(get_imessage_reader),
+) -> Response:
+    """Download a conversation as a PDF file.
+
+    Returns the PDF file directly for download instead of base64-encoded data.
+
+    Args:
+        chat_id: The conversation ID to export.
+        request: Export options.
+
+    Returns:
+        PDF file response for direct download.
+    """
+    try:
+        # Get conversation metadata via direct lookup (avoids N+1)
+        conversation = await run_in_threadpool(reader.get_conversation, chat_id)
+
+        if conversation is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Conversation not found: {chat_id}",
+            )
+
+        # Get messages with optional date filtering
+        before = request.date_range.end if request.date_range else None
+        after = request.date_range.start if request.date_range else None
+        messages = await run_in_threadpool(
+            reader.get_messages,
+            chat_id=chat_id,
+            limit=request.limit,
+            before=before,
+            after=after,
+        )
+
+        if not messages:
+            raise HTTPException(
+                status_code=404,
+                detail="No messages found in the specified range",
+            )
+
+        # Create export options
+        options = PDFExportOptions(
+            include_attachments=request.include_attachments,
+            include_reactions=request.include_reactions,
+            start_date=request.date_range.start if request.date_range else None,
+            end_date=request.date_range.end if request.date_range else None,
+        )
+
+        # Generate PDF
+        pdf_bytes = await run_in_threadpool(generate_pdf, messages, conversation, options)
+
+        # Generate filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_chat_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in chat_id)
+        safe_chat_id = safe_chat_id[:30]
+        filename = f"conversation_{safe_chat_id}_{timestamp}.pdf"
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate PDF: {e}",
         ) from e

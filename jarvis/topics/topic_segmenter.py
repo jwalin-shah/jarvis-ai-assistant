@@ -82,7 +82,10 @@ def segment_conversation(
         return []
 
     # Use shared preparation logic (sorting, junk filtering)
-    from jarvis.topics.utils import get_embeddings_for_segmentation, prepare_messages_for_segmentation
+    from jarvis.topics.utils import (
+        get_embeddings_for_segmentation,
+        prepare_messages_for_segmentation,
+    )
 
     messages, norm_texts = prepare_messages_for_segmentation(messages)
 
@@ -108,7 +111,8 @@ def segment_conversation(
     # Load config with defaults
     cfg = _get_segmentation_config()
     topic_shift_weight = cfg.topic_shift_weight
-    boundary_threshold = cfg.boundary_threshold
+    # Use drift_threshold if provided (function arg), else fall back to config
+    boundary_threshold = drift_threshold if drift_threshold is not None else cfg.boundary_threshold
     use_topic_shift = cfg.use_topic_shift_markers
 
     # Compute dynamic time gap threshold based on conversation patterns

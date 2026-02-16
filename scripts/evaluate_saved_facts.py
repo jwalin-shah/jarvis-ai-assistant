@@ -108,7 +108,8 @@ def main() -> None:
         reason_counts[reason] += 1
         if len(per_chat_samples.get(row["contact_id"], [])) < args.per_chat:
             per_chat_samples.setdefault(row["contact_id"], []).append(
-                f"{label.upper()}: {row['subject']} | {row['predicate']} | {row['value']} (c={row['confidence']})"
+                f"{label.upper()}: {row['subject']} | {row['predicate']} | "
+                f"{row['value']} (c={row['confidence']})"
             )
 
     total = sum(label_counts.values())

@@ -24,30 +24,34 @@ class PrefetchHandler(BaseHandler):
     @rpc_handler("Failed to get prefetch stats")
     async def _prefetch_stats(self) -> dict[str, Any]:
         """Get prefetch manager statistics."""
-        if not self.server._prefetch_manager:
+        manager = self.server.get_prefetch_manager()
+        if manager is None:
             return {"enabled": False}
-        return self.server._prefetch_manager.get_stats()
+        return manager.get_stats()
 
     @rpc_handler("Failed to invalidate prefetch")
     async def _prefetch_invalidate(self, chat_id: str | None = None) -> dict[str, bool]:
         """Invalidate prefetch cache."""
-        if not self.server._prefetch_manager:
+        manager = self.server.get_prefetch_manager()
+        if manager is None:
             return {"success": False}
-        self.server._prefetch_manager.invalidate(chat_id)
+        manager.invalidate(chat_id)
         return {"success": True}
 
     @rpc_handler("Failed to record focus")
     async def _prefetch_focus(self, chat_id: str) -> dict[str, bool]:
         """Record UI focus event for prefetching."""
-        if not self.server._prefetch_manager:
+        manager = self.server.get_prefetch_manager()
+        if manager is None:
             return {"success": False}
-        self.server._prefetch_manager.record_event("focus", chat_id)
+        manager.record_event("focus", chat_id)
         return {"success": True}
 
     @rpc_handler("Failed to record hover")
     async def _prefetch_hover(self, chat_id: str) -> dict[str, bool]:
         """Record UI hover event for prefetching."""
-        if not self.server._prefetch_manager:
+        manager = self.server.get_prefetch_manager()
+        if manager is None:
             return {"success": False}
-        self.server._prefetch_manager.record_event("hover", chat_id)
+        manager.record_event("hover", chat_id)
         return {"success": True}

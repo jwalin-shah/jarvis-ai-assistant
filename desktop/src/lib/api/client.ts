@@ -52,6 +52,7 @@ DownloadStatus,
   GraphExportResponse,
   GraphStats,
   HealthResponse,
+  KnowledgeGraphData,
   ImprovementsResponse,
   ImportantContactResponse,
   LayoutType,
@@ -1604,6 +1605,11 @@ class ApiClient {
 
   async getGraphStats(maxNodes: number = 200): Promise<GraphStats> {
     return this.request<GraphStats>(`/graph/stats?max_nodes=${maxNodes}`);
+  }
+
+  // Knowledge Graph endpoints
+  async getKnowledgeGraph(): Promise<KnowledgeGraphData> {
+    return this.request<KnowledgeGraphData>("/graph/knowledge");
   }
 }
 

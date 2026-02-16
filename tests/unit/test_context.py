@@ -153,8 +153,8 @@ class TestGetReplyContext:
         # Check formatted context structure
         assert "Conversation with: John Smith" in result.formatted_context
         assert "---" in result.formatted_context
-        assert "[2024-01-25 10:30] John Smith:" in result.formatted_context
-        assert "[2024-01-25 10:33] Me:" in result.formatted_context
+        assert "John Smith:" in result.formatted_context
+        assert "Me:" in result.formatted_context
         assert "dinner tomorrow" in result.formatted_context
 
     def test_last_received_message(

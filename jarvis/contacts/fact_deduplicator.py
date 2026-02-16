@@ -7,6 +7,9 @@ Ensures that semantically identical facts (e.g., "lives in Austin" vs
 from __future__ import annotations
 
 import logging
+import os
+import sqlite3
+import hashlib
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -18,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class FactDeduplicator:
-    """Deduplicates facts using semantic similarity."""
+    """Deduplicates facts using semantic similarity with persistent caching."""
 
     def __init__(self, threshold: float = 0.85) -> None:
         """Initialize deduplicator.
@@ -29,6 +32,52 @@ class FactDeduplicator:
         """
         self.threshold = threshold
         self._embedder: Any | None = None
+        self._cache_path = os.path.expanduser("~/.jarvis/embedding_cache.db")
+        self._init_cache()
+
+    def _init_cache(self) -> None:
+        """Initialize the persistent embedding cache table."""
+        os.makedirs(os.path.dirname(self._cache_path), exist_ok=True)
+        with sqlite3.connect(self._cache_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS embedding_cache (
+                    hash TEXT PRIMARY KEY,
+                    embedding BLOB NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+
+    def _get_cached_embeddings(self, texts: list[str]) -> dict[str, np.ndarray]:
+        """Fetch multiple embeddings from the persistent cache."""
+        hashes = [hashlib.sha256(t.encode("utf-8")).hexdigest() for t in texts]
+        results = {}
+        with sqlite3.connect(self._cache_path) as conn:
+            # Chunked fetch for large batches
+            for i in range(0, len(hashes), 900):
+                chunk = hashes[i : i + 900]
+                placeholders = ",".join(["?"] * len(chunk))
+                rows = conn.execute(
+                    f"SELECT hash, embedding FROM embedding_cache WHERE hash IN ({placeholders})",
+                    chunk,
+                ).fetchall()
+                for h, blob in rows:
+                    results[h] = np.frombuffer(blob, dtype=np.float32)
+        return results
+
+    def _save_to_cache(self, text_to_emb: dict[str, np.ndarray]) -> None:
+        """Save new embeddings to the persistent cache."""
+        if not text_to_emb:
+            return
+        data = [
+            (hashlib.sha256(t.encode("utf-8")).hexdigest(), emb.tobytes())
+            for t, emb in text_to_emb.items()
+        ]
+        with sqlite3.connect(self._cache_path) as conn:
+            conn.executemany(
+                "INSERT OR IGNORE INTO embedding_cache (hash, embedding) VALUES (?, ?)", data
+            )
 
     def _get_embedder(self) -> Any:
         """Lazy-load the embedding model."""
@@ -91,10 +140,39 @@ class FactDeduplicator:
             key = (fact.subject or "", fact.predicate or "")
             facts_by_key[key].append((fact, i))
 
-        embedder = self._get_embedder()
-        # Only embed the value for semantic comparison (subject+pred already matched)
-        texts = [f.value or "" for f in compact_facts]
-        embeddings = embedder.encode(texts)  # (n_new, dim)
+        # --- CACHE-AWARE EMBEDDING ---
+        texts = [f.to_searchable_text() for f in compact_facts]
+        cached_map = self._get_cached_embeddings(texts)
+        
+        embeddings = [None] * len(texts)
+        missing_indices = []
+        missing_texts = []
+        
+        # 1. Fill from cache
+        for i, text in enumerate(texts):
+            h = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            if h in cached_map:
+                embeddings[i] = cached_map[h]
+            else:
+                missing_indices.append(i)
+                missing_texts.append(text)
+        
+        # 2. Encode missing only
+        if missing_texts:
+            embedder = self._get_embedder()
+            new_embs = embedder.encode(missing_texts)
+            
+            new_cache_data = {}
+            for idx, emb in zip(missing_indices, new_embs):
+                embeddings[idx] = emb
+                new_cache_data[texts[idx]] = emb
+            
+            # 3. Persist new embs
+            self._save_to_cache(new_cache_data)
+            logger.debug("Encoded %d new facts, %d pulled from cache", len(missing_texts), len(texts) - len(missing_texts))
+
+        # Convert back to array for math
+        embeddings_arr = np.array(embeddings)
 
         unique_new_facts: list[Fact] = []
         unique_embeddings: list[np.ndarray] = []
@@ -104,7 +182,7 @@ class FactDeduplicator:
             accepted_embeddings: list[np.ndarray] = []
 
             for fact, original_idx in fact_indices:
-                current_emb = embeddings[original_idx]
+                current_emb = embeddings_arr[original_idx]
                 is_duplicate = False
 
                 # --- Check against accepted items in current batch ---

@@ -23,6 +23,9 @@ from api.schemas.graph import (
     GraphEvolutionResponse,
     GraphEvolutionSnapshot,
     GraphNodeSchema,
+    KnowledgeEdgeSchema,
+    KnowledgeGraphSchema,
+    KnowledgeNodeSchema,
 )
 from jarvis.errors import GraphError
 
@@ -672,3 +675,116 @@ def get_graph_stats(
     except Exception as e:
         logger.exception("Error computing graph stats")
         raise GraphError("Failed to compute graph statistics", cause=e)
+
+
+@router.get(
+    "/knowledge",
+    response_model=KnowledgeGraphSchema,
+    summary="Get knowledge graph with facts as entity nodes",
+    responses={
+        200: {
+            "description": "Knowledge graph with contacts and fact entities",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "nodes": [
+                            {
+                                "id": "alice",
+                                "label": "Alice Smith",
+                                "node_type": "contact",
+                                "relationship_type": "friend",
+                                "color": "#4ECDC4",
+                                "size": 24,
+                            },
+                            {
+                                "id": "entity:san francisco",
+                                "label": "San Francisco",
+                                "node_type": "entity",
+                                "category": "location",
+                                "color": "#4ECDC4",
+                                "size": 8,
+                            },
+                        ],
+                        "edges": [
+                            {
+                                "source": "alice",
+                                "target": "entity:san francisco",
+                                "edge_type": "lives_in",
+                                "label": "lives in",
+                                "weight": 0.9,
+                                "category": "location",
+                            }
+                        ],
+                        "metadata": {
+                            "total_nodes": 10,
+                            "total_edges": 8,
+                            "contact_count": 3,
+                            "entity_count": 7,
+                        },
+                    }
+                }
+            },
+        },
+    },
+)
+def get_knowledge_graph() -> KnowledgeGraphSchema:
+    """Get the knowledge graph with facts as entity nodes.
+
+    Builds a graph where:
+    - Contact nodes represent people (from contacts table)
+    - Entity nodes represent facts (locations, workplaces, preferences, etc.)
+    - Edges connect contacts to entities with predicates (lives_in, works_at, likes)
+
+    This is different from the network graph which only shows contact-to-contact
+    relationships. The knowledge graph visualizes the structured facts extracted
+    from messages.
+
+    **Use cases:**
+    - Explore what you know about contacts
+    - Find connections via shared entities (e.g., who else lives in SF?)
+    - Browse facts by category (locations, work, preferences)
+    """
+    try:
+        from jarvis.graph import KnowledgeGraph
+
+        kg = KnowledgeGraph()
+        kg.build_from_db()
+        data = kg.to_graph_data()
+
+        # Convert to schema
+        nodes = [
+            KnowledgeNodeSchema(
+                id=n["id"],
+                label=n["label"],
+                node_type=n.get("node_type", "contact"),
+                category=n.get("category", ""),
+                color=n.get("color", "#8E8E93"),
+                size=n.get("size", 12.0),
+                relationship_type=n.get("relationship_type", "unknown"),
+                message_count=n.get("message_count", 0),
+                metadata=n.get("metadata", {}),
+            )
+            for n in data.nodes
+        ]
+
+        edges = [
+            KnowledgeEdgeSchema(
+                source=e["source"],
+                target=e["target"],
+                edge_type=e.get("edge_type", ""),
+                label=e.get("label", ""),
+                weight=e.get("weight", 1.0),
+                category=e.get("category", ""),
+            )
+            for e in data.edges
+        ]
+
+        return KnowledgeGraphSchema(
+            nodes=nodes,
+            edges=edges,
+            metadata=data.metadata,
+        )
+
+    except Exception as e:
+        logger.exception("Error building knowledge graph")
+        raise GraphError("Failed to build knowledge graph", cause=e)
