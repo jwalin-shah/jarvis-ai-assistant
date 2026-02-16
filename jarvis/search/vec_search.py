@@ -545,6 +545,68 @@ class VecSearcher:
             logger.error("Failed to batch index segments: %s", e)
             return []
 
+    def index_feedback_pair(
+        self,
+        context_text: str,
+        reply_text: str,
+        chat_id: str,
+    ) -> int | None:
+        """Index a high-quality (user-edited or confirmed) feedback pair.
+
+        This allows the system to learn from manual edits by making them
+        available for future RAG searches as 'gold' examples.
+
+        Returns:
+            The rowid of the new chunk, or None if failed.
+        """
+        if not context_text or not reply_text:
+            return None
+
+        try:
+            # Combine context and reply for the centroid embedding
+            # This follows the same logic as segment centroids
+            full_text = f"{context_text}\n{reply_text}"
+            embedding = self._embedder.encode(full_text, normalize=True)
+            int8_blob = self._quantize_embedding(embedding)
+            binary_blob = self._binarize_embedding(embedding)
+
+            with self.db.connection() as conn:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO vec_chunks(
+                        embedding, chat_id, source_timestamp,
+                        context_text, reply_text, topic_label, message_count
+                    ) VALUES (vec_int8(?), ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        int8_blob,
+                        chat_id,
+                        datetime.now().timestamp(),
+                        context_text[:1000],
+                        reply_text[:1000],
+                        "gold_feedback",  # Special label to prioritize or identify
+                        1,
+                    ),
+                )
+                chunk_rowid = cursor.lastrowid
+
+                # Insert into vec_binary for fast global search
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8)
+                        VALUES (vec_bit(?), ?, ?)
+                        """,
+                        (binary_blob, chunk_rowid, int8_blob),
+                    )
+                except Exception as e:
+                    logger.debug("vec_binary insert failed: %s", e)
+
+                return chunk_rowid
+        except Exception as e:
+            logger.error("Failed to index feedback pair: %s", e)
+            return None
+
     def delete_chunks_for_chat(self, chat_id: str) -> int:
         """Delete all chunks for a chat_id. Returns count deleted."""
         try:
@@ -832,10 +894,6 @@ class VecSearcher:
                 # Standard sort by distance ascending if no rerank or rerank failed
                 results.sort(key=lambda r: r.distance)
                 return results[:limit]
-
-        except Exception as e:
-            logger.warning("Two-phase search failed, falling back: %s", e)
-            return self.search_with_chunks(query, limit=limit, embedder=embedder)
 
         except Exception as e:
             logger.warning("Two-phase search failed, falling back: %s", e)
