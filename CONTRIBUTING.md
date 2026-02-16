@@ -81,7 +81,7 @@ def process_message(text: str, contact_id: str | None = None) -> Message:
 All custom errors should inherit from `JarvisError`:
 
 ```python
-from jarvis.errors import JarvisError
+from jarvis.core.exceptions import JarvisError
 
 class MyCustomError(JarvisError):
     """Raised when something specific fails."""

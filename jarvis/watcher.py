@@ -66,6 +66,9 @@ DEBOUNCE_INTERVAL = 0.05  # 50ms - very fast with FSEvents
 
 # Polling interval (fallback when FSEvents unavailable)
 POLL_INTERVAL = 2.0  # seconds
+FACT_EXTRACTION_MIN_LIMIT = 25
+FACT_EXTRACTION_MAX_LIMIT = 100
+FACT_EXTRACTION_MESSAGES_TO_WINDOW_MULTIPLIER = 5
 
 # Check if watchfiles is available
 try:
@@ -381,15 +384,19 @@ class ChatDBWatcher:
                 from jarvis.tasks.queue import get_task_queue
 
                 queue = get_task_queue()
-                # Group by chat_id and enqueue one task per active chat
-                chats = {msg["chat_id"] for msg in new_messages}
-                for chat_id in chats:
+                # Group by chat_id and adapt extraction window to burst size.
+                chat_message_counts: dict[str, int] = {}
+                for msg in new_messages:
+                    chat_id = msg["chat_id"]
+                    chat_message_counts[chat_id] = chat_message_counts.get(chat_id, 0) + 1
+
+                for chat_id, message_count in chat_message_counts.items():
                     queue.enqueue(
                         TaskType.FACT_EXTRACTION,
-                        # TODO: Implement adaptive sliding window that respects
-                        # sentence/turn boundaries
-                        # instead of hard 25-msg slice. See docs/design/fact_extraction_strategy.md
-                        {"chat_id": chat_id, "limit": 25},  # Process small window for real-time
+                        {
+                            "chat_id": chat_id,
+                            "limit": self._get_fact_extraction_limit(message_count),
+                        },
                     )
 
             # Track per-chat message counts for incremental re-segmentation
@@ -422,6 +429,15 @@ class ChatDBWatcher:
 
         except Exception as e:
             logger.warning("Error checking new messages: %s", e)
+
+    @staticmethod
+    def _get_fact_extraction_limit(message_count: int) -> int:
+        """Scale extraction window for bursty chats while keeping bounded latency."""
+        adaptive_window = message_count * FACT_EXTRACTION_MESSAGES_TO_WINDOW_MULTIPLIER
+        return max(
+            FACT_EXTRACTION_MIN_LIMIT,
+            min(FACT_EXTRACTION_MAX_LIMIT, adaptive_window),
+        )
 
     async def _index_new_messages(self, messages: list[dict[str, Any]]) -> None:
         """Index new messages into vec_messages for semantic search.

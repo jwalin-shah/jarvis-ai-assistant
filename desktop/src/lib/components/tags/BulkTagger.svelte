@@ -55,6 +55,7 @@
           type="button"
           class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           on:click={() => dispatch("cancel")}
+          aria-label="Close bulk tagger"
         >
           <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -66,9 +67,7 @@
       <div class="p-6 space-y-6">
         <!-- Selected Conversations Preview -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Selected Conversations
-          </label>
+          <p class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Selected Conversations</p>
           <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
             {#each selectedConversations.slice(0, 10) as conv (conv.chat_id)}
               <span class="px-2 py-0.5 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-full">
@@ -85,9 +84,7 @@
 
         <!-- Action Type -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Action
-          </label>
+          <p class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Action</p>
           <div class="flex gap-4">
             <label class="flex items-center gap-2 cursor-pointer">
               <input
@@ -112,9 +109,9 @@
 
         <!-- Tag Selection -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <p class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Tags to {action}
-          </label>
+          </p>
           <TagPicker
             {tags}
             {selectedTagIds}
@@ -126,9 +123,9 @@
         <!-- Selected Tags Preview -->
         {#if selectedTags.length > 0}
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <p class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               {action === "add" ? "Tags to add" : "Tags to remove"}
-            </label>
+            </p>
             <div class="flex flex-wrap gap-1.5">
               {#each selectedTags as tag (tag.id)}
                 <TagBadge {tag} size="sm" />

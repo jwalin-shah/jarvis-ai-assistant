@@ -607,8 +607,6 @@
 </div>
 
 <style>
-  @import '../styles/tokens.css';
-
   .conversation-list {
     width: 300px;
     min-width: 300px;
@@ -819,7 +817,6 @@
     font-weight: var(--font-weight-medium);
   }
 
-  .loading,
   .error,
   .empty {
     padding: var(--space-6) var(--space-4);

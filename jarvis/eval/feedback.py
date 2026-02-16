@@ -197,9 +197,7 @@ class FeedbackStore:
     """Manager for the feedback SQLite table.
 
     Thread-safe with per-thread connection reuse.
-
-    TODO: This implementation should be unified with the JSONL-based
-    FeedbackStore in jarvis/eval/evaluation.py.
+    This is the canonical runtime feedback store used by desktop/server flows.
     """
 
     def __init__(self, db_path: Path | None = None) -> None:

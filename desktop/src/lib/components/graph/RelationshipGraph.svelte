@@ -94,6 +94,7 @@
       if (showFacts) {
         // Load knowledge graph with entities
         knowledgeGraphData = await api.getKnowledgeGraph();
+        console.log("[KnowledgeGraph] Raw data:", knowledgeGraphData?.nodes?.length, "nodes,", knowledgeGraphData?.edges?.length, "edges");
         // Convert to GraphData format for rendering
         graphData = convertKnowledgeToGraphData(knowledgeGraphData);
       } else {
@@ -105,10 +106,12 @@
           width,
           height,
         });
+        console.log("[NetworkGraph] Raw data:", graphData?.nodes?.length, "nodes,", graphData?.edges?.length, "edges");
       }
-      
+
       adjacencyMap = buildAdjacencyMap(graphData.edges);
       nodeMap = buildNodeMap(graphData.nodes);
+      console.log("[Graph] Rendering:", graphData.nodes.length, "nodes,", graphData.edges.length, "edges, svgElement:", !!svgElement);
       renderGraph();
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to load graph";

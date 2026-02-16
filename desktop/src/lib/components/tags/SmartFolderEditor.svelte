@@ -76,6 +76,11 @@
     { value: "users", label: "Users" },
     { value: "briefcase", label: "Briefcase" },
   ];
+  const nameInputId = "smart-folder-name";
+  const iconInputId = "smart-folder-icon";
+  const sortByInputId = "smart-folder-sort-by";
+  const sortOrderInputId = "smart-folder-sort-order";
+  const limitInputId = "smart-folder-limit";
 
   $: isEditing = folder !== null;
   $: if (isOpen) {
@@ -183,6 +188,7 @@
           type="button"
           class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           on:click={() => dispatch("cancel")}
+          aria-label="Close smart folder editor"
         >
           <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -195,10 +201,11 @@
         <!-- Basic Info -->
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for={nameInputId}>
               Name
             </label>
             <input
+              id={nameInputId}
               type="text"
               bind:value={name}
               placeholder="My Smart Folder"
@@ -207,10 +214,11 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for={iconInputId}>
               Icon
             </label>
             <select
+              id={iconInputId}
               bind:value={icon}
               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
             >
@@ -223,9 +231,9 @@
 
         <!-- Color -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <p class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Color
-          </label>
+          </p>
           <div class="flex flex-wrap gap-2">
             {#each colorOptions as [colorName, colorValue]}
               <button
@@ -245,9 +253,9 @@
 
         <!-- Match Type -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <p class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Match
-          </label>
+          </p>
           <div class="flex gap-4">
             <label class="flex items-center gap-2 cursor-pointer">
               <input
@@ -273,9 +281,9 @@
         <!-- Conditions -->
         <div>
           <div class="flex items-center justify-between mb-2">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <p class="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Conditions
-            </label>
+            </p>
             <button
               type="button"
               class="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
@@ -351,6 +359,7 @@
                     type="button"
                     class="text-gray-400 hover:text-red-500"
                     on:click={() => removeCondition(index)}
+                    aria-label="Remove condition"
                   >
                     <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                       <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -365,10 +374,11 @@
         <!-- Sort Options -->
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for={sortByInputId}>
               Sort by
             </label>
             <select
+              id={sortByInputId}
               bind:value={sortBy}
               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
             >
@@ -380,10 +390,11 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for={sortOrderInputId}>
               Order
             </label>
             <select
+              id={sortOrderInputId}
               bind:value={sortOrder}
               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
             >
@@ -395,10 +406,11 @@
 
         <!-- Limit -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for={limitInputId}>
             Limit results (0 = unlimited)
           </label>
           <input
+            id={limitInputId}
             type="number"
             bind:value={limitResults}
             min="0"

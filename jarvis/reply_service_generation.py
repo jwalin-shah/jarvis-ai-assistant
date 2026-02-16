@@ -71,6 +71,12 @@ def prepare_streaming_context(
         hybrid_searcher = get_hybrid_searcher()
         search_results = hybrid_searcher.search(query=normalized_incoming, limit=5, rerank=True)
 
+    logger.info(
+        "[stream] RAG search: %d results, top_similarity=%.3f",
+        len(search_results),
+        search_results[0].get("similarity", 0.0) if search_results else 0.0,
+    )
+
     message_context = MessageContext(
         chat_id=chat_id or "",
         message_text=normalized_incoming,
@@ -210,6 +216,12 @@ def build_generation_request(
     )
     all_exchanges = all_exchanges[:5]
 
+    logger.info(
+        "[build] Context: %d messages, %d RAG docs, %d examples, contact=%s",
+        len(context_messages), len(top_results), len(all_exchanges),
+        context.metadata.get("contact_name", "unknown"),
+    )
+
     rag_documents: list[RAGDocument] = []
     for result in top_results:
         context_text = str(result.get("context_text", "")).strip()
@@ -247,6 +259,7 @@ def to_model_generation_request(service: Any, request: GenerationRequest) -> Mod
     return ModelGenerationRequest(
         prompt=prompt,
         max_tokens=service._max_tokens_for_pressure(pressure),
+        stop_sequences=["</reply>", "<system>", "<conversation>", "<examples>", "\n\n\n"],
     )
 
 
@@ -338,6 +351,7 @@ def generate_llm_reply(
     """Generate response from model and compute confidence metadata."""
     incoming = request.context.message_text.strip()
     pressure = service._pressure_from_classification(request.classification)
+    logger.info("[reply] Incoming: %r | pressure=%s", incoming[:80], pressure.value)
 
     if pressure == ResponsePressure.NONE and not search_results:
         return GenerationResponse(
@@ -372,8 +386,28 @@ def generate_llm_reply(
     try:
         model_request = to_model_generation_request(service, request)
         final_prompt = model_request.prompt
+        logger.info(
+            "[reply] Prompt built (%d chars), RAG docs=%d, examples=%d",
+            len(final_prompt), len(request.retrieved_docs), len(request.few_shot_examples),
+        )
         response = service.generator.generate(model_request)
         text = response.text.strip()
+
+        logger.info(
+            "[reply] LLM response (%d chars, %d tokens): %r",
+            len(text), response.tokens_used, text[:120],
+        )
+        logger.info(
+            "[reply] Generation time: %.1fms, model=%s",
+            response.generation_time_ms, response.model_name,
+        )
+
+        # Strip XML tags that leaked through stop_sequences
+        if "</reply>" in text:
+            text = text.split("</reply>")[0].strip()
+        for tag in ["<system>", "<conversation>", "<facts>", "<examples>", "<style", "<relationships>"]:
+            if tag in text:
+                text = text.split(tag)[0].strip()
 
         if text.lower() in UNCERTAIN_SIGNALS:
             return GenerationResponse(
@@ -407,6 +441,10 @@ def generate_llm_reply(
             text,
             incoming_text=incoming,
             rerank_score=rerank_score,
+        )
+        logger.info(
+            "[reply] Confidence: %.2f (%s) | similarity=%.3f | diversity=%.3f",
+            confidence_score, confidence_label, similarity, example_diversity,
         )
 
         similar_triggers = [

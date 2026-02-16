@@ -241,11 +241,11 @@ model, tokenizer = load(
 ## End-to-End Example
 
 ```python
-from jarvis.router import get_reply_router
+from jarvis.reply_service import get_reply_service
 
-router = get_reply_router()
+reply_service = get_reply_service()
 
-result = router.route(
+result = reply_service.route_legacy(
     incoming="Want to grab lunch?",
     thread=["You: hey", "Friend: want to grab lunch?"],
     chat_id="chat123"

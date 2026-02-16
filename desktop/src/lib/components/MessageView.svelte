@@ -800,8 +800,6 @@
 </div>
 
 <style>
-  @import '../styles/tokens.css';
-
   .message-view {
     flex: 1;
     display: flex;
