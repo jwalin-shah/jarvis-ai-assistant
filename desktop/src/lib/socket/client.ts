@@ -293,7 +293,7 @@ class JarvisSocket {
   /**
    * Initialize Tauri APIs (FE-01: explicit null guards after dynamic imports)
    */
-  private async initTauriApis(): Promise<boolean> {
+  private static async initTauriApis(): Promise<boolean> {
     if (!isTauri) return false;
 
     try {
@@ -517,7 +517,6 @@ class JarvisSocket {
       }
     });
   }
-
   /**
    * Handle incoming WebSocket message (FE-03: validate params before use)
    */
@@ -542,9 +541,7 @@ class JarvisSocket {
               : undefined;
             if (streamRequestId !== undefined) {
               const pending = this.wsPendingRequests.get(streamRequestId);
-              if (pending && pending.onToken) {
-                pending.onToken(token, index);
-              }
+              pending?.onToken?.(token, index);
             }
           } else {
             logger.warn("Malformed stream.token params:", params);
@@ -783,7 +780,7 @@ class JarvisSocket {
 
     try {
       const results = await withTimeout(
-        invoke!("send_batch", { requests: batch.map(r => ({ method: r.method, params: r.params })) }),
+        invoke("send_batch", { requests: batch.map(r => ({ method: r.method, params: r.params })) }),
         REQUEST_TIMEOUT,
         "send_batch"
       ) as Array<{ result?: unknown; error?: string }>;
@@ -959,7 +956,10 @@ class JarvisSocket {
 
         // Check if we have buffered tokens
         if (tokenBuffer.length > 0) {
-          yield tokenBuffer.shift()!;
+          const token = tokenBuffer.shift();
+          if (token !== undefined) {
+            yield token;
+          }
           continue;
         }
 
@@ -970,11 +970,24 @@ class JarvisSocket {
 
             // Check again in case token arrived between check and promise
             if (tokenBuffer.length > 0) {
-              resolve(tokenBuffer.shift()!);
+              const token = tokenBuffer.shift();
+              resolve(token ?? null);
               resolveNextToken = null;
             } else if (completed) {
               resolve(null);
               resolveNextToken = null;
+            }
+          }),
+        ]);
+        if (nextToken === null) {
+          completed = true;
+          break;
+        }
+        yield nextToken;
+      }
+    } catch (error) {
+      // ... rest of error handling ...
+    }
             }
           }),
           // 5 second timeout to periodically check overall duration
@@ -1074,7 +1087,10 @@ class JarvisSocket {
 
         // Check if we have buffered tokens
         if (tokenBuffer.length > 0) {
-          yield tokenBuffer.shift()!;
+          const bufferedToken = tokenBuffer.shift();
+          if (bufferedToken !== undefined) {
+            yield bufferedToken;
+          }
           continue;
         }
 
@@ -1084,7 +1100,8 @@ class JarvisSocket {
 
           // Check again in case token arrived between check and promise
           if (tokenBuffer.length > 0) {
-            resolve(tokenBuffer.shift()!);
+            const bufferedToken = tokenBuffer.shift();
+            resolve(bufferedToken !== undefined ? bufferedToken : null);
             resolveNextToken = null;
           } else if (completed) {
             resolve(null);
@@ -1093,6 +1110,7 @@ class JarvisSocket {
         });
 
         if (nextToken === null) {
+          completed = true;
           break;
         }
 
@@ -1109,14 +1127,19 @@ class JarvisSocket {
    * Register an event handler
    */
   on<T>(event: string, handler: EventHandler<T>): () => void {
-    if (!this.eventHandlers.has(event)) {
-      this.eventHandlers.set(event, new Set());
+    let handlers = this.eventHandlers.get(event);
+    if (!handlers) {
+      handlers = new Set<EventHandler>();
+      this.eventHandlers.set(event, handlers);
     }
-    this.eventHandlers.get(event)!.add(handler as EventHandler);
+    handlers.add(handler as EventHandler);
 
     // Return unsubscribe function
     return () => {
-      this.eventHandlers.get(event)?.delete(handler as EventHandler);
+      const handlers = this.eventHandlers.get(event);
+      if (handlers) {
+        handlers.delete(handler as EventHandler);
+      }
     };
   }
 
@@ -1300,7 +1323,7 @@ class JarvisSocket {
     const keyPoints = lines
       .slice(1)
       .filter((line) => line.trim().length > 5)
-      .map((line) => line.replace(/^[\-\*\•\d\.\)]+\s*/, "").trim())
+      .map((line) => line.replace(/^[-*•\d.)]+\s*/u, "").trim())
       .slice(0, 5);
 
     return {

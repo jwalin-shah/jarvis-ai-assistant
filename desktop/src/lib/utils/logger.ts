@@ -11,7 +11,7 @@ export class Logger {
     this.prefix = prefix;
   }
 
-  private getArgs(args: any[]): any[] {
+  private getArgs(args: unknown[]): unknown[] {
     if (args.length > 0 && typeof args[0] === 'string') {
       const message = args[0];
       return [`[${this.prefix}] ${message}`, ...args.slice(1)];
@@ -22,7 +22,7 @@ export class Logger {
   /**
    * Log with console.debug (only in DEV)
    */
-  debug(...args: any[]) {
+  debug(...args: unknown[]) {
     if (import.meta.env.DEV) {
       console.debug(...this.getArgs(args));
     }
@@ -31,7 +31,7 @@ export class Logger {
   /**
    * Log with console.log (only in DEV)
    */
-  log(...args: any[]) {
+  log(...args: unknown[]) {
     if (import.meta.env.DEV) {
       console.log(...this.getArgs(args));
     }
@@ -40,7 +40,7 @@ export class Logger {
   /**
    * Log with console.info (only in DEV)
    */
-  info(...args: any[]) {
+  info(...args: unknown[]) {
     if (import.meta.env.DEV) {
       console.info(...this.getArgs(args));
     }
@@ -49,14 +49,14 @@ export class Logger {
   /**
    * Log with console.warn (always logs)
    */
-  warn(...args: any[]) {
+  warn(...args: unknown[]) {
     console.warn(...this.getArgs(args));
   }
 
   /**
    * Log with console.error (always logs)
    */
-  error(...args: any[]) {
+  error(...args: unknown[]) {
     console.error(...this.getArgs(args));
   }
 }
