@@ -196,15 +196,34 @@ class VecSearcher:
 
         count = 0
         try:
+            # Filter out already indexed messages to avoid UNIQUE constraint violations
+            # on virtual tables that might not fully support OR IGNORE
+            all_ids = [m.id for m in valid_messages]
+            existing_ids = set()
+            with self.db.connection() as conn:
+                for i in range(0, len(all_ids), 900):
+                    chunk = all_ids[i:i+900]
+                    placeholders = ",".join(["?"] * len(chunk))
+                    rows = conn.execute(
+                        f"SELECT rowid FROM vec_messages WHERE rowid IN ({placeholders})", 
+                        chunk
+                    ).fetchall()
+                    for r in rows:
+                        existing_ids.add(r[0])
+            
+            to_index = [m for m in valid_messages if m.id not in existing_ids]
+            if not to_index:
+                return 0
+
             # Batch compute embeddings
-            texts = [m.text for m in valid_messages]
+            texts = [m.text for m in to_index]
             # Use cached embedder which handles batching internally
             embeddings = self._embedder.encode(texts, normalize=True, dtype=dtype)
 
             with self.db.connection() as conn:
                 # Prepare batch data
                 batch_data = []
-                for msg, emb in zip(valid_messages, embeddings):
+                for msg, emb in zip(to_index, embeddings):
                     batch_data.append(
                         (
                             msg.id,

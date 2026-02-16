@@ -118,10 +118,19 @@ class MessageHandler(BaseHandler):
                     writer, token_text, token_index, is_final, request_id=request_id
                 )
 
-            return {
-                "response": "".join(response_tokens).strip(),
+            # Ensure a final token is sent if the generator didn't provide one
+            if response_tokens and not is_final:
+                await self.send_stream_token(
+                    writer, "", len(response_tokens), True, request_id=request_id
+                )
+
+            full_response = "".join(response_tokens).strip()
+            result = {
+                "response": full_response,
                 "tokens_generated": len(response_tokens),
             }
+            await self.send_stream_response(writer, request_id, result)
+            return result
         except Exception as e:
             logger.exception("Chat streaming failed")
             raise JsonRpcError(INTERNAL_ERROR, f"Chat streaming failed: {e}")
@@ -257,6 +266,12 @@ class MessageHandler(BaseHandler):
                             response_tokens.append(remaining)
                             await self.send_stream_token(
                                 writer, remaining, token_index, True, request_id=request_id
+                            )
+                        else:
+                            # If no new content but we hit the tag, send an empty final token
+                            # to ensure onComplete() is triggered in the frontend.
+                            await self.send_stream_token(
+                                writer, "", token_index, True, request_id=request_id
                             )
                         break
 
