@@ -1,11 +1,6 @@
 {
   "source": "OpenRL/daily_dialog",
-  "labels": [
-    "commissive",
-    "directive",
-    "inform",
-    "question"
-  ],
+  "labels": ["commissive", "directive", "inform", "question"],
   "label_map": {
     "commissive": 0,
     "directive": 1,

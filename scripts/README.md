@@ -33,7 +33,7 @@ Located in `evaluation/`:
 
 - `eval_*.py` - Various evaluation pipelines
 - `extraction_bakeoff*.py` - Fact extraction experiments
-- `prompt_bakeoff*.py` - Prompt engineering experiments  
+- `prompt_bakeoff*.py` - Prompt engineering experiments
 - `reply_bakeoff.py` - Reply generation experiments
 - `benchmark_speculative.py` - Speculative decoding benchmark
 

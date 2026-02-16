@@ -1,33 +1,62 @@
 /**
- * Simple logger utility for consistent logging with scopes and levels.
+ * Simple logger wrapper to control log levels in production.
+ * Automatically adds a prefix to log messages.
+ * Only logs debug/log/info to console if in development mode.
  */
 
 export class Logger {
-  private scope: string;
+  private prefix: string;
 
-  constructor(scope: string) {
-    this.scope = scope;
+  constructor(prefix: string) {
+    this.prefix = prefix;
   }
 
-  private format(message: string): string {
-    return `[${this.scope}] ${message}`;
+  private getArgs(args: unknown[]): unknown[] {
+    if (args.length > 0 && typeof args[0] === 'string') {
+      const message = args[0];
+      return [`[${this.prefix}] ${message}`, ...args.slice(1)];
+    }
+    return [`[${this.prefix}]`, ...args];
   }
 
-  debug(message: string, ...args: unknown[]): void {
+  /**
+   * Log with console.debug (only in DEV)
+   */
+  debug(...args: unknown[]) {
     if (import.meta.env.DEV) {
-      console.log(this.format(message), ...args);
+      console.debug(...this.getArgs(args));
     }
   }
 
-  info(message: string, ...args: unknown[]): void {
-    console.info(this.format(message), ...args);
+  /**
+   * Log with console.log (only in DEV)
+   */
+  log(...args: unknown[]) {
+    if (import.meta.env.DEV) {
+      console.log(...this.getArgs(args));
+    }
   }
 
-  warn(message: string, ...args: unknown[]): void {
-    console.warn(this.format(message), ...args);
+  /**
+   * Log with console.info (only in DEV)
+   */
+  info(...args: unknown[]) {
+    if (import.meta.env.DEV) {
+      console.info(...this.getArgs(args));
+    }
   }
 
-  error(message: string, ...args: unknown[]): void {
-    console.error(this.format(message), ...args);
+  /**
+   * Log with console.warn (always logs)
+   */
+  warn(...args: unknown[]) {
+    console.warn(...this.getArgs(args));
+  }
+
+  /**
+   * Log with console.error (always logs)
+   */
+  error(...args: unknown[]) {
+    console.error(...this.getArgs(args));
   }
 }

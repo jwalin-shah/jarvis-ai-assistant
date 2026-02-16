@@ -14,7 +14,7 @@
  * - More secure than query parameters which are logged by proxies/servers
  */
 
-import { getApiWebSocketBaseUrl } from "../config/runtime";
+import { getApiWebSocketBaseUrl } from '../config/runtime';
 
 export const WS_BASE = getApiWebSocketBaseUrl();
 
@@ -22,11 +22,11 @@ export const WS_BASE = getApiWebSocketBaseUrl();
 export const WS_HTTP_BASE = (() => {
   try {
     const url = new URL(WS_BASE);
-    url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+    url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
     return url.origin;
   } catch {
     // Fallback for non-standard URLs
-    return WS_BASE.replace(/^wss:/, "https:").replace(/^ws:/, "http:");
+    return WS_BASE.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
   }
 })();
 
@@ -34,36 +34,32 @@ export const WS_HTTP_BASE = (() => {
  * WebSocket message types (server -> client)
  */
 export enum ServerMessageType {
-  CONNECTED = "connected",
-  TOKEN = "token",
-  GENERATION_START = "generation_start",
-  GENERATION_COMPLETE = "generation_complete",
-  GENERATION_ERROR = "generation_error",
-  HEALTH_UPDATE = "health_update",
-  PONG = "pong",
-  ERROR = "error",
+  CONNECTED = 'connected',
+  TOKEN = 'token',
+  GENERATION_START = 'generation_start',
+  GENERATION_COMPLETE = 'generation_complete',
+  GENERATION_ERROR = 'generation_error',
+  HEALTH_UPDATE = 'health_update',
+  PONG = 'pong',
+  ERROR = 'error',
 }
 
 /**
  * WebSocket message types (client -> server)
  */
 export enum ClientMessageType {
-  GENERATE = "generate",
-  GENERATE_STREAM = "generate_stream",
-  SUBSCRIBE_HEALTH = "subscribe_health",
-  UNSUBSCRIBE_HEALTH = "unsubscribe_health",
-  PING = "ping",
-  CANCEL = "cancel",
+  GENERATE = 'generate',
+  GENERATE_STREAM = 'generate_stream',
+  SUBSCRIBE_HEALTH = 'subscribe_health',
+  UNSUBSCRIBE_HEALTH = 'unsubscribe_health',
+  PING = 'ping',
+  CANCEL = 'cancel',
 }
 
 /**
  * Connection state
  */
-export type ConnectionState =
-  | "disconnected"
-  | "connecting"
-  | "connected"
-  | "reconnecting";
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 
 /**
  * WebSocket message structure
@@ -161,7 +157,7 @@ class JarvisWebSocket {
   private maxReconnectDelay = 30000;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
-  private _state: ConnectionState = "disconnected";
+  private _state: ConnectionState = 'disconnected';
   private _clientId: string | null = null;
   private shouldReconnect = true;
 
@@ -189,7 +185,7 @@ class JarvisWebSocket {
    * Check if connected
    */
   get isConnected(): boolean {
-    return this._state === "connected" && this.ws?.readyState === WebSocket.OPEN;
+    return this._state === 'connected' && this.ws?.readyState === WebSocket.OPEN;
   }
 
   /**
@@ -216,7 +212,7 @@ class JarvisWebSocket {
     }
 
     this.shouldReconnect = true;
-    this.setState("connecting");
+    this.setState('connecting');
 
     try {
       // Use Sec-WebSocket-Protocol for authentication (browser-compatible)
@@ -241,11 +237,11 @@ class JarvisWebSocket {
       };
 
       this.ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        this.handlers.onError?.("WebSocket connection error");
+        console.error('WebSocket error:', error);
+        this.handlers.onError?.('WebSocket connection error');
       };
     } catch (error) {
-      console.error("Failed to create WebSocket:", error);
+      console.error('Failed to create WebSocket:', error);
       this.handleDisconnect();
     }
   }
@@ -264,7 +260,7 @@ class JarvisWebSocket {
     }
 
     this._clientId = null;
-    this.setState("disconnected");
+    this.setState('disconnected');
   }
 
   /**
@@ -272,7 +268,7 @@ class JarvisWebSocket {
    */
   send(type: ClientMessageType, data: unknown = {}): boolean {
     if (!this.isConnected) {
-      console.warn("Cannot send message: not connected");
+      console.warn('Cannot send message: not connected');
       return false;
     }
 
@@ -281,7 +277,7 @@ class JarvisWebSocket {
       this.ws!.send(JSON.stringify(message));
       return true;
     } catch (error) {
-      console.error("Failed to send message:", error);
+      console.error('Failed to send message:', error);
       return false;
     }
   }
@@ -342,7 +338,7 @@ class JarvisWebSocket {
       switch (message.type) {
         case ServerMessageType.CONNECTED:
           this._clientId = (message.data as ConnectedEvent).client_id;
-          this.setState("connected");
+          this.setState('connected');
           this.handlers.onConnect?.(message.data as ConnectedEvent);
           break;
 
@@ -351,21 +347,15 @@ class JarvisWebSocket {
           break;
 
         case ServerMessageType.GENERATION_START:
-          this.handlers.onGenerationStart?.(
-            message.data as GenerationStartEvent
-          );
+          this.handlers.onGenerationStart?.(message.data as GenerationStartEvent);
           break;
 
         case ServerMessageType.GENERATION_COMPLETE:
-          this.handlers.onGenerationComplete?.(
-            message.data as GenerationCompleteEvent
-          );
+          this.handlers.onGenerationComplete?.(message.data as GenerationCompleteEvent);
           break;
 
         case ServerMessageType.GENERATION_ERROR:
-          this.handlers.onGenerationError?.(
-            message.data as GenerationErrorEvent
-          );
+          this.handlers.onGenerationError?.(message.data as GenerationErrorEvent);
           break;
 
         case ServerMessageType.HEALTH_UPDATE:
@@ -382,10 +372,10 @@ class JarvisWebSocket {
           break;
 
         default:
-          console.warn("Unknown message type:", message.type);
+          console.warn('Unknown message type:', message.type);
       }
     } catch (error) {
-      console.error("Failed to parse WebSocket message:", error);
+      console.error('Failed to parse WebSocket message:', error);
     }
   }
 
@@ -397,42 +387,39 @@ class JarvisWebSocket {
     if (this.shouldReconnect) {
       this.scheduleReconnect();
     } else {
-      this.setState("disconnected");
+      this.setState('disconnected');
     }
   }
 
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error("Max reconnection attempts reached");
-      this.setState("disconnected");
-      this.handlers.onError?.("Connection lost. Please refresh the page.");
+      console.error('Max reconnection attempts reached');
+      this.setState('disconnected');
+      this.handlers.onError?.('Connection lost. Please refresh the page.');
       return;
     }
 
     // Don't reconnect when app is backgrounded - saves resources
-    if (typeof document !== "undefined" && document.hidden) {
+    if (typeof document !== 'undefined' && document.hidden) {
       const onVisible = () => {
-        document.removeEventListener("visibilitychange", onVisible);
-        if (this.shouldReconnect && this._state !== "connected") {
+        document.removeEventListener('visibilitychange', onVisible);
+        if (this.shouldReconnect && this._state !== 'connected') {
           this.scheduleReconnect();
         }
       };
-      document.addEventListener("visibilitychange", onVisible);
+      document.addEventListener('visibilitychange', onVisible);
       return;
     }
 
-    this.setState("reconnecting");
+    this.setState('reconnecting');
 
     // Exponential backoff with jitter
     const delay = Math.min(
-      this.reconnectDelay * Math.pow(2, this.reconnectAttempts) +
-        Math.random() * 1000,
+      this.reconnectDelay * Math.pow(2, this.reconnectAttempts) + Math.random() * 1000,
       this.maxReconnectDelay
     );
 
-    console.log(
-      `Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts + 1})`
-    );
+    console.log(`Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts + 1})`);
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectAttempts++;

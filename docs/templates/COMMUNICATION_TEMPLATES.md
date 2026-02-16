@@ -310,4 +310,4 @@ Incident is closed. No user impact.
 
 ---
 
-*Customize these templates as needed. Remove sections that don't apply and add details specific to your incident.*
+_Customize these templates as needed. Remove sections that don't apply and add details specific to your incident._

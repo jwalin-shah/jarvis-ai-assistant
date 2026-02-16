@@ -19,7 +19,7 @@ export {
   loadContactsFromAddressBook,
   resolveContactName,
   formatParticipant,
-} from "./direct";
+} from './direct';
 
 export {
   parseAppleTimestamp,
@@ -27,4 +27,4 @@ export {
   formatDate,
   normalizePhoneNumber,
   type SchemaVersion,
-} from "./queries";
+} from './queries';

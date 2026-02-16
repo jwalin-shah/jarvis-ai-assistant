@@ -168,9 +168,7 @@ def build_rag_reply_prompt(
 
     # Add guidance for follow-ups if last message was from Me
     if last_is_from_me:
-        followup_guidance = (
-            "You spoke last. Add a follow-up or ask if they saw your message."
-        )
+        followup_guidance = "You spoke last. Add a follow-up or ask if they saw your message."
         if custom_instruction:
             custom_instruction += " " + followup_guidance
         else:
