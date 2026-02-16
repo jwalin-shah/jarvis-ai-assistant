@@ -18,8 +18,8 @@ _total_ram = psutil.virtual_memory().total
 
 # Memory limits for different model types (in bytes)
 # Scale with available RAM, capped at reasonable maximums
-# On 8GB systems, this targets ~1.5GB for weights and ~512MB for cache
-LLM_MEMORY_LIMIT = min(1536 * 1024 * 1024, int(_total_ram * 0.20))
+# On 8GB systems, this targets ~1GB for weights/buffers and ~512MB for cache
+LLM_MEMORY_LIMIT = min(1024 * 1024 * 1024, int(_total_ram * 0.15))
 LLM_CACHE_LIMIT = min(512 * 1024 * 1024, int(_total_ram * 0.08))
 
 # Embedders, cross-encoders, and utility models are smaller
