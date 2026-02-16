@@ -6,15 +6,15 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from jarvis.cache import TTLCache
 from jarvis.db.models import JARVIS_DB_PATH
 from jarvis.db.schema import (
     CURRENT_SCHEMA_VERSION,
     EXPECTED_INDICES,
     SCHEMA_SQL,
 )
+from jarvis.infrastructure.cache import TTLCache
 from jarvis.utils.resources import safe_close
 
 logger = logging.getLogger(__name__)
@@ -130,7 +130,7 @@ class JarvisDBBase:
             # Track this connection for cleanup
             with self._connections_lock:
                 self._all_connections.add(self._local.connection)
-        return self._local.connection
+        return cast(sqlite3.Connection, self._local.connection)
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:

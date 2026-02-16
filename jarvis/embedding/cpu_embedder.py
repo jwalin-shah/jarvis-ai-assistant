@@ -15,16 +15,19 @@ from __future__ import annotations
 
 import gc
 import logging
+import os
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+    from tokenizers import Tokenizer
 
 logger = logging.getLogger(__name__)
+HF_MODEL_REVISION = os.getenv("JARVIS_HF_MODEL_REVISION", "main")
 
 # ONNX Runtime is optional - graceful fallback
 try:
@@ -60,15 +63,21 @@ class CPUEmbedder:
     _lock = threading.Lock()
     _init_lock = threading.Lock()
 
+    # Type annotations for singleton instance attributes
+    _session: ort.InferenceSession | None = None
+    _tokenizer: Tokenizer | None = None
+    _model_name: str | None = None
+    _loaded: bool = False
+
     def __new__(cls) -> CPUEmbedder:
         """Singleton pattern - one embedder system-wide."""
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
-                    cls._instance._session: ort.InferenceSession | None = None
+                    cls._instance._session = None
                     cls._instance._tokenizer = None
-                    cls._instance._model_name: str | None = None
+                    cls._instance._model_name = None
                     cls._instance._loaded = False
         return cls._instance
 
@@ -116,9 +125,7 @@ class CPUEmbedder:
 
                 # CPU-only session with optimizations
                 sess_options = ort.SessionOptions()
-                sess_options.graph_optimization_level = (
-                    ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-                )
+                sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
                 sess_options.intra_op_num_threads = 4  # Use 4 CPU cores
                 sess_options.inter_op_num_threads = 2
 
@@ -171,14 +178,15 @@ class CPUEmbedder:
         try:
             from huggingface_hub import snapshot_download
 
-            cache_dir = snapshot_download(
+            cache_dir = snapshot_download(  # nosec B615
                 repo_id=model_name,
+                revision=HF_MODEL_REVISION,
                 local_files_only=True,
             )
             cache_path = Path(cache_dir) / "model.onnx"
             if cache_path.exists():
                 return cache_path
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
         return local_path
@@ -202,7 +210,7 @@ class CPUEmbedder:
         texts: list[str] | str,
         normalize: bool = True,
         batch_size: int = 32,
-        dtype: np.dtype = np.float32,
+        dtype: np.dtype[Any] | type[np.floating] = np.float32,
     ) -> NDArray[np.float32]:
         """Encode texts to embeddings.
 
@@ -244,14 +252,14 @@ class CPUEmbedder:
                 dtype=np.int64,
             )
             attention_mask = np.array(
-                [e.attention_mask + [0] * (max_len - len(e.attention_mask))
-                 for e in encodings],
+                [e.attention_mask + [0] * (max_len - len(e.attention_mask)) for e in encodings],
                 dtype=np.int64,
             )
             # token_type_ids is required by some ONNX models
             token_type_ids = np.zeros_like(input_ids, dtype=np.int64)
 
             # ONNX inference
+            assert self._session is not None  # nosec B101
             outputs = self._session.run(
                 None,
                 {

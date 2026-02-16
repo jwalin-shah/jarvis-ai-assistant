@@ -14,11 +14,14 @@ import logging
 import re
 from dataclasses import dataclass
 from functools import lru_cache
+from re import Match
 from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from symspellpy import SymSpell
+
     from jarvis.nlp.ner_client import Entity
 
 # Reaction patterns - these are tapbacks in iMessage
@@ -304,7 +307,7 @@ TEMPORAL_REGEX = re.compile("|".join(TEMPORAL_PATTERNS), re.IGNORECASE)
 _SPELL_CHECKER = None
 
 
-def _get_spell_checker():
+def _get_spell_checker() -> "SymSpell | None":
     """Get or initialize the SymSpell spell checker."""
     global _SPELL_CHECKER
     if _SPELL_CHECKER is None:
@@ -341,7 +344,8 @@ def _spell_correct(text: str) -> str:
         # Use lookup_compound for multi-word correction
         suggestions = checker.lookup_compound(text, max_edit_distance=2)
         if suggestions:
-            return suggestions[0].term
+            result: str = suggestions[0].term
+            return result
         return text
     except Exception:
         return text
@@ -484,7 +488,8 @@ def detect_language(text: str) -> str:
     try:
         from langdetect import detect
 
-        return detect(text)
+        result: str = detect(text)
+        return result
     except Exception:
         return "en"  # Default to English on any error
 
@@ -553,7 +558,7 @@ def _replace_urls_with_domains(text: str) -> str:
     if not text:
         return text
 
-    def _repl(match: re.Match) -> str:
+    def _repl(match: Match[str]) -> str:
         url = match.group(0)
         try:
             from urllib.parse import urlparse
@@ -562,7 +567,7 @@ def _replace_urls_with_domains(text: str) -> str:
             domain = parsed.netloc or parsed.path.split("/")[0]
             if domain:
                 return f"<URL:{domain.lower()}>"
-        except Exception:
+        except Exception:  # nosec B110
             pass
         return "<URL>"
 
@@ -604,18 +609,18 @@ def _mask_entities(text: str, use_ner: bool = False, ner_model: str = "en_core_w
                     label = ent.label
                     token = None
                     if label == "PERSON":
-                        token = "<PERSON>"
+                        token = "<PERSON>"  # nosec B105
                     elif label in ("GPE", "LOC"):
-                        token = "<CITY>"
+                        token = "<CITY>"  # nosec B105
                     elif label == "ORG":
-                        token = "<ORG>"
+                        token = "<ORG>"  # nosec B105
                     elif label == "TIME":
-                        token = "<TIME>"
+                        token = "<TIME>"  # nosec B105
                     elif label == "DATE":
-                        token = "<DATE>"
+                        token = "<DATE>"  # nosec B105
                     if token:
                         masked = masked[: ent.start] + token + masked[ent.end :]
-        except Exception:
+        except Exception:  # nosec B110
             # Fall back to regex masking if NER unavailable
             pass
 
@@ -642,7 +647,7 @@ def _extract_entities_from_service(text: str) -> list["Entity"]:
 
         if is_service_running():
             return get_entities(text)
-    except Exception:
+    except Exception:  # nosec B110
         pass
 
     return []

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import OrderedDict
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -71,7 +72,7 @@ class PerKeyLockManager:
             return lock
 
     @asynccontextmanager
-    async def lock(self, key: Any):
+    async def lock(self, key: Any) -> AsyncGenerator[None, None]:
         """Context manager for per-key locking.
 
         Args:

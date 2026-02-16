@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from jarvis.errors import (
+from jarvis.core.exceptions import (
     ErrorCode,
     JarvisError,
     ModelLoadError,
@@ -377,7 +377,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(TimeoutError, timeout_error_handler)  # type: ignore[arg-type]
 
     # Register a generic exception handler for unexpected errors
-    app.add_exception_handler(Exception, generic_exception_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(Exception, generic_exception_handler)
 
     logger.debug("Registered JARVIS exception handlers")
 

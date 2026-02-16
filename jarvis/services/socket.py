@@ -26,7 +26,7 @@ class SocketService(Service):
         config = ServiceConfig(
             name="socket",
             venv_path=venv_path,
-            command=["python", "-m", "jarvis.socket_server"],
+            command=["python", "-m", "jarvis.interfaces.desktop"],
             health_check_socket=socket_path,
             startup_timeout=30.0,
             dependencies=[],  # Embedding service is optional

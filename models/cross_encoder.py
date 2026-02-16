@@ -48,13 +48,13 @@ CROSS_ENCODER_REGISTRY: dict[str, tuple[str, int, str]] = {
 }
 
 
-class BertForSequenceClassification(nn.Module):
+class BertForSequenceClassification(nn.Module):  # type: ignore[name-defined,misc]
     """BERT with a linear classification head on [CLS] token."""
 
-    def __init__(self, config: dict, num_labels: int = 1) -> None:
+    def __init__(self, config: dict[str, Any], num_labels: int = 1) -> None:
         super().__init__()
         self.bert = BertModel(config, add_pooler=True)
-        self.classifier = nn.Linear(config["hidden_size"], num_labels)
+        self.classifier = nn.Linear(config["hidden_size"], num_labels)  # type: ignore[attr-defined]
 
     def __call__(
         self,
@@ -67,13 +67,17 @@ class BertForSequenceClassification(nn.Module):
         Returns:
             Logits of shape (batch_size, num_labels).
         """
-        hidden_states = self.bert(input_ids, attention_mask, token_type_ids)
+        hidden_states = self.bert(
+            input_ids,
+            attention_mask if attention_mask is not None else mx.ones_like(input_ids),
+            token_type_ids if token_type_ids is not None else mx.zeros_like(input_ids),
+        )
         # [CLS] token is at position 0
         cls_output = hidden_states[:, 0, :]
         # Apply pooler (tanh activation) if available
         if hasattr(self.bert, "pooler_dense"):
             cls_output = mx.tanh(self.bert.pooler_dense(cls_output))
-        logits = self.classifier(cls_output)
+        logits: mx.array = self.classifier(cls_output)
         return logits
 
 
@@ -89,7 +93,13 @@ def load_cross_encoder_weights(model: BertForSequenceClassification, weights_pat
     classifier_weights: dict[str, mx.array] = {}
     bert_weights: dict[str, mx.array] = {}
 
-    for name, weight in hf_weights.items():
+    # mx.load returns dict[str, array] for safetensors files
+    hf_weights_dict: dict[str, mx.array]
+    if isinstance(hf_weights, dict):
+        hf_weights_dict = hf_weights
+    else:
+        hf_weights_dict = {}
+    for name, weight in hf_weights_dict.items():
         if name.startswith("classifier."):
             # Map classifier.weight -> classifier.weight (already matches)
             classifier_weights[name] = weight
@@ -125,7 +135,7 @@ class InProcessCrossEncoder:
         self.model: BertForSequenceClassification | None = None
         self.tokenizer: Tokenizer | None = None
         self.model_name: str | None = None
-        self.config: dict | None = None
+        self.config: dict[str, Any] | None = None
         self._num_labels: int = 1
         self._activation: str = "sigmoid"
 
@@ -260,6 +270,7 @@ class InProcessCrossEncoder:
         with gpu_context():
             # Tokenize WITHOUT padding so each batch pads only to its own
             # max length (not global max), saving memory.
+            assert self.tokenizer is not None
             self.tokenizer.no_padding()
             encodings = self.tokenizer.encode_batch([(query, doc) for query, doc in pairs])
 
@@ -295,6 +306,7 @@ class InProcessCrossEncoder:
                 attention_mask_mx = mx.array(attention_mask)
                 token_type_ids_mx = mx.array(token_type_ids)
 
+                assert self.model is not None
                 logits = self.model(input_ids_mx, attention_mask_mx, token_type_ids_mx)
 
                 if self._activation == "sigmoid":
@@ -311,7 +323,7 @@ class InProcessCrossEncoder:
                 all_scores.append(np.array(scores))
 
             # Concatenate and unsort
-            all_scores_arr = np.concatenate(all_scores)
+            all_scores_arr: np.ndarray = np.concatenate(all_scores)
             reverse_indices = np.argsort(sorted_indices)
             return all_scores_arr[reverse_indices]
 

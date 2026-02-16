@@ -11,7 +11,7 @@ from tests.helpers_api import api_client_with_reader
 
 def test_drafts_reply_smoke_with_stubbed_pipeline(monkeypatch) -> None:
     """Smoke-test API message flow through /drafts/reply with lightweight stubs."""
-    import api.routers.drafts as drafts_router
+    import api.services.drafts_service as drafts_service
 
     reader = MagicMock()
     reader.get_messages.return_value = [
@@ -51,11 +51,11 @@ def test_drafts_reply_smoke_with_stubbed_pipeline(monkeypatch) -> None:
             return None
 
     monkeypatch.setattr(
-        drafts_router,
+        drafts_service,
         "run_classification_and_search",
         lambda *_args, **_kwargs: (object(), [{"similarity": 0.91, "context_text": "ctx"}]),
     )
-    monkeypatch.setattr("jarvis.reply_service.get_reply_service", lambda: _ReplyServiceStub())
+    monkeypatch.setattr(drafts_service, "get_reply_service", lambda: _ReplyServiceStub())
 
     with api_client_with_reader(app, reader, raise_server_exceptions=False) as client:
         response = client.post(

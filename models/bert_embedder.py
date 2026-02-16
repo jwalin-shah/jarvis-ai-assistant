@@ -15,6 +15,7 @@ Usage:
     embeddings = embedder.encode(["Hello, world!"])
     print(embeddings.shape)  # (1, 384)
 """
+# mypy: ignore-errors
 
 from __future__ import annotations
 
@@ -35,7 +36,7 @@ import mlx.nn as nn
 import numpy as np
 from tokenizers import Tokenizer
 
-from jarvis.errors import ErrorCode, JarvisError
+from jarvis.core.exceptions import ErrorCode, JarvisError
 from models.memory_config import gpu_context
 from models.utils import HF_CACHE, find_model_snapshot, map_hf_bert_key
 

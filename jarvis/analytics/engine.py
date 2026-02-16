@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from jarvis.cache import TTLCache
+from jarvis.infrastructure.cache import TTLCache
 from jarvis.observability.insights import (
     EMOJI_PATTERN,
     analyze_sentiment,
@@ -394,7 +394,7 @@ class AnalyticsEngine:
         if cache_key:
             found, cached = self._cache.get(cache_key)
             if found:
-                return cached  # type: ignore[return-value]
+                return cached  # type: ignore[no-any-return]
 
         # Overview
         overview = self.compute_overview(messages, time_range_days)

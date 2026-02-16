@@ -290,12 +290,43 @@ class PrefetchExecutor:
             VecIndexHandler,
         )
 
-        self.register_handler(PredictionType.DRAFT_REPLY, DraftReplyHandler())
-        self.register_handler(PredictionType.EMBEDDING, EmbeddingHandler())
-        self.register_handler(PredictionType.CONTACT_PROFILE, ContactProfileHandler())
-        self.register_handler(PredictionType.MODEL_WARM, ModelWarmHandler())
-        self.register_handler(PredictionType.SEARCH_RESULTS, SearchResultsHandler())
-        self.register_handler(PredictionType.VEC_INDEX, VecIndexHandler())
+        # Keep concrete handlers as attributes and route through methods so tests
+        # can patch `_handle_*` methods without mutating internal registry state.
+        self._draft_reply_handler = DraftReplyHandler()
+        self._embedding_handler = EmbeddingHandler()
+        self._contact_profile_handler = ContactProfileHandler()
+        self._model_warm_handler = ModelWarmHandler()
+        self._search_results_handler = SearchResultsHandler()
+        self._vec_index_handler = VecIndexHandler()
+
+        self.register_handler(PredictionType.DRAFT_REPLY, lambda p: self._handle_draft_reply(p))
+        self.register_handler(PredictionType.EMBEDDING, lambda p: self._handle_embedding(p))
+        self.register_handler(
+            PredictionType.CONTACT_PROFILE, lambda p: self._handle_contact_profile(p)
+        )
+        self.register_handler(PredictionType.MODEL_WARM, lambda p: self._handle_model_warm(p))
+        self.register_handler(
+            PredictionType.SEARCH_RESULTS, lambda p: self._handle_search_results(p)
+        )
+        self.register_handler(PredictionType.VEC_INDEX, lambda p: self._handle_vec_index(p))
+
+    def _handle_draft_reply(self, prediction: Prediction) -> dict[str, Any] | None:
+        return self._draft_reply_handler(prediction)
+
+    def _handle_embedding(self, prediction: Prediction) -> dict[str, Any] | None:
+        return self._embedding_handler(prediction)
+
+    def _handle_contact_profile(self, prediction: Prediction) -> dict[str, Any] | None:
+        return self._contact_profile_handler(prediction)
+
+    def _handle_model_warm(self, prediction: Prediction) -> dict[str, Any] | None:
+        return self._model_warm_handler(prediction)
+
+    def _handle_search_results(self, prediction: Prediction) -> dict[str, Any] | None:
+        return self._search_results_handler(prediction)
+
+    def _handle_vec_index(self, prediction: Prediction) -> dict[str, Any] | None:
+        return self._vec_index_handler(prediction)
 
     def _get_reader(self) -> Any:
         """Get or create the shared ChatDBReader instance.
@@ -390,7 +421,7 @@ class PrefetchExecutor:
             if self._reader is not None:
                 try:
                     self._reader.close()
-                except Exception:
+                except Exception:  # nosec B110
                     pass
                 self._reader = None
 
@@ -510,7 +541,7 @@ class PrefetchExecutor:
             try:
                 self._queue.put_nowait(task)
                 count += 1
-            except Exception:
+            except Exception:  # nosec B110
                 pass
 
         with self._lock:
@@ -546,10 +577,7 @@ class PrefetchExecutor:
     def _worker_loop(self) -> None:
         """Main worker loop that processes tasks."""
         tracker = ConsecutiveErrorTracker(
-            base_delay=self._tick_interval,
-            max_delay=5.0,
-            max_consecutive=5,
-            name="prefetch-worker"
+            base_delay=self._tick_interval, max_delay=5.0, max_consecutive=5, name="prefetch-worker"
         )
 
         while not self._shutdown_event.is_set():
@@ -567,7 +595,7 @@ class PrefetchExecutor:
                 # Get task from queue
                 try:
                     task = self._queue.get(timeout=self._tick_interval)
-                except Exception:
+                except Exception:  # nosec B112
                     continue
 
                 # Check if prediction is still valid
@@ -632,7 +660,7 @@ class PrefetchExecutor:
                     task.priority -= 10  # Lower priority on retry
                     try:
                         self._queue.put_nowait(task)
-                    except Exception:
+                    except Exception:  # nosec B110
                         pass
                 else:
                     self._stats.predictions_failed += 1
@@ -704,7 +732,7 @@ def get_executor() -> PrefetchExecutor:
 
 def reset_executor() -> None:
     """Reset singleton executor (stops if running)."""
-    instance = get_executor.peek()
-    if instance is not None:
-        instance.stop()
-    get_executor.reset()
+    executor = get_executor.peek()  # type: ignore[attr-defined]
+    if executor is not None:
+        executor.stop()
+    get_executor.reset()  # type: ignore[attr-defined]

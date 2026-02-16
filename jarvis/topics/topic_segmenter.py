@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -17,7 +18,19 @@ from numpy.typing import NDArray
 if TYPE_CHECKING:
     from jarvis.contracts.imessage import Message
 
-from enum import Enum
+
+# Forward reference for segmentation config return type
+class _SegmentationConfig:
+    """Protocol for segmentation config (avoids circular import)."""
+
+    time_gap_minutes: float
+    similarity_threshold: float
+    entity_weight: float
+    entity_jaccard_threshold: float
+    use_topic_shift_markers: bool
+    topic_shift_weight: float
+    boundary_threshold: float
+
 
 logger = logging.getLogger(__name__)
 
@@ -238,12 +251,12 @@ def _create_segment(
     )
 
 
-def _get_segmentation_config():
+def _get_segmentation_config() -> _SegmentationConfig:
     """Load segmentation config with defaults."""
     from jarvis.config import get_config
 
     try:
-        return get_config().segmentation
+        return get_config().segmentation  # type: ignore[return-value]
     except Exception:
         # Return defaults if config unavailable
         from dataclasses import dataclass
@@ -258,10 +271,10 @@ def _get_segmentation_config():
             topic_shift_weight = 0.4
             boundary_threshold = 0.5
 
-        return Defaults()
+        return Defaults()  # type: ignore[return-value]
 
 
-def _compute_segment_metadata(segment: TopicSegment):
+def _compute_segment_metadata(segment: TopicSegment) -> None:
     """Generate labels, keywords and summary for a segment."""
     from sklearn.feature_extraction.text import TfidfVectorizer
 
@@ -280,7 +293,7 @@ def _compute_segment_metadata(segment: TopicSegment):
         if normalized_text and len(normalized_text.split()) > 3:
             vectorizer.fit([normalized_text])
             segment.keywords = list(vectorizer.get_feature_names_out())
-    except Exception:
+    except Exception:  # nosec B110
         pass
 
     # 2. Label and Summary via SegmentLabeler
@@ -299,13 +312,34 @@ def _compute_segment_metadata(segment: TopicSegment):
 class TopicSegmenter:
     """Class-based wrapper for segmentation (legacy support)."""
 
-    def segment(self, messages: list[Message], **kwargs) -> list[TopicSegment]:
-        return segment_conversation(messages, **kwargs)
+    def segment(
+        self,
+        messages: list[Message],
+        contact_id: str | None = None,
+        drift_threshold: float = 0.35,
+        pre_fetched_embeddings: dict[int, Any] | None = None,
+    ) -> list[TopicSegment]:
+        return segment_conversation(
+            messages,
+            contact_id=contact_id,
+            drift_threshold=drift_threshold,
+            pre_fetched_embeddings=pre_fetched_embeddings,
+        )
 
 
-def segment_for_extraction(messages: list[Message], **kwargs) -> list[TopicSegment]:
+def segment_for_extraction(
+    messages: list[Message],
+    contact_id: str | None = None,
+    drift_threshold: float = 0.35,
+    pre_fetched_embeddings: dict[int, Any] | None = None,
+) -> list[TopicSegment]:
     """Helper for extraction pipeline."""
-    return segment_conversation(messages, **kwargs)
+    return segment_conversation(
+        messages,
+        contact_id=contact_id,
+        drift_threshold=drift_threshold,
+        pre_fetched_embeddings=pre_fetched_embeddings,
+    )
 
 
 _segmenter: TopicSegmenter | None = None
@@ -318,6 +352,6 @@ def get_segmenter() -> TopicSegmenter:
     return _segmenter
 
 
-def reset_segmenter():
+def reset_segmenter() -> None:
     global _segmenter
     _segmenter = None

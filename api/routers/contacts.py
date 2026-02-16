@@ -11,7 +11,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Any
-from xml.sax.saxutils import escape as xml_escape
+from xml.sax.saxutils import escape as xml_escape  # nosec B406
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
@@ -178,7 +178,7 @@ def _get_color_for_identifier(identifier: str) -> str:
     Returns:
         Hex color string (e.g., "#FF6B6B")
     """
-    hash_val = int(hashlib.md5(identifier.encode()).hexdigest(), 16)
+    hash_val = int(hashlib.md5(identifier.encode(), usedforsecurity=False).hexdigest(), 16)
     return AVATAR_COLORS[hash_val % len(AVATAR_COLORS)]
 
 

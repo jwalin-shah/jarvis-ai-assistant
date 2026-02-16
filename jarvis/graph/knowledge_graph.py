@@ -18,6 +18,9 @@ from typing import Any
 
 from jarvis.utils.latency_tracker import track_latency
 
+# Type hint for networkx graph
+_nx_graph_type = Any
+
 logger = logging.getLogger(__name__)
 
 # Entity node colors by fact category
@@ -69,14 +72,14 @@ class KnowledgeGraph:
     """Knowledge graph built from contact facts and profiles."""
 
     def __init__(self) -> None:
-        self._nx = None
-        self.graph = None
+        self._nx: Any = None
+        self.graph: _nx_graph_type = None
         # Inverted index: lowercased word -> set of (src, tgt, edge_key) tuples
         self._search_index: dict[str, set[tuple[str, str, int]]] = {}
         # Edge data cache for search results: (src, tgt, key) -> attrs dict
         self._edge_cache: dict[tuple[str, str, int], dict[str, Any]] = {}
 
-    def _ensure_nx(self) -> Any:
+    def _ensure_nx(self) -> _nx_graph_type:
         """Lazy-import networkx."""
         if self._nx is None:
             import networkx as nx

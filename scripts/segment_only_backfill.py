@@ -58,13 +58,14 @@ def main():
         convos = reader.get_conversations(limit=1000)
 
     active_chats = [
-        c for c in convos
+        c
+        for c in convos
         if c.message_count >= 5
         and ("iMessage" in c.chat_id or "RCS" in c.chat_id or "SMS" in c.chat_id)
     ]
 
     if args.limit:
-        active_chats = active_chats[:args.limit]
+        active_chats = active_chats[: args.limit]
 
     print(f"\nProcessing {len(active_chats)} chats for segmentation...")
     print(f"Drift threshold: {args.drift_threshold}")
@@ -72,10 +73,12 @@ def main():
     # Import embedder
     if args.use_cpu:
         from jarvis.embedding import get_parallel_embedder
+
         embedder = get_parallel_embedder()
         print(f"Using CPU embedder: {type(embedder).__name__}")
     else:
         from jarvis.embedding_adapter import get_embedder
+
         embedder = get_embedder()
         print(f"Using MLX embedder: {type(embedder).__name__}")
 
@@ -132,8 +135,8 @@ def main():
                 extract_facts=False,  # Don't extract facts here
             )
 
-            persisted = stats.get('persisted', 0)
-            indexed = stats.get('indexed', 0)
+            persisted = stats.get("persisted", 0)
+            indexed = stats.get("indexed", 0)
 
             print(f"  ✓ Segments: {persisted}, Indexed: {indexed}")
             processed += 1
@@ -142,6 +145,7 @@ def main():
             print(f"  ✗ Error: {e}")
             errors += 1
             import traceback
+
             traceback.print_exc()
 
     print("\n" + "=" * 60)
@@ -154,6 +158,7 @@ def main():
     # Cleanup
     if args.use_cpu:
         from jarvis.embedding import CPUEmbedder
+
         CPUEmbedder.get_instance().unload()
 
     return 0

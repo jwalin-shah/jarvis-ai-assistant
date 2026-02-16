@@ -44,12 +44,22 @@ def route_reply_sync(
     last_message: str,
     thread_context: list[str],
 ) -> dict[str, Any]:
-    """Run reply router synchronously for threadpool execution."""
-    from jarvis.router import get_reply_router
+    """Run reply generation synchronously for threadpool execution."""
+    from datetime import UTC, datetime
 
-    router = get_reply_router()
-    return router.route(
+    from jarvis.contracts.pipeline import MessageContext
+    from jarvis.reply_service import get_reply_service
+
+    service = get_reply_service()
+    return service.route_legacy(
         incoming=last_message,
         chat_id=chat_id,
         thread=thread_context,
+        context=MessageContext(
+            chat_id=chat_id,
+            message_text=last_message,
+            is_from_me=False,
+            timestamp=datetime.now(UTC),
+            metadata={"thread": thread_context},
+        ),
     )

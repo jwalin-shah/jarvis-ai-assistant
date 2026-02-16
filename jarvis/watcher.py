@@ -10,16 +10,35 @@ import asyncio
 import logging
 import sqlite3
 import threading
+from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
 from jarvis.utils.async_utils import log_task_exception
 from jarvis.utils.backoff import AsyncConsecutiveErrorTracker
-from jarvis.utils.datetime_utils import parse_apple_timestamp
-from jarvis.utils.locks import PerKeyLockManager
+from jarvis.utils.datetime_utils import (
+    APPLE_EPOCH_OFFSET as _APPLE_EPOCH_OFFSET,
+)
+from jarvis.watcher_db import (
+    validate_chat_db_schema,
+)
+from jarvis.watcher_polling import (
+    get_new_messages,
+    get_poll_conn,
+    query_last_rowid_safe,
+    query_new_messages_safe,
+)
+from jarvis.watcher_resegment import (
+    do_resegment_one,
+    get_resegment_lock,
+    resegment_chats,
+)
 
 logger = logging.getLogger(__name__)
+
+# Backward-compatible export for tests and legacy imports.
+APPLE_EPOCH_OFFSET = _APPLE_EPOCH_OFFSET
 
 
 # =============================================================================
@@ -105,7 +124,9 @@ class ChatDBWatcher:
         self._chat_msg_counts: dict[str, int] = {}
         self._segment_threshold = 15
         self._segment_window = 50
-        self._resegment_locks = PerKeyLockManager(max_locks=100)
+        self._max_resegment_locks = 100
+        self._resegment_locks: OrderedDict[str, asyncio.Lock] = OrderedDict()
+        self._resegment_locks_guard = asyncio.Lock()
         # Persistent read-only connection for rowid polling (avoids 10-50ms connect overhead)
         self._poll_conn: sqlite3.Connection | None = None
         self._poll_conn_lock = threading.Lock()  # Protects _poll_conn from stop()/query race
@@ -166,8 +187,8 @@ class ChatDBWatcher:
             if self._poll_conn:
                 try:
                     self._poll_conn.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Error closing poll connection: {e}")
                 self._poll_conn = None
 
         if self._monitor_task:
@@ -199,10 +220,7 @@ class ChatDBWatcher:
     async def _watch_fsevents(self) -> None:
         """Watch using FSEvents via watchfiles (macOS native, <100ms latency)."""
         tracker = AsyncConsecutiveErrorTracker(
-            base_delay=1.0,
-            max_delay=30.0,
-            max_consecutive=5,
-            name="watcher-fsevents"
+            base_delay=1.0, max_delay=30.0, max_consecutive=5, name="watcher-fsevents"
         )
 
         try:
@@ -284,7 +302,7 @@ class ChatDBWatcher:
             base_delay=self._poll_interval,
             max_delay=30.0,
             max_consecutive=1,  # Back off immediately on poll error
-            name="watcher-polling"
+            name="watcher-polling",
         )
 
         while self._running:
@@ -598,12 +616,11 @@ class ChatDBWatcher:
         same chat_id are serialized, preventing interleaved delete+index
         operations that corrupt the vector index.
         """
-        for chat_id in chat_ids:
-            async with self._resegment_locks.lock(chat_id):
-                try:
-                    await asyncio.to_thread(self._do_resegment_one, chat_id)
-                except Exception as e:
-                    logger.warning("Error re-segmenting %s: %s", chat_id, e)
+        await resegment_chats(self, chat_ids)
+
+    async def _get_resegment_lock(self, chat_id: str) -> asyncio.Lock:
+        """Return per-chat async lock with LRU eviction for bounded growth."""
+        return await get_resegment_lock(self, chat_id)
 
     def _do_resegment_one(self, chat_id: str) -> None:
         """Sync worker: incrementally segment new messages for a single chat.
@@ -611,123 +628,7 @@ class ChatDBWatcher:
         Instead of deleting all segments and rebuilding, this appends new segments
         for messages that arrived since the last segmentation.
         """
-        from integrations.imessage import ChatDBReader
-        from jarvis.search.vec_search import get_vec_searcher
-        from jarvis.topics.segment_pipeline import process_segments
-        from jarvis.topics.topic_segmenter import segment_conversation
-
-        try:
-            get_vec_searcher()
-        except Exception as e:
-            logger.debug("Cannot get vec_searcher for re-segmentation: %s", e)
-            return
-
-        db = None
-        try:
-            from jarvis.db import get_db
-
-            db = get_db()
-        except Exception as e:
-            logger.debug("Cannot get db for segment persistence: %s", e)
-            return
-
-        with ChatDBReader() as reader:
-            # Find the timestamp of the last message we've segmented
-            last_segmented_time = None
-            if db is not None:
-                with db.connection() as conn:
-                    row = conn.execute(
-                        """SELECT MAX(end_time) as last_time
-                           FROM conversation_segments
-                           WHERE chat_id = ?""",
-                        (chat_id,),
-                    ).fetchone()
-                    if row and row["last_time"]:
-                        from datetime import datetime
-
-                        try:
-                            last_segmented_time = datetime.fromisoformat(row["last_time"])
-                        except (ValueError, TypeError):
-                            pass
-
-            # Get messages - either all (if never segmented) or new ones
-            if last_segmented_time:
-                # Get recent messages and filter to only new ones
-                messages = reader.get_messages(chat_id, limit=self._segment_window * 2)
-                messages.reverse()  # chronological
-
-                # Filter to only messages after last segmentation
-                new_messages = [m for m in messages if m.date and m.date > last_segmented_time]
-
-                if not new_messages:
-                    logger.debug("No new messages to segment for %s", chat_id[:20])
-                    return
-
-                # Include last few messages from previous segment for context
-                context_messages = [
-                    m for m in messages if m.date and m.date <= last_segmented_time
-                ][-5:]  # Last 5 messages for continuity
-
-                messages_to_segment = context_messages + new_messages
-                logger.debug(
-                    "Segmenting %d new messages (+ %d context) for %s",
-                    len(new_messages),
-                    len(context_messages),
-                    chat_id[:20],
-                )
-            else:
-                # First time segmenting this chat - get recent window
-                messages = reader.get_messages(chat_id, limit=self._segment_window)
-                messages.reverse()  # chronological
-                messages_to_segment = messages
-                logger.debug(
-                    "First-time segmentation for %s: %d messages",
-                    chat_id[:20],
-                    len(messages_to_segment),
-                )
-
-            if not messages_to_segment:
-                return
-
-            # Segment the messages
-            segments = segment_conversation(messages_to_segment, contact_id=chat_id)
-
-            if not segments:
-                logger.debug("No segments created for %s", chat_id[:20])
-                return
-
-            # If we have context messages, try to merge first segment with existing
-            if last_segmented_time and len(segments) > 0:
-                with db.connection() as conn:
-                    # Get the last segment from previous run
-                    last_seg_row = conn.execute(
-                        """SELECT id, segment_id, message_count, preview, end_time
-                           FROM conversation_segments
-                           WHERE chat_id = ?
-                           ORDER BY end_time DESC LIMIT 1""",
-                        (chat_id,),
-                    ).fetchone()
-
-                    if last_seg_row:
-                        # Check if first new segment should be merged (same topic)
-                        first_new_seg = segments[0]
-                        # Simple heuristic: if first new segment has few messages,
-                        # it might be a continuation
-                        if len(first_new_seg.messages) <= 3:
-                            # Delete and re-segment with more context
-                            # For now, just delete the overlap and re-index
-                            pass
-
-            # Unified persist + index (only new segments)
-            stats = process_segments(segments, chat_id, contact_id=chat_id, extract_facts=False)
-
-            logger.info(
-                "Incremental segment %s: persisted=%d, indexed=%d (new: %s)",
-                chat_id[:20],
-                stats["persisted"],
-                stats["indexed"],
-                "yes" if last_segmented_time else "first-run",
-            )
+        do_resegment_one(self, chat_id)
 
     def _validate_schema(self) -> bool:
         """Validate that chat.db has the expected schema.
@@ -736,63 +637,7 @@ class ChatDBWatcher:
         This is intentionally permissive - we don't fail if Apple adds new
         tables/columns in macOS updates, only if required ones are missing.
         """
-        if not CHAT_DB_PATH.exists():
-            logger.warning("chat.db not found, watcher cannot start")
-            return False
-
-        try:
-            conn = sqlite3.connect(
-                f"file:{CHAT_DB_PATH}?mode=ro",
-                uri=True,
-                timeout=5.0,
-            )
-            try:
-                cursor = conn.cursor()
-
-                # Check required tables (only what we use)
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-                tables = {row[0] for row in cursor.fetchall()}
-                required_tables = {"message", "chat", "handle", "chat_message_join"}
-                missing_tables = required_tables - tables
-                if missing_tables:
-                    logger.error("chat.db missing required tables: %s", missing_tables)
-                    return False
-
-                # Check required columns in message table (only what we query)
-                # Note: ROWID is always present in SQLite, no need to check
-                # PRAGMA table_info returns: (cid, name, type, notnull, dflt_value, pk)
-                cursor.execute("PRAGMA table_info(message)")
-                column_info = {row[1]: row[2].upper() for row in cursor.fetchall()}
-                required_columns = {"text", "date", "is_from_me", "handle_id"}
-                missing_columns = required_columns - set(column_info.keys())
-                if missing_columns:
-                    logger.error("chat.db message table missing columns: %s", missing_columns)
-                    return False
-
-                # Validate column types for the columns we depend on
-                expected_types = {
-                    "text": {"TEXT", ""},  # TEXT or untyped (SQLite is flexible)
-                    "date": {"INTEGER", "REAL", ""},
-                    "is_from_me": {"INTEGER", "BOOLEAN", ""},
-                    "handle_id": {"INTEGER", ""},
-                }
-                for col_name, valid_types in expected_types.items():
-                    actual_type = column_info.get(col_name, "")
-                    if actual_type not in valid_types:
-                        logger.error(
-                            "chat.db message.%s has unexpected type '%s' (expected one of %s)",
-                            col_name,
-                            actual_type,
-                            valid_types,
-                        )
-                        return False
-
-                return True
-            finally:
-                conn.close()
-        except Exception as e:
-            logger.error("chat.db schema validation error: %s", e)
-            return False
+        return validate_chat_db_schema(CHAT_DB_PATH)
 
     async def _get_last_rowid(self) -> int | None:
         """Get the current maximum message ROWID."""
@@ -805,46 +650,11 @@ class ChatDBWatcher:
         Error handlers in _query_last_rowid/_query_new_messages reset the
         connection on failure, which forces reconnection on next call.
         """
-        with self._poll_conn_lock:
-            if self._poll_conn is not None:
-                return self._poll_conn
-
-            # Create new connection
-            if not CHAT_DB_PATH.exists():
-                return None
-            try:
-                self._poll_conn = sqlite3.connect(
-                    f"file:{CHAT_DB_PATH}?mode=ro",
-                    uri=True,
-                    timeout=5.0,
-                    check_same_thread=False,
-                )
-                return self._poll_conn
-            except Exception as e:
-                logger.debug("Error creating poll connection: %s", e)
-                return None
+        return get_poll_conn(self, CHAT_DB_PATH)
 
     def _query_last_rowid(self) -> int | None:
         """Query the last message ROWID (sync)."""
-        conn = self._get_poll_conn()
-        if conn is None:
-            return None
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT MAX(ROWID) FROM message")
-            row = cursor.fetchone()
-            return row[0] if row and row[0] else None
-        except Exception as e:
-            logger.debug("Error getting last ROWID: %s", e)
-            # Connection may be stale, reset it and force reconnect on next call
-            with self._poll_conn_lock:
-                try:
-                    if self._poll_conn:
-                        self._poll_conn.close()
-                except Exception:
-                    pass
-                self._poll_conn = None
-            return None
+        return query_last_rowid_safe(self, CHAT_DB_PATH)
 
     async def _get_new_messages(self) -> list[dict[str, Any]]:
         """Get messages newer than last known ROWID.
@@ -852,27 +662,7 @@ class ChatDBWatcher:
         Handles bursty writes by fetching in batches until all new messages
         are retrieved (prevents missing messages when >500 arrive at once).
         """
-        if self._last_rowid is None:
-            return []
-
-        all_new_messages = []
-        current_rowid = self._last_rowid
-
-        while True:
-            batch = await asyncio.to_thread(self._query_new_messages, current_rowid, limit=500)
-            if not batch:
-                break
-
-            all_new_messages.extend(batch)
-
-            # If we got fewer than the limit, we've fetched all messages
-            if len(batch) < 500:
-                break
-
-            # Update current_rowid to the max of this batch to get next batch
-            current_rowid = max(msg["id"] for msg in batch)
-
-        return all_new_messages
+        return await get_new_messages(self)
 
     def _query_new_messages(self, since_rowid: int, limit: int = 500) -> list[dict[str, Any]]:
         """Query for new messages (sync).
@@ -881,59 +671,12 @@ class ChatDBWatcher:
             since_rowid: Only fetch messages with ROWID > this value
             limit: Maximum number of messages to fetch in one query
         """
-        conn = self._get_poll_conn()
-        if conn is None:
-            return []
-
-        try:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT
-                    message.ROWID as id,
-                    chat.guid as chat_id,
-                    COALESCE(handle.id, 'me') as sender,
-                    message.text,
-                    message.date,
-                    message.is_from_me
-                FROM message
-                JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
-                JOIN chat ON chat_message_join.chat_id = chat.ROWID
-                LEFT JOIN handle ON message.handle_id = handle.ROWID
-                WHERE message.ROWID > ?
-                ORDER BY message.date ASC
-                LIMIT ?
-                """,
-                (since_rowid, limit),
-            )
-
-            messages = []
-            for row in cursor.fetchall():
-                # Parse Apple timestamp
-                date = None
-                if row["date"]:
-                    date = parse_apple_timestamp(row["date"]).isoformat()
-
-                messages.append(
-                    {
-                        "id": row["id"],
-                        "chat_id": row["chat_id"],
-                        "sender": row["sender"],
-                        "text": row["text"],
-                        "date": date,
-                        "is_from_me": bool(row["is_from_me"]),
-                    }
-                )
-
-            return messages
-
-        except Exception as e:
-            logger.warning("Error querying new messages: %s", e)
-            # Connection may be stale, reset it
-            with self._poll_conn_lock:
-                self._poll_conn = None
-            return []
+        return query_new_messages_safe(
+            self,
+            CHAT_DB_PATH,
+            since_rowid,
+            limit=limit,
+        )
 
 
 async def run_watcher(broadcast_handler: BroadcastHandler) -> None:

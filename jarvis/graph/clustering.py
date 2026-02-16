@@ -82,32 +82,35 @@ def get_cluster_colors(num_clusters: int) -> list[str]:
     while len(colors) < num_clusters:
         # Generate a random but visually distinct color
         hue = (len(colors) * 0.618033988749895) % 1.0  # Golden ratio
-        saturation = 0.6 + random.random() * 0.2
-        lightness = 0.5 + random.random() * 0.2
+        saturation = 0.6 + random.random() * 0.2  # nosec B311
+        lightness = 0.5 + random.random() * 0.2  # nosec B311
 
         # HSL to RGB conversion
         c = (1 - abs(2 * lightness - 1)) * saturation
         x = c * (1 - abs((hue * 6) % 2 - 1))
         m = lightness - c / 2
 
+        r: float
+        g: float
+        b: float
         if hue < 1 / 6:
-            r, g, b = c, x, 0
+            r, g, b = c, x, 0.0
         elif hue < 2 / 6:
-            r, g, b = x, c, 0
+            r, g, b = x, c, 0.0
         elif hue < 3 / 6:
-            r, g, b = 0, c, x
+            r, g, b = 0.0, c, x
         elif hue < 4 / 6:
-            r, g, b = 0, x, c
+            r, g, b = 0.0, x, c
         elif hue < 5 / 6:
-            r, g, b = x, 0, c
+            r, g, b = x, 0.0, c
         else:
-            r, g, b = c, 0, x
+            r, g, b = c, 0.0, x
 
-        r = int((r + m) * 255)
-        g = int((g + m) * 255)
-        b = int((b + m) * 255)
+        r_int = int((r + m) * 255)
+        g_int = int((g + m) * 255)
+        b_int = int((b + m) * 255)
 
-        colors.append(f"#{r:02x}{g:02x}{b:02x}")
+        colors.append(f"#{r_int:02x}{g_int:02x}{b_int:02x}")
 
     return colors
 
@@ -132,7 +135,7 @@ class LouvainClustering:
             random_seed: Seed for reproducibility
         """
         self.resolution = resolution
-        self._rng = random.Random(random_seed)
+        self._rng = random.Random(random_seed)  # nosec B311
 
     def detect(self, graph: GraphData) -> ClusterResult:
         """Detect communities in the graph.
@@ -288,10 +291,12 @@ class LouvainClustering:
         cluster_labels: dict[int, str] = {}
         cluster_relationships: dict[int, dict[str, int]] = {i: {} for i in range(num_clusters)}
 
-        for node in graph.nodes:
-            comm = clusters.get(node.id, 0)
-            rel_type = node.relationship_type
-            cluster_relationships[comm][rel_type] = cluster_relationships[comm].get(rel_type, 0) + 1
+        for graph_node in graph.nodes:
+            node_comm = clusters.get(graph_node.id, 0)
+            node_rel_type = graph_node.relationship_type
+            cluster_relationships[node_comm][node_rel_type] = (
+                cluster_relationships[node_comm].get(node_rel_type, 0) + 1
+            )
 
         for comm, rel_counts in cluster_relationships.items():
             if rel_counts:

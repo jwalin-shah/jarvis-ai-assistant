@@ -25,7 +25,7 @@ from api.schemas import (
     WordFrequency,
 )
 from integrations.imessage import ChatDBReader
-from jarvis.cache import TTLCache
+from jarvis.infrastructure.cache import TTLCache
 
 _URL_RE = re.compile(r"https?://\S+")
 _WORD_RE = re.compile(r"\b[a-zA-Z]{3,}\b")

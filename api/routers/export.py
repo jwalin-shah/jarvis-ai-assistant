@@ -24,7 +24,7 @@ from api.schemas import (
 )
 from contracts.imessage import Conversation, Message
 from integrations.imessage import ChatDBReader
-from jarvis.errors import ExportError
+from jarvis.core.exceptions import ExportError
 from jarvis.export import (
     ExportFormat,
     export_backup,
@@ -42,6 +42,7 @@ router = APIRouter(prefix="/export", tags=["export"])
 # =============================================================================
 # PDF Export Models
 # =============================================================================
+
 
 class PDFExportDateRange(BaseModel):
     """Date range filter for PDF exports."""

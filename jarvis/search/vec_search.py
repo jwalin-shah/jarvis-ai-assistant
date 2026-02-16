@@ -22,6 +22,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from dataclasses import dataclass
@@ -436,25 +437,40 @@ class VecSearcher:
                     chunk_size = 100
                     for i in range(0, len(vec_chunks_batch), chunk_size):
                         batch_chunk = vec_chunks_batch[i : i + chunk_size]
-                        placeholders = []
-                        params = []
+                        rows_payload: list[dict[str, Any]] = []
                         for row in batch_chunk:
-                            placeholders.append(
-                                "(contact_id = ? AND chat_id = ? AND"
-                                " source_timestamp = ? AND topic_label = ? AND message_count = ?)"
+                            rows_payload.append(
+                                {
+                                    "contact_id": row[1],
+                                    "chat_id": row[2],
+                                    "source_timestamp": row[3],
+                                    "topic_label": row[6],
+                                    "message_count": row[7],
+                                }
                             )
-                            params.extend([row[1], row[2], row[3], row[6], row[7]])
-
-                        where_clause = " OR ".join(placeholders)
                         cursor = conn.execute(
-                            f"""
-                            SELECT rowid, contact_id, chat_id,
-                                source_timestamp, topic_label, message_count
-                            FROM vec_chunks
-                            WHERE {where_clause}
-                            ORDER BY rowid DESC
+                            """
+                            WITH input_rows AS (
+                                SELECT
+                                    json_extract(value, '$.contact_id') AS contact_id,
+                                    json_extract(value, '$.chat_id') AS chat_id,
+                                    json_extract(value, '$.source_timestamp') AS source_timestamp,
+                                    json_extract(value, '$.topic_label') AS topic_label,
+                                    json_extract(value, '$.message_count') AS message_count
+                                FROM json_each(?)
+                            )
+                            SELECT vc.rowid, vc.contact_id, vc.chat_id,
+                                   vc.source_timestamp, vc.topic_label, vc.message_count
+                            FROM vec_chunks vc
+                            JOIN input_rows ir
+                              ON vc.contact_id = ir.contact_id
+                             AND vc.chat_id = ir.chat_id
+                             AND vc.source_timestamp = ir.source_timestamp
+                             AND vc.topic_label = ir.topic_label
+                             AND vc.message_count = ir.message_count
+                            ORDER BY vc.rowid DESC
                             """,
-                            params,
+                            (json.dumps(rows_payload),),
                         )
 
                         for row in cursor:
@@ -531,7 +547,7 @@ class VecSearcher:
                             # SECURITY: Validate placeholders before SQL interpolation
                             _validate_placeholders(placeholders)
                             conn.execute(
-                                f"DELETE FROM vec_binary WHERE chunk_rowid IN ({placeholders})",
+                                f"DELETE FROM vec_binary WHERE chunk_rowid IN ({placeholders})",  # nosec B608
                                 batch_rowids,
                             )
                     except Exception as e:
@@ -737,15 +753,13 @@ class VecSearcher:
                 chunk_rowids = [r[0] for r in top_indices]
                 dist_by_rowid = {r[0]: r[1] for r in top_indices}
 
-                placeholders = ",".join("?" * len(chunk_rowids))
-                _validate_placeholders(placeholders)
                 meta_rows = conn.execute(
-                    f"""
+                    """
                     SELECT rowid, chat_id, context_text, reply_text, topic_label
                     FROM vec_chunks
-                    WHERE rowid IN ({placeholders})
+                    WHERE rowid IN (SELECT value FROM json_each(?))
                     """,
-                    chunk_rowids,
+                    (json.dumps(chunk_rowids),),
                 ).fetchall()
 
                 results = []
@@ -882,7 +896,7 @@ class VecSearcher:
                 chunk = message_ids[chunk_start : chunk_start + 900]
                 placeholders = ",".join("?" * len(chunk))
                 rows = conn.execute(
-                    f"SELECT rowid, embedding FROM vec_messages WHERE rowid IN ({placeholders})",
+                    f"SELECT rowid, embedding FROM vec_messages WHERE rowid IN ({placeholders})",  # nosec B608
                     chunk,
                 ).fetchall()
                 for row in rows:
@@ -926,9 +940,6 @@ class VecSearcher:
         # Try to enrich with segment data
         try:
             chunk_rowids = [h.rowid for h in hits]
-            placeholders = ",".join("?" * len(chunk_rowids))
-            _validate_placeholders(placeholders)
-
             with self.db.connection() as conn:
                 # Check if conversation_segments table exists
                 table_check = conn.execute(
@@ -941,14 +952,14 @@ class VecSearcher:
 
                 # Join vec_chunks rowids → conversation_segments
                 seg_rows = conn.execute(
-                    f"""
+                    """
                     SELECT cs.id, cs.segment_id, cs.chat_id, cs.contact_id,
                            cs.start_time, cs.end_time, cs.preview,
                            cs.message_count, cs.vec_chunk_rowid
                     FROM conversation_segments cs
-                    WHERE cs.vec_chunk_rowid IN ({placeholders})
-                    """,  # noqa: S608
-                    chunk_rowids,
+                    WHERE cs.vec_chunk_rowid IN (SELECT value FROM json_each(?))
+                    """,
+                    (json.dumps(chunk_rowids),),
                 ).fetchall()
 
                 if not seg_rows:
@@ -956,16 +967,14 @@ class VecSearcher:
 
                 # Batch fetch message memberships
                 seg_ids = [r["id"] for r in seg_rows]
-                seg_ph = ",".join("?" * len(seg_ids))
-                _validate_placeholders(seg_ph)
                 msg_rows = conn.execute(
-                    f"""
+                    """
                     SELECT segment_id, message_rowid, position, is_from_me
                     FROM segment_messages
-                    WHERE segment_id IN ({seg_ph})
+                    WHERE segment_id IN (SELECT value FROM json_each(?))
                     ORDER BY segment_id, position
-                    """,  # noqa: S608
-                    seg_ids,
+                    """,
+                    (json.dumps(seg_ids),),
                 ).fetchall()
 
             # Group messages by segment

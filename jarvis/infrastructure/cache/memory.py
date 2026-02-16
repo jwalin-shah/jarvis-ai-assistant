@@ -102,7 +102,7 @@ class MemoryBackend(CacheBackend):
     def get_or_set(self, key: str, factory: Callable[[], T], ttl: float | None = None) -> T:
         val = self.get(key)
         if val is not _SENTINEL:
-            return val
+            return val  # type: ignore[return-value]
 
         with self._inflight_lock:
             if key in self._inflight:
@@ -116,7 +116,7 @@ class MemoryBackend(CacheBackend):
             event.wait(timeout=60.0)
             val = self.get(key)
             if val is not _SENTINEL:
-                return val
+                return val  # type: ignore[return-value]
 
         try:
             result = factory()

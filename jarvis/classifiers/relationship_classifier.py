@@ -296,8 +296,7 @@ class RelationshipClassifier:
                 conn.row_factory = sqlite3.Row
 
                 # Use ROW_NUMBER to limit per chat within a single query
-                placeholders = ",".join("?" for _ in chat_ids)
-                query = f"""
+                query = """
                     WITH ranked AS (
                         SELECT
                             m.text,
@@ -311,7 +310,7 @@ class RelationshipClassifier:
                         FROM message m
                         JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
                         JOIN chat c ON cmj.chat_id = c.ROWID
-                        WHERE c.chat_identifier IN ({placeholders})
+                        WHERE c.chat_identifier IN (SELECT value FROM json_each(?))
                             AND m.text IS NOT NULL
                             AND m.text != ''
                     )
@@ -320,7 +319,7 @@ class RelationshipClassifier:
                     WHERE rn <= ?
                 """
 
-                cursor = conn.execute(query, (*chat_ids, limit_per_chat))
+                cursor = conn.execute(query, (json.dumps(chat_ids), limit_per_chat))
 
                 for row in cursor:
                     date_int = row["date_int"]

@@ -139,9 +139,7 @@ def _is_transactional_message(text: str) -> bool:
     return bool(_TRANSACTIONAL_MSG_RE.search(text))
 
 
-def _build_extraction_system_prompt(
-    user_name: str, contact_name: str, **kwargs: Any
-) -> str:
+def _build_extraction_system_prompt(user_name: str, contact_name: str, **kwargs: Any) -> str:
     """Build pass-1 prompt for single-segment extraction."""
     return EXTRACTION_SYSTEM_PROMPT
 
@@ -181,7 +179,7 @@ def _parse_pass1_json_lines(
             depth = 0
 
     # --- Step 2: Parse JSON objects ---
-    def _accept_item(item: dict) -> bool:
+    def _accept_item(item: dict[str, Any]) -> bool:
         subject = str(item.get("subject", "")).strip()
         speaker = str(item.get("speaker", "")).strip()
         claim = str(item.get("claim", "")).strip()
@@ -573,9 +571,7 @@ class InstructionFactExtractor:
                 return [[] for _ in segments]
 
             # PASS 2: Structuring - Convert sentences to triples
-            p2_system = VERIFY_SYSTEM_PROMPT.format(
-                user_name=user_name, contact_name=contact_name
-            )
+            p2_system = VERIFY_SYSTEM_PROMPT.format(user_name=user_name, contact_name=contact_name)
             p2_user = VERIFY_USER_PROMPT.format(text=batch_text, facts=raw_facts)
 
             messages_p2 = [
@@ -780,7 +776,7 @@ class InstructionFactExtractor:
                         contact_id=contact_id,
                         confidence=base_confidence,
                         attribution=self._attribution_resolver.resolve(
-                            source_text=best_msg.text or "",
+                            source_text=getattr(best_msg, "text", "") or "",
                             subject=subject_name,
                             is_from_me=best_msg.is_from_me if best_msg else False,
                             category="other",  # category is determined later

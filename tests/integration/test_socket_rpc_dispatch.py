@@ -74,16 +74,20 @@ async def test_process_message_streaming_mode_writes_stream_frames() -> None:
         _writer: _WriterStub,
         _request_id: int,
     ) -> dict[str, str]:
-        token_frame = json.dumps(
-            {
-                "jsonrpc": "2.0",
-                "method": "stream.token",
-                "params": {"token": text, "index": 0, "final": True, "request_id": _request_id},
-            }
-        ).encode() + b"\n"
-        final_frame = json.dumps(
-            {"jsonrpc": "2.0", "result": {"response": text}, "id": _request_id}
-        ).encode() + b"\n"
+        token_frame = (
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "stream.token",
+                    "params": {"token": text, "index": 0, "final": True, "request_id": _request_id},
+                }
+            ).encode()
+            + b"\n"
+        )
+        final_frame = (
+            json.dumps({"jsonrpc": "2.0", "result": {"response": text}, "id": _request_id}).encode()
+            + b"\n"
+        )
         _writer.write(token_frame)
         _writer.write(final_frame)
         await _writer.drain()

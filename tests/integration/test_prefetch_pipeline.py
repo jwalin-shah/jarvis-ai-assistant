@@ -49,16 +49,16 @@ def mock_mlx_lock():
 
 @pytest.fixture
 def mock_router():
-    """Mock the router to avoid real LLM inference."""
-    with patch("jarvis.router.get_reply_router") as mock_get_router:
-        router = MagicMock()
-        router.route.return_value = {
+    """Mock reply service to avoid real LLM inference."""
+    with patch("jarvis.reply_service.get_reply_service") as mock_get_service:
+        service = MagicMock()
+        service.route_legacy.return_value = {
             "type": "generated",
             "response": "Sure, sounds good!",
             "confidence": "high",
         }
-        mock_get_router.return_value = router
-        yield router
+        mock_get_service.return_value = service
+        yield service
 
 
 @pytest.fixture
@@ -159,9 +159,9 @@ class TestPrefetchPipelineFlow:
             assert len(result["suggestions"]) > 0
             assert result["suggestions"][0]["text"] == "Sure, sounds good!"
 
-            # Verify router was called with conversation_messages (not thread)
-            mock_router.route.assert_called_once()
-            call_kwargs = mock_router.route.call_args[1]
+            # Verify reply service was called with conversation_messages (not thread)
+            mock_router.route_legacy.assert_called_once()
+            call_kwargs = mock_router.route_legacy.call_args[1]
             assert call_kwargs["incoming"] == "Hey, want to grab lunch?"
             assert call_kwargs["chat_id"] == "chat123"
             assert "conversation_messages" in call_kwargs

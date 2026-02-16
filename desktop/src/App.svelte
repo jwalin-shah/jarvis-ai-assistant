@@ -19,8 +19,17 @@
   // Check if running in Tauri context
   const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
+  type View =
+    | 'messages'
+    | 'dashboard'
+    | 'health'
+    | 'settings'
+    | 'templates'
+    | 'network'
+    | 'chat';
+
   // View state
-  let currentView = $state<'messages' | 'dashboard' | 'health' | 'settings' | 'templates' | 'network' | 'chat'>('messages');
+  let currentView = $state<View>('messages');
   let showSearch = $state(false);
   let showShortcuts = $state(false);
   let showCommandPalette = $state(false);
@@ -35,7 +44,7 @@
   });
 
   // Lazy loaded components with error handling
-  type LazyComponent = typeof import('./lib/components/Dashboard.svelte').default;
+  type LazyComponent = any;
   
   interface LoadState {
     component: LazyComponent | null;
@@ -91,27 +100,27 @@
   });
   
   // Derived states for templates
-  const Dashboard = $derived(lazyLoaders.dashboard.state.component);
+  const Dashboard = $derived(lazyLoaders.dashboard.state.component as LazyComponent);
   const dashboardLoading = $derived(lazyLoaders.dashboard.state.loading);
   const dashboardError = $derived(lazyLoaders.dashboard.state.error);
   
-  const HealthStatus = $derived(lazyLoaders.health.state.component);
+  const HealthStatus = $derived(lazyLoaders.health.state.component as LazyComponent);
   const healthLoading = $derived(lazyLoaders.health.state.loading);
   const healthError = $derived(lazyLoaders.health.state.error);
   
-  const Settings = $derived(lazyLoaders.settings.state.component);
+  const Settings = $derived(lazyLoaders.settings.state.component as LazyComponent);
   const settingsLoading = $derived(lazyLoaders.settings.state.loading);
   const settingsError = $derived(lazyLoaders.settings.state.error);
   
-  const TemplateBuilder = $derived(lazyLoaders.templates.state.component);
+  const TemplateBuilder = $derived(lazyLoaders.templates.state.component as LazyComponent);
   const templatesLoading = $derived(lazyLoaders.templates.state.loading);
   const templatesError = $derived(lazyLoaders.templates.state.error);
   
-  const RelationshipGraph = $derived(lazyLoaders.network.state.component);
+  const RelationshipGraph = $derived(lazyLoaders.network.state.component as LazyComponent);
   const networkLoading = $derived(lazyLoaders.network.state.loading);
   const networkError = $derived(lazyLoaders.network.state.error);
   
-  const ChatView = $derived(lazyLoaders.chat.state.component);
+  const ChatView = $derived(lazyLoaders.chat.state.component as LazyComponent);
   const chatLoading = $derived(lazyLoaders.chat.state.loading);
   const chatError = $derived(lazyLoaders.chat.state.error);
 
@@ -373,7 +382,7 @@
           <div class="error-fallback">Failed to load Dashboard</div>
         </ErrorBoundary>
       {:else if Dashboard}
-        <Dashboard onNavigate={(view) => (currentView = view)} />
+        <Dashboard onNavigate={(view: View) => (currentView = view)} />
       {/if}
     {:else if currentView === 'health'}
       {#if healthLoading}
@@ -488,7 +497,7 @@
 {#if showCommandPalette}
   <CommandPalette
     onClose={() => (showCommandPalette = false)}
-    onNavigate={(view) => (currentView = view)}
+    onNavigate={(view: View) => (currentView = view)}
     onOpenSearch={() => (showSearch = true)}
     onOpenShortcuts={() => (showShortcuts = true)}
   />

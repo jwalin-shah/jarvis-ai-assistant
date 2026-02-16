@@ -70,7 +70,7 @@ class PipelineMonitor:
     def get_summary(self) -> dict[str, Any]:
         """Get a summary of all tracked metrics."""
         total_duration = time.monotonic() - self.overall_start
-        summary = {
+        summary: dict[str, Any] = {
             "total_duration_s": round(total_duration, 2),
             "stages": {},
         }

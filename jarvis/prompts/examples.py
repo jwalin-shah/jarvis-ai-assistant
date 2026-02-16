@@ -13,9 +13,9 @@ from __future__ import annotations
 from jarvis.prompts.constants import (
     PROMPT_LAST_UPDATED,
     PROMPT_VERSION,
-    FewShotExample,
     PromptMetadata,
 )
+from jarvis.prompts.types import FewShotExample
 
 # =============================================================================
 # Reply Generation Examples

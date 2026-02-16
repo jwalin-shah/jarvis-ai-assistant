@@ -18,7 +18,7 @@ import json
 import logging
 import os
 import socket
-import subprocess
+import subprocess  # nosec B404
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -126,7 +126,7 @@ def _ensure_service_running() -> bool:
         log_path = Path.home() / ".jarvis" / "ner_server.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_file = open(log_path, "a")  # noqa: SIM115
-        subprocess.Popen(
+        subprocess.Popen(  # nosec B603
             [str(python_path), str(server_script)],
             stdout=subprocess.DEVNULL,
             stderr=log_file,
@@ -271,7 +271,8 @@ def _send_on_socket(sock: socket.socket, request: dict[str, Any]) -> dict[str, A
         response_data += chunk
 
     _socket_last_used = time.monotonic()
-    return json.loads(response_data.decode("utf-8"))
+    result: dict[str, Any] = json.loads(response_data.decode("utf-8"))
+    return result
 
 
 def _send_request(request: dict[str, Any]) -> dict[str, Any]:
@@ -451,7 +452,8 @@ def get_syntactic_features(text: str) -> list[float]:
             logger.warning("NER service error: %s", response["error"])
             return [0.0] * 14
 
-        return response.get("features", [0.0] * 14)
+        features: list[float] = response.get("features", [0.0] * 14)
+        return features
 
     except (ConnectionError, TimeoutError) as e:
         logger.warning("NER service connection failed: %s", e)
@@ -482,7 +484,8 @@ def get_syntactic_features_batch(texts: list[str]) -> list[list[float]]:
             logger.warning("NER service error: %s", response["error"])
             return [[0.0] * 14 for _ in texts]
 
-        return response.get("results", [[0.0] * 14 for _ in texts])
+        results: list[list[float]] = response.get("results", [[0.0] * 14 for _ in texts])
+        return results
 
     except (ConnectionError, TimeoutError) as e:
         logger.warning("NER service connection failed: %s", e)

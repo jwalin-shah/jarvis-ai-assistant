@@ -13,6 +13,7 @@ Documentation:
 """
 
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -86,7 +87,7 @@ messages, or personal information is ever sent to external servers.
 
 
 @asynccontextmanager
-async def lifespan(app_instance: FastAPI):
+async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
     """Lifecycle event handler for the FastAPI application."""
     # Start model warmer
     from jarvis.model_warmer import get_model_warmer

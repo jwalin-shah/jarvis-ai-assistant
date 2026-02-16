@@ -1058,7 +1058,12 @@ class FeedbackStore:
                 recommendation = f"Tag more failures ({tagged} tagged, need ~50 for insights)"
             elif total_capability > total_classifier:
                 top_gap = (
-                    max(capability_counts, key=capability_counts.get) if capability_counts else None
+                    max(
+                        capability_counts,
+                        key=lambda k: capability_counts[k],
+                    )
+                    if capability_counts
+                    else None
                 )
                 if top_gap:
                     gap_name = top_gap.replace("needs_", "")
@@ -1066,7 +1071,12 @@ class FeedbackStore:
                     recommendation = f"Build {gap_name} integration ({gap_count} failures)"
             else:
                 top_issue = (
-                    max(classifier_counts, key=classifier_counts.get) if classifier_counts else None
+                    max(
+                        classifier_counts,
+                        key=lambda k: classifier_counts[k],
+                    )
+                    if classifier_counts
+                    else None
                 )
                 if top_issue:
                     issue_count = classifier_counts[top_issue]

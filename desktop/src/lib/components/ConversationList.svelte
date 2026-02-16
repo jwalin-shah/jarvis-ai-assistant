@@ -22,7 +22,7 @@
   import { LRUCache } from '../utils/lru-cache';
   import { jarvis } from '../socket';
   import type { ConnectionInfo } from '../socket';
-  import { resolveContactName, formatParticipant } from '../db';
+  import { formatParticipant } from '../db';
 
   // Track focused conversation for keyboard navigation
   let focusedIndex = $state(-1);
@@ -106,14 +106,6 @@
 
   const API_BASE = getApiBaseUrl();
   let cleanup: (() => void) | null = null;
-
-  // Use $derived for conversation fingerprint to avoid manual tracking
-  let conversationFingerprint = $derived(
-    conversationsStore.conversations
-      .slice(0, 20)
-      .map((c) => c.chat_id)
-      .join(',')
-  );
 
   onMount(() => {
     initializePolling().then((fn) => { cleanup = fn; });

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
@@ -60,16 +61,16 @@ async def get_system_status(request: Request) -> dict[str, Any]:
 
         gen = get_generator()
         model_loaded = gen.is_loaded()
-    except Exception:
-        pass
+    except Exception as e:
+        logging.getLogger(__name__).debug(f"Model loaded check failed: {e}")
 
     embedding_available = False
     try:
         from models.bert_embedder import is_mlx_available
 
         embedding_available = is_mlx_available()
-    except Exception:
-        pass
+    except Exception as e:
+        logging.getLogger(__name__).debug(f"Embedding availability check failed: {e}")
 
     return {
         "memory_rss_mb": round(mem_info.rss / BYTES_PER_MB, 1),

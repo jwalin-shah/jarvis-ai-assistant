@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, cast
 
 from jarvis.infrastructure.cache.base import CacheBackend
+
+T = TypeVar("T")
 
 
 class SQLiteBackend(CacheBackend):
@@ -107,6 +110,16 @@ class SQLiteBackend(CacheBackend):
     def clear(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("DELETE FROM cache")
+
+    def get_or_set(self, key: str, factory: Callable[[], T], ttl: float | None = None) -> T:
+        """Get from cache or compute via factory and store."""
+        cached = self.get(key)
+        if cached is not None:
+            return cast(T, cached)
+
+        result = factory()
+        self.set(key, result, ttl=ttl)
+        return result
 
     def stats(self) -> dict[str, Any]:
         with sqlite3.connect(self.db_path) as conn:

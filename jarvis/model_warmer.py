@@ -37,6 +37,9 @@ from typing import TYPE_CHECKING
 from contracts.memory import MemoryMode
 
 if TYPE_CHECKING:
+    from core.memory.controller import DefaultMemoryController
+
+if TYPE_CHECKING:
     from models.generator import MLXGenerator
 
 logger = logging.getLogger(__name__)
@@ -156,7 +159,7 @@ class ModelWarmer:
 
         return get_generator()
 
-    def _get_memory_controller(self):
+    def _get_memory_controller(self) -> DefaultMemoryController:
         """Get the memory controller instance.
 
         Returns:

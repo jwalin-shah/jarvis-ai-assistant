@@ -8,6 +8,8 @@ import sys
 
 sys.path.insert(0, ".")
 
+from scripts.compare_json_vs_summary import _build_segments, _parse_summary_output
+
 from integrations.imessage import ChatDBReader
 from jarvis.contacts.instruction_extractor import (
     NEGATIVE_CONSTRAINTS,
@@ -18,7 +20,6 @@ from jarvis.contacts.instruction_extractor import (
 )
 from jarvis.contacts.junk_filters import is_junk_message
 from jarvis.text_normalizer import normalize_text
-from scripts.compare_json_vs_summary import _build_segments, _parse_summary_output
 
 
 def _build_batch_text(segments, contact_id: str, contact_name: str, user_name: str) -> str:

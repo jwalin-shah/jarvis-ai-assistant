@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from jarvis.db.models import IndexVersion
 
 if TYPE_CHECKING:
-    from jarvis.db.core import JarvisDBBase
+    pass
 
 
 class IndexVersionMixin:
     """Mixin providing FAISS index version management."""
 
     def add_index_version(
-        self: JarvisDBBase,
+        self: Any,
         version_id: str,
         model_name: str,
         embedding_dim: int,
@@ -47,7 +47,7 @@ class IndexVersionMixin:
                 is_active=is_active,
             )
 
-    def get_active_index(self: JarvisDBBase) -> IndexVersion | None:
+    def get_active_index(self: Any) -> IndexVersion | None:
         """Get the currently active index version."""
         with self.connection() as conn:
             cursor = conn.execute("SELECT * FROM index_versions WHERE is_active = TRUE LIMIT 1")
@@ -65,7 +65,7 @@ class IndexVersionMixin:
                 )
             return None
 
-    def set_active_index(self: JarvisDBBase, version_id: str) -> bool:
+    def set_active_index(self: Any, version_id: str) -> bool:
         """Set the active index version."""
         with self.connection() as conn:
             conn.execute("UPDATE index_versions SET is_active = FALSE")
@@ -73,9 +73,10 @@ class IndexVersionMixin:
                 "UPDATE index_versions SET is_active = TRUE WHERE version_id = ?",
                 (version_id,),
             )
-            return cursor.rowcount > 0
+            result: bool = cursor.rowcount > 0
+            return result
 
-    def list_index_versions(self: JarvisDBBase) -> list[IndexVersion]:
+    def list_index_versions(self: Any) -> list[IndexVersion]:
         """List all index versions."""
         with self.connection() as conn:
             cursor = conn.execute("SELECT * FROM index_versions ORDER BY created_at DESC")

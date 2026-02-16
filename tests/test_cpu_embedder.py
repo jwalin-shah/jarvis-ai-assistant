@@ -58,7 +58,7 @@ def test_encode_dummy():
     embedder = CPUEmbedder.get_instance()
 
     # Check interface exists
-    if hasattr(embedder, 'encode') and hasattr(embedder, 'load'):
+    if hasattr(embedder, "encode") and hasattr(embedder, "load"):
         print("✓ Interface methods exist")
         return True
     else:
@@ -105,8 +105,10 @@ def test_performance_comparison():
         loaded = embedder.load()
         if not loaded:
             print("⚠ Model not available (need ONNX export)")
-            print("  Run: optimum-cli export onnx --model BAAI/bge-small-en-v1.5 "
-            "models/bge-small-onnx/")
+            print(
+                "  Run: optimum-cli export onnx --model BAAI/bge-small-en-v1.5 "
+                "models/bge-small-onnx/"
+            )
             return None
 
         print("  Encoding test texts...")
@@ -116,8 +118,10 @@ def test_performance_comparison():
 
         print(f"✓ Encoded {len(test_texts)} texts in {elapsed:.3f}s")
         print(f"  Shape: {embeddings.shape}")
-        print(f"  Mean embedding norm: "
-        f"{sum(sum(e**2 for e in emb)**0.5 for emb in embeddings) / len(embeddings):.3f}")
+        print(
+            f"  Mean embedding norm: "
+            f"{sum(sum(e**2 for e in emb) ** 0.5 for emb in embeddings) / len(embeddings):.3f}"
+        )
 
         # Cleanup
         embedder.unload()
@@ -126,6 +130,7 @@ def test_performance_comparison():
     except Exception as e:
         print(f"✗ Performance test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -153,6 +158,7 @@ def main():
         except Exception as e:
             print(f"\n✗ {name} crashed: {e}")
             import traceback
+
             traceback.print_exc()
             results.append((name, False))
 

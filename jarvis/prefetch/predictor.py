@@ -300,14 +300,14 @@ class TimeOfDayStrategy(PredictionStrategy):
         # Also check adjacent hours for fuzzy matching
         hours_to_check = [current_hour, (current_hour + 1) % 24, (current_hour - 1) % 24]
 
-        chat_scores: Counter[str] = Counter()
+        chat_scores: dict[str, float] = {}
         for hour in hours_to_check:
             weight = 1.0 if hour == current_hour else 0.5
             for chat_id, count in self._hourly_patterns[hour].items():
-                chat_scores[chat_id] += count * weight
+                chat_scores[chat_id] = chat_scores.get(chat_id, 0.0) + count * weight
 
-        # Get top candidates
-        for chat_id, score in chat_scores.most_common(3):
+        # Get top candidates (sorted by score descending)
+        for chat_id, score in sorted(chat_scores.items(), key=lambda x: x[1], reverse=True)[:3]:
             if score < 2:  # Minimum threshold
                 continue
 

@@ -277,10 +277,12 @@ class JarvisSocketServer:
 
         if self._enable_watcher:
             from jarvis.watcher import ChatDBWatcher
+
             self._watcher = ChatDBWatcher(self)
             self._watcher_task = asyncio.create_task(self._watcher.start())
 
         from jarvis.model_warmer import get_model_warmer
+
         get_model_warmer().start()
 
         if self._preload_models:
@@ -291,6 +293,7 @@ class JarvisSocketServer:
         if self._enable_prefetch:
             try:
                 from jarvis.prefetch import get_prefetch_manager
+
                 self._prefetch_manager = get_prefetch_manager()
                 if self._preload_models:
                     self._prefetch_manager._warmup_on_start = False
@@ -336,6 +339,7 @@ class JarvisSocketServer:
     def _preload_llm(self) -> None:
         try:
             from models.loader import get_model
+
             model = get_model()
             if model and not model.is_loaded():
                 model.load()
@@ -345,6 +349,7 @@ class JarvisSocketServer:
     def _preload_embeddings(self) -> None:
         try:
             from jarvis.embedding_adapter import get_embedder
+
             embedder = get_embedder()
             if embedder:
                 embedder.encode(["test"])
@@ -354,6 +359,7 @@ class JarvisSocketServer:
     def _preload_cross_encoder(self) -> None:
         try:
             from models.cross_encoder import get_cross_encoder
+
             ce = get_cross_encoder()
             if ce and not ce.is_loaded:
                 ce.load_model()
@@ -363,6 +369,7 @@ class JarvisSocketServer:
     def _preload_vec_index(self) -> None:
         try:
             from jarvis.search.vec_search import get_vec_searcher
+
             searcher = get_vec_searcher()
             if searcher:
                 searcher.backfill_vec_binary()
@@ -372,6 +379,7 @@ class JarvisSocketServer:
     def _preload_category_classifier(self) -> None:
         try:
             from jarvis.classifiers.category_classifier import get_classifier
+
             classifier = get_classifier()
             classifier._load_pipeline()
         except Exception as e:
@@ -380,16 +388,17 @@ class JarvisSocketServer:
     async def stop(self) -> None:
         self._running = False
         from jarvis.model_warmer import get_model_warmer
+
         try:
             get_model_warmer().stop()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to stop model warmer: {e}")
 
         if self._watcher:
             try:
                 await self._watcher.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to stop watcher: {e}")
         if self._watcher_task:
             self._watcher_task.cancel()
             try:
@@ -400,8 +409,8 @@ class JarvisSocketServer:
         if self._prefetch_manager:
             try:
                 self._prefetch_manager.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to stop prefetch manager: {e}")
 
         if self._preload_task:
             self._preload_task.cancel()
@@ -415,15 +424,15 @@ class JarvisSocketServer:
                 try:
                     writer.close()
                     await writer.wait_closed()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Failed to close client connection: {e}")
             self._clients.clear()
 
             for ws in self._ws_clients.copy():
                 try:
                     await ws.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Failed to close websocket connection: {e}")
             self._ws_clients.clear()
 
         if self._server:
@@ -447,8 +456,8 @@ class JarvisSocketServer:
             fd = os.open(WS_TOKEN_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "w") as f:
                 f.write(self._ws_auth_token)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.debug(f"Failed to rotate WebSocket token: {e}")
 
     def _verify_ws_token(self, client_token: str) -> bool:
         if self._ws_auth_token and hmac.compare_digest(client_token, self._ws_auth_token):
@@ -498,12 +507,14 @@ class JarvisSocketServer:
                 try:
                     writer.write(notification_bytes)
                     await writer.drain()
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"Failed to write to client: {e}")
                     self._clients.discard(writer)
             for ws in self._ws_clients.copy():
                 try:
                     await ws.send(notification)
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"Failed to send to websocket: {e}")
                     self._ws_clients.discard(ws)
 
         if method == "new_message" and self._prefetch_manager:
@@ -513,8 +524,8 @@ class JarvisSocketServer:
                 is_from_me = params.get("is_from_me", False)
                 if chat_id:
                     self._prefetch_manager.on_message(chat_id, text, is_from_me)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to notify prefetch manager: {e}")
 
     async def _handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -544,8 +555,8 @@ class JarvisSocketServer:
                         asyncio.create_task(self._process_and_respond(line.decode(), writer, peer))
                 except TimeoutError:
                     break
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Client handler error: {e}")
         finally:
             async with self._clients_lock:
                 self._clients.discard(writer)
@@ -587,12 +598,10 @@ class JarvisSocketServer:
                     )
                 else:
                     asyncio.create_task(
-                        self._process_and_respond(
-                            str(message), websocket, websocket.remote_address
-                        )
+                        self._process_and_respond(str(message), websocket, websocket.remote_address)
                     )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Websocket handler error: {e}")
         finally:
             async with self._clients_lock:
                 self._ws_clients.discard(websocket)

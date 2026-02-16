@@ -63,6 +63,4 @@ def record_rpc_latency(method: str, elapsed_ms: float) -> None:
         )
     )
     if exceeded:
-        logger.warning(
-            f"[RPC Budget] {method} took {elapsed_ms:.1f}ms (budget: {threshold}ms)"
-        )
+        logger.warning(f"[RPC Budget] {method} took {elapsed_ms:.1f}ms (budget: {threshold}ms)")

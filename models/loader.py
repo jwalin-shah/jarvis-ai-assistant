@@ -40,7 +40,7 @@ import psutil
 from mlx_lm import generate, load, stream_generate
 from mlx_lm.sample_utils import make_repetition_penalty, make_sampler
 
-from jarvis.errors import (
+from jarvis.core.exceptions import (
     ErrorCode,
     ModelGenerationError,
     ModelLoadError,
@@ -203,15 +203,17 @@ class NegativeConstraintLogitsProcessor:
 
         # 2. Apply multi-token sequence penalties
         # input_ids shape can be (L,) or (1, L) depending on the generator step
+        from typing import cast
+
         if input_ids.ndim == 1:
-            input_list = input_ids.tolist()
+            input_list = cast(list[int], input_ids.tolist())
         else:
-            input_list = input_ids[0].tolist()
+            input_list = cast(list[int], input_ids[0].tolist())
 
         for phrase in self.phrase_ids:
             # Check if current input_ids end matches phrase prefix
             for i in range(1, len(phrase)):
-                prefix = phrase[:i]
+                prefix: list[int] = phrase[:i]
                 if input_list[-i:] == prefix:
                     # Penalize the NEXT token in the phrase
                     next_token = phrase[i]

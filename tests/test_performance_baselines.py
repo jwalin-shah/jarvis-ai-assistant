@@ -79,7 +79,7 @@ class TestSocketServerPerformance:
     @pytest.mark.asyncio
     async def test_ping_under_200ms(self) -> None:
         """Ping round-trip should complete in <200ms."""
-        from jarvis.socket_server import JarvisSocketServer
+        from jarvis.interfaces.desktop.server import JarvisSocketServer
 
         server = JarvisSocketServer(
             enable_watcher=False,
@@ -99,7 +99,7 @@ class TestSocketServerPerformance:
         """Processing a JSON-RPC ping message should complete in <200ms."""
         import json
 
-        from jarvis.socket_server import JarvisSocketServer
+        from jarvis.interfaces.desktop.server import JarvisSocketServer
 
         server = JarvisSocketServer(
             enable_watcher=False,
@@ -131,7 +131,7 @@ class TestCachePerformance:
 
     def test_cache_hit_under_1ms(self) -> None:
         """Cache hit should complete in <1ms."""
-        from jarvis.cache import TTLCache
+        from jarvis.infrastructure.cache import TTLCache
 
         cache = TTLCache(maxsize=1000, ttl_seconds=300)
 
@@ -152,7 +152,7 @@ class TestCachePerformance:
 
     def test_cache_miss_under_1ms(self) -> None:
         """Cache miss should complete in <1ms."""
-        from jarvis.cache import TTLCache
+        from jarvis.infrastructure.cache import TTLCache
 
         cache = TTLCache(maxsize=1000, ttl_seconds=300)
 
@@ -167,7 +167,7 @@ class TestCachePerformance:
 
     def test_cache_set_under_1ms(self) -> None:
         """Cache set should complete in <1ms."""
-        from jarvis.cache import TTLCache
+        from jarvis.infrastructure.cache import TTLCache
 
         cache = TTLCache(maxsize=1000, ttl_seconds=300)
 

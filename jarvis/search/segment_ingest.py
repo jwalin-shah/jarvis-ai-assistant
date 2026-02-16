@@ -9,12 +9,13 @@ Uses basic_segmenter for clean boundaries without low-quality topic metadata.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from jarvis.db.contacts import _CONTACT_COLUMNS
+from jarvis.db.models import Contact
 
 if TYPE_CHECKING:
     from jarvis.db import JarvisDB
@@ -101,29 +102,27 @@ def ingest_and_extract_segments(
     contact_by_chat_id: dict[str, Any] = {}
     if chat_ids:
         with jarvis_db.connection() as conn:
-            placeholders = ",".join("?" * len(chat_ids))
             cursor = conn.execute(
-                f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE chat_id IN ({placeholders})",
-                chat_ids,
+                "SELECT * FROM contacts WHERE chat_id IN (SELECT value FROM json_each(?))",
+                (json.dumps(chat_ids),),
             )
             for row in cursor.fetchall():
-                contact = jarvis_db._row_to_contact(row)
-                if contact:
-                    contact_by_chat_id[contact.chat_id] = contact
+                row_contact = jarvis_db._row_to_contact(row)
+                if row_contact and row_contact.chat_id is not None:
+                    contact_by_chat_id[row_contact.chat_id] = row_contact
 
     # Batch-load last processed timestamp per chat (avoids N+1 in loop)
     last_processed_by_chat: dict[str, str | None] = {}
     if chat_ids and not force:
         with jarvis_db.connection() as conn:
-            placeholders = ",".join("?" * len(chat_ids))
             cursor = conn.execute(
-                f"""
+                """
                 SELECT chat_id, MAX(end_time) AS last_time
                 FROM conversation_segments
-                WHERE chat_id IN ({placeholders})
+                WHERE chat_id IN (SELECT value FROM json_each(?))
                 GROUP BY chat_id
                 """,
-                chat_ids,
+                (json.dumps(chat_ids),),
             )
             for row in cursor.fetchall():
                 # Row supports column name access (sqlite3.Row)
@@ -139,7 +138,7 @@ def ingest_and_extract_segments(
 
         try:
             # Ensure contact exists
-            contact = contact_by_chat_id.get(conv.chat_id)
+            contact: Contact | None = contact_by_chat_id.get(conv.chat_id)
             if not contact:
                 contact = jarvis_db.add_contact(
                     chat_id=conv.chat_id, display_name=conv.display_name or conv.chat_id
@@ -199,7 +198,7 @@ def ingest_and_extract_segments(
             if msg_ids:
                 try:
                     pre_fetched_embeddings = vec_searcher.get_embeddings_by_ids(msg_ids)
-                except Exception:
+                except Exception:  # nosec B110
                     pass
 
             segments = segment_conversation_basic(
@@ -211,11 +210,20 @@ def ingest_and_extract_segments(
 
             if eligible:
                 from jarvis.topics.segment_storage import link_vec_chunk_rowids, persist_segments
+                from jarvis.topics.topic_segmenter import TopicSegment
+
+                # Cast to TopicSegment for compatibility with storage/search APIs
+                eligible_segments: list[TopicSegment] = eligible  # type: ignore[assignment]
 
                 with jarvis_db.connection() as conn:
-                    db_ids = persist_segments(conn, eligible, conv.chat_id, str(contact_id))
+                    db_ids = persist_segments(
+                        conn,
+                        eligible_segments,
+                        conv.chat_id,
+                        str(contact_id),
+                    )
 
-                vec_ids = vec_searcher.index_segments(eligible, contact_id, conv.chat_id)
+                vec_ids = vec_searcher.index_segments(eligible_segments, contact_id, conv.chat_id)
                 stats.segments_indexed += len(vec_ids)
 
                 if db_ids and vec_ids:
@@ -254,7 +262,7 @@ def ingest_and_extract_segments(
 
         # Use batched extractor (ModelManager handled inside extractor.load)
         batch_size = max(1, int(os.getenv("FACT_EXTRACT_BATCH_SIZE", "2")))
-        extractor = get_batched_instruction_extractor(tier=tier, batch_size=batch_size)
+        extractor = get_batched_instruction_extractor(model_tier=tier, batch_size=batch_size)
         logger.info(
             "Phase 2: Extracting facts from %d segments using %s model (batch_size=%d)...",
             len(all_created_segments),
@@ -318,7 +326,7 @@ def ingest_and_extract_segments(
 
                 total_facts = 0
                 for chat_id, chat_facts in facts_by_chat.items():
-                    new_count = save_facts(
+                    result = save_facts(
                         chat_facts,
                         chat_id,
                         segment_id=None,
@@ -326,6 +334,8 @@ def ingest_and_extract_segments(
                         log_chat_id=chat_id,
                         log_stage="segment_ingest",
                     )
+                    # save_facts returns int or tuple[int, np.ndarray]
+                    new_count = result[0] if isinstance(result, tuple) else result
                     total_facts += new_count
 
                 logger.info(

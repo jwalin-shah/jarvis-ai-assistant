@@ -20,10 +20,11 @@ ModelType = Literal["llm", "embedder", "nli"]
 class ModelManager:
     """Manages system-wide model resources and memory limits."""
 
-    _instance = None
+    _instance: ModelManager | None = None
     _lock = threading.Lock()
+    _initialized: bool
 
-    def __new__(cls):
+    def __new__(cls) -> ModelManager:
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
@@ -31,7 +32,7 @@ class ModelManager:
             return cls._instance
 
     def __init__(self) -> None:
-        if self._initialized:
+        if getattr(self, "_initialized", False):
             return
         self._active_type: ModelType | None = None
         self._initialized = True

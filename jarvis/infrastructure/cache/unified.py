@@ -92,13 +92,13 @@ class UnifiedCache(CacheBackend):
 
     def stats(self) -> dict[str, Any]:
         total = self._hits + self._misses
-        s = {
+        stats_dict: dict[str, Any] = {
             "hits": self._hits,
             "misses": self._misses,
             "hit_rate": self._hits / total if total > 0 else 0.0,
         }
         if self.l1:
-            s["l1"] = self.l1.stats()
+            stats_dict["l1"] = self.l1.stats()
         if self.l2:
-            s["l2"] = self.l2.stats()
-        return s
+            stats_dict["l2"] = self.l2.stats()
+        return stats_dict

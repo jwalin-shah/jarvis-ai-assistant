@@ -20,6 +20,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from contracts.imessage import Message
 from jarvis.tasks.models import Task, TaskResult, TaskType
 from jarvis.tasks.queue import TaskQueue, get_task_queue
 
@@ -414,7 +415,7 @@ class TaskWorker:
                     # Resolve contact name
                     contact_name = display_name or "them"
 
-                    from jarvis.prompts.builders import build_rag_reply_prompt
+                    from jarvis.prompts.rag import build_rag_reply_prompt
 
                     formatted_prompt = build_rag_reply_prompt(
                         context=context.formatted_context,
@@ -592,7 +593,7 @@ class TaskWorker:
 
                 @dataclass
                 class MockSeg:
-                    messages: list
+                    messages: list[Message]
                     text: str
 
                 seg_lines = []

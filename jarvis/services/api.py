@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .base import Service, ServiceConfig
 
@@ -38,8 +39,16 @@ class FastAPIService(Service):
             return super()._perform_health_check()
 
         try:
+            parsed = urlparse(self.config.health_check_url)
+            if parsed.scheme not in {"http", "https"}:
+                logger.warning(
+                    "Refusing non-http(s) health check URL: %s",
+                    self.config.health_check_url,
+                )
+                return False
+
             req = urllib.request.Request(self.config.health_check_url)
-            with urllib.request.urlopen(req, timeout=self.config.health_check_timeout) as response:
+            with urllib.request.urlopen(req, timeout=self.config.health_check_timeout) as response:  # nosec B310
                 status = int(getattr(response, "status", 0))
                 return status == 200
         except (OSError, ConnectionError):

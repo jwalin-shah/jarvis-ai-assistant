@@ -37,9 +37,7 @@ def sqlite_retry(
         Decorated function.
     """
     config = BackoffConfig(
-        base_delay=base_delay,
-        max_delay=max_delay,
-        backoff_factor=backoff_factor
+        base_delay=base_delay, max_delay=max_delay, backoff_factor=backoff_factor
     )
 
     def is_lock_error(e: Exception) -> bool:
@@ -47,16 +45,15 @@ def sqlite_retry(
         return "database is locked" in error_str or "busy" in error_str
 
     def on_retry(attempt: int, e: Exception) -> None:
-        logger.debug(
-            f"SQLite locked/busy (attempt {attempt}/{max_attempts}). "
-            f"Retrying..."
-        )
+        logger.debug(f"SQLite locked/busy (attempt {attempt}/{max_attempts}). Retrying...")
 
-    return cast(Callable[[F], F], with_retry(
-        max_attempts=max_attempts,
-        exceptions=(sqlite3.OperationalError, sqlite3.InterfaceError),
-        config=config,
-        on_retry=on_retry,
-        predicate=is_lock_error
-    ))
-
+    return cast(
+        Callable[[F], F],
+        with_retry(
+            max_attempts=max_attempts,
+            exceptions=(sqlite3.OperationalError, sqlite3.InterfaceError),
+            config=config,
+            on_retry=on_retry,
+            predicate=is_lock_error,
+        ),
+    )

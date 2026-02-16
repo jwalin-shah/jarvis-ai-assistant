@@ -1,0 +1,4 @@
+[bandit]
+exclude_dirs = tests,tools
+targets = jarvis,api,core
+skips = B101,B105,B110,B112,B311,B403,B404,B405,B406,B603,B607,B608

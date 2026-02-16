@@ -45,7 +45,8 @@ def get_calendar_reader_dep() -> CalendarReaderImpl:
     """Get calendar reader with access check."""
     reader = get_calendar_reader()
     if not reader.check_access():
-        from jarvis.errors import calendar_permission_denied
+        from jarvis.core.exceptions import calendar_permission_denied
+
         raise calendar_permission_denied()
     return reader
 
@@ -55,7 +56,8 @@ def get_calendar_writer_dep() -> CalendarWriterImpl:
     """Get calendar writer with access check."""
     writer = get_calendar_writer()
     if not writer.check_access():
-        from jarvis.errors import calendar_permission_denied
+        from jarvis.core.exceptions import calendar_permission_denied
+
         raise calendar_permission_denied()
     return writer
 

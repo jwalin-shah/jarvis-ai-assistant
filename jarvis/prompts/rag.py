@@ -153,7 +153,7 @@ def build_rag_reply_prompt(
         resolved_style = user_style or analyze_user_style(user_messages)
         avg_length = resolved_style.avg_length
     else:
-        resolved_style = user_style
+        resolved_style = user_style or analyze_user_style([])
 
     # Format relationship context with user messages for style analysis
     relationship_context = _format_relationship_context(

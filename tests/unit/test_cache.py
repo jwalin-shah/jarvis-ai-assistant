@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from jarvis.cache import TTLCache
+from jarvis.infrastructure.cache import TTLCache
 
 
 class TestBasicOperations:

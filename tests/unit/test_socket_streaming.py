@@ -20,7 +20,7 @@ class TestStreamTokenOrdering:
     @pytest.mark.asyncio
     async def test_send_stream_token_preserves_order(self):
         """Tokens are sent with correct indices and in order."""
-        from jarvis.socket_server import JarvisSocketServer
+        from jarvis.interfaces.desktop.server import JarvisSocketServer
 
         server = JarvisSocketServer(
             enable_watcher=False,
@@ -66,7 +66,7 @@ class TestStreamTokenOrdering:
     @pytest.mark.asyncio
     async def test_send_stream_response_after_tokens(self):
         """Final response is sent after all stream tokens."""
-        from jarvis.socket_server import JarvisSocketServer
+        from jarvis.interfaces.desktop.server import JarvisSocketServer
 
         server = JarvisSocketServer(
             enable_watcher=False,
@@ -105,7 +105,8 @@ class TestStreamingErrorHandling:
     @pytest.mark.asyncio
     async def test_process_message_returns_error_for_invalid_json(self):
         """Invalid JSON returns parse error."""
-        from jarvis.socket_server import PARSE_ERROR, JarvisSocketServer
+        from jarvis.handlers.base import PARSE_ERROR
+        from jarvis.interfaces.desktop.server import JarvisSocketServer
 
         server = JarvisSocketServer(
             enable_watcher=False,
@@ -121,7 +122,8 @@ class TestStreamingErrorHandling:
     @pytest.mark.asyncio
     async def test_process_message_returns_error_for_unknown_method(self):
         """Unknown method returns method_not_found error."""
-        from jarvis.socket_server import METHOD_NOT_FOUND, JarvisSocketServer
+        from jarvis.handlers.base import METHOD_NOT_FOUND
+        from jarvis.interfaces.desktop.server import JarvisSocketServer
 
         server = JarvisSocketServer(
             enable_watcher=False,
@@ -145,7 +147,8 @@ class TestStreamingErrorHandling:
     @pytest.mark.asyncio
     async def test_process_message_missing_method(self):
         """Missing method field returns invalid request error."""
-        from jarvis.socket_server import INVALID_REQUEST, JarvisSocketServer
+        from jarvis.handlers.base import INVALID_REQUEST
+        from jarvis.interfaces.desktop.server import JarvisSocketServer
 
         server = JarvisSocketServer(
             enable_watcher=False,
@@ -165,7 +168,7 @@ class TestWebSocketWriter:
     @pytest.mark.asyncio
     async def test_write_buffers_data(self):
         """write() buffers data instead of sending immediately."""
-        from jarvis.socket_server import WebSocketWriter
+        from jarvis.interfaces.desktop.protocol import WebSocketWriter
 
         mock_ws = AsyncMock()
         writer = WebSocketWriter(mock_ws)
@@ -179,7 +182,7 @@ class TestWebSocketWriter:
     @pytest.mark.asyncio
     async def test_drain_sends_combined_data(self):
         """drain() combines buffered data and sends once."""
-        from jarvis.socket_server import WebSocketWriter
+        from jarvis.interfaces.desktop.protocol import WebSocketWriter
 
         mock_ws = AsyncMock()
         writer = WebSocketWriter(mock_ws)
@@ -193,7 +196,7 @@ class TestWebSocketWriter:
     @pytest.mark.asyncio
     async def test_drain_clears_buffer(self):
         """drain() clears the buffer after sending."""
-        from jarvis.socket_server import WebSocketWriter
+        from jarvis.interfaces.desktop.protocol import WebSocketWriter
 
         mock_ws = AsyncMock()
         writer = WebSocketWriter(mock_ws)
@@ -212,7 +215,7 @@ class TestWebSocketWriter:
     @pytest.mark.asyncio
     async def test_drain_noop_when_empty(self):
         """drain() with empty buffer does nothing."""
-        from jarvis.socket_server import WebSocketWriter
+        from jarvis.interfaces.desktop.protocol import WebSocketWriter
 
         mock_ws = AsyncMock()
         writer = WebSocketWriter(mock_ws)

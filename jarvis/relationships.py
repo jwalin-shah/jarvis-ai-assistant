@@ -8,6 +8,7 @@ jarvis.contacts.contact_profile.ContactProfile instead.
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 MIN_MESSAGES_FOR_PROFILE = 20
 
@@ -30,12 +31,12 @@ class RelationshipProfile:
     message_count: int = 0
     tone_profile: ToneProfile | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.tone_profile is None:
             self.tone_profile = ToneProfile()
 
 
-def build_relationship_profile(contact_id: str, messages: list) -> RelationshipProfile:
+def build_relationship_profile(contact_id: str, messages: list[Any]) -> RelationshipProfile:
     """Stub for backward compatibility."""
     return RelationshipProfile(contact_id=contact_id, message_count=len(messages))
 
@@ -56,15 +57,15 @@ def delete_profile(contact_id: str) -> None:
 
 
 def select_matching_examples(
-    contact_id: str,
-    category: str,
-    limit: int = 3,
-) -> list:
+    relationship_profile: RelationshipProfile,
+    casual_examples: list[tuple[str, str]],
+    professional_examples: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
     """Stub for backward compatibility."""
     return []
 
 
-def get_voice_guidance(contact_id: str) -> dict:
+def get_voice_guidance(contact_id: str) -> dict[str, str]:
     """Stub for backward compatibility."""
     return {
         "tone": "casual",
@@ -72,9 +73,6 @@ def get_voice_guidance(contact_id: str) -> dict:
     }
 
 
-def generate_style_guide(messages: list[str]) -> dict:
+def generate_style_guide(relationship_profile: RelationshipProfile) -> str:
     """Stub for backward compatibility."""
-    return {
-        "formality": "casual",
-        "formality_score": 0.5,
-    }
+    return "casual"

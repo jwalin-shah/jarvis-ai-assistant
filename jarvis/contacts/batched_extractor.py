@@ -271,7 +271,9 @@ class BatchedInstructionFactExtractor:
         Format: [Segment N] - Subject | Predicate | Object
         """
         # Initialize results for each segment
-        results = [(segment_offset + i, []) for i in range(len(segments))]
+        results: list[tuple[int, list[Fact]]] = [
+            (segment_offset + i, []) for i in range(len(segments))
+        ]
 
         # Triple pattern: [Segment N] - Subject | Predicate | Object
         triple_re = re.compile(

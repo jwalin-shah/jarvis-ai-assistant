@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from xml.etree import ElementTree as ET
+from xml.etree import ElementTree as ET  # nosec B405
 
 from jarvis.graph.builder import GraphData
 

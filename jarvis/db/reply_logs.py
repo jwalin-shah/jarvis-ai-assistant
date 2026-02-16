@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from jarvis.db.core import JarvisDBBase
+from typing import Any
 
 
 class ReplyLogMixin:
     """Mixin providing reply logging operations."""
 
     def save_reply_log(
-        self: JarvisDBBase,
+        self: Any,
         chat_id: str | None,
         contact_id: str | None,
         incoming_text: str,
@@ -22,7 +19,7 @@ class ReplyLogMixin:
         response_text: str,
         confidence: float,
         metadata_json: str,
-    ) -> int:
+    ) -> int | None:
         """Save a full generation log for traceability.
 
         Args:
@@ -60,15 +57,15 @@ class ReplyLogMixin:
                     metadata_json,
                 ),
             )
-            return cursor.lastrowid
+            return cursor.lastrowid  # type: ignore[no-any-return]
 
     def get_recent_reply_logs(
-        self: JarvisDBBase, limit: int = 20, chat_id: str | None = None
+        self: Any, limit: int = 20, chat_id: str | None = None
     ) -> list[dict[str, Any]]:
         """Retrieve recent reply logs for inspection."""
         with self.connection() as conn:
             query = "SELECT * FROM reply_logs"
-            params = []
+            params: list[Any] = []
             if chat_id:
                 query += " WHERE chat_id = ?"
                 params.append(chat_id)

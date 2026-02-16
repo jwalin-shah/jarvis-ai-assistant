@@ -237,7 +237,7 @@ def expand_slang(text: str) -> str:
     if not text:
         return text
 
-    def _replace(match: re.Match) -> str:
+    def _replace(match: re.Match[str]) -> str:
         word = match.group(0)
         lower = word.lower()
         if lower in SLANG_MAP:
@@ -251,7 +251,8 @@ def expand_slang(text: str) -> str:
             return replacement
         return word
 
-    return _WORD_BOUNDARY_PATTERN.sub(_replace, text)
+    result: str = _WORD_BOUNDARY_PATTERN.sub(_replace, text)
+    return result
 
 
 def get_slang_map() -> dict[str, str]:

@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING, Any, Literal
 from jarvis.prompts.constants import (
     REPLY_PROMPT,
     THREADED_REPLY_PROMPT,
+    FewShotExample,
 )
 from jarvis.prompts.examples import (
     CASUAL_REPLY_EXAMPLES,
     CATCHING_UP_THREAD_EXAMPLES,
     PROFESSIONAL_REPLY_EXAMPLES,
     THREAD_EXAMPLES,
-    FewShotExample,
 )
 from jarvis.prompts.tone import (
     analyze_user_style,

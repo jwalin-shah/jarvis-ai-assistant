@@ -23,39 +23,23 @@ def _module_all(path: str) -> set[str]:
     return set()
 
 
-def test_socket_server_facade_exports_expected_surface() -> None:
-    exported = _module_all("jarvis/socket_server.py")
-    assert "JarvisSocketServer" in exported
-    assert "WebSocketWriter" in exported
-    assert "RateLimiter" in exported
-    assert "JsonRpcError" in exported
+def test_retired_facade_modules_removed() -> None:
+    retired = [
+        Path("jarvis/socket_server.py"),
+        Path("jarvis/errors.py"),
+        Path("jarvis/router.py"),
+        Path("jarvis/cache.py"),
+    ]
+    for path in retired:
+        assert not path.exists()
 
 
-def test_errors_facade_exports_expected_surface() -> None:
-    exported = _module_all("jarvis/errors.py")
+def test_canonical_exception_surface_exists() -> None:
+    exported = _module_all("jarvis/core/exceptions/__init__.py")
     assert "ErrorCode" in exported
     assert "JarvisError" in exported
-    assert "GraphContactNotFoundError" in exported
-    assert "iMessageAccessError" in exported
 
 
-def test_router_facade_retains_compat_methods() -> None:
-    module = _read_module("jarvis/router.py")
-    reply_router = next(
-        node
-        for node in module.body
-        if isinstance(node, ast.ClassDef) and node.name == "ReplyRouter"
-    )
-    methods = {
-        node.name
-        for node in reply_router.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
-    assert {"route", "route_message", "get_routing_stats", "close"}.issubset(methods)
-
-    module_functions = {
-        node.name
-        for node in module.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
-    assert {"get_reply_router", "reset_reply_router"}.issubset(module_functions)
+def test_canonical_cache_surface_exists() -> None:
+    exported = _module_all("jarvis/infrastructure/cache/__init__.py")
+    assert "TTLCache" in exported

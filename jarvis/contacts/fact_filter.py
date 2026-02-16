@@ -7,7 +7,7 @@ and to filter noisy candidates after extraction.
 from __future__ import annotations
 
 import logging
-import pickle
+import pickle  # nosec B403
 from pathlib import Path
 from typing import Any
 
@@ -180,7 +180,7 @@ class MessageGate:
 
         try:
             with open(self.model_path, "rb") as f:
-                data = pickle.load(f)
+                data = pickle.load(f)  # nosec B301
 
             self.model = data["model"]
             self.vectorizer = data["vectorizer"]

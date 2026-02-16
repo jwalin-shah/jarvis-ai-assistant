@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
 from jarvis.contacts.contact_profile import Fact
 
@@ -69,7 +70,7 @@ PREDICATE_CATEGORIES = {
 }
 
 
-def extract_predicate_from_text(text: str) -> tuple[str, str] | None:
+def extract_predicate_from_text(text: str) -> tuple[str | None, str | None]:
     """Extract predicate and object from free-text fact.
 
     Args:
@@ -91,10 +92,10 @@ def extract_predicate_from_text(text: str) -> tuple[str, str] | None:
                 if len(object_value) > 1:
                     return predicate, object_value
 
-    return None, text  # Return full text as fallback
+    return None, None  # No predicate found
 
 
-def parse_free_text_fact(fact_text: str, subject_hint: str | None = None) -> list[dict[str, str]]:
+def parse_free_text_fact(fact_text: str, subject_hint: str | None = None) -> list[dict[str, Any]]:
     """Parse free-text fact into structured triples.
 
     Handles complex facts like "lives in Austin and works at Google"
@@ -127,7 +128,7 @@ def parse_free_text_fact(fact_text: str, subject_hint: str | None = None) -> lis
                 {
                     "subject": subject_hint or "Contact",
                     "predicate": predicate,
-                    "object": obj,
+                    "object": obj or "",
                     "category": category,
                     "original": sentence,
                 }

@@ -241,7 +241,7 @@ class TestRateLimiter:
 
     def test_rate_limiter_allows_normal_traffic(self):
         """Normal traffic within limits is allowed."""
-        from jarvis.socket_server import RateLimiter
+        from jarvis.interfaces.desktop.limiter import RateLimiter
 
         limiter = RateLimiter(max_requests=10, window_seconds=1.0)
         for _ in range(10):
@@ -249,7 +249,7 @@ class TestRateLimiter:
 
     def test_rate_limiter_blocks_excessive_traffic(self):
         """Traffic exceeding the limit is blocked."""
-        from jarvis.socket_server import RateLimiter
+        from jarvis.interfaces.desktop.limiter import RateLimiter
 
         limiter = RateLimiter(max_requests=5, window_seconds=1.0)
         for _ in range(5):
@@ -260,7 +260,7 @@ class TestRateLimiter:
 
     def test_rate_limiter_separate_clients(self):
         """Different clients have independent rate limits."""
-        from jarvis.socket_server import RateLimiter
+        from jarvis.interfaces.desktop.limiter import RateLimiter
 
         limiter = RateLimiter(max_requests=2, window_seconds=1.0)
         assert limiter.is_allowed("client1") is True

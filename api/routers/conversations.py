@@ -33,7 +33,7 @@ from api.schemas import (
     SendMessageResponse,
 )
 from integrations.imessage import ChatDBReader, IMessageSender
-from jarvis.errors import ValidationError
+from jarvis.core.exceptions import ValidationError
 from jarvis.metrics import get_conversation_cache
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -584,7 +584,8 @@ async def send_message(
                 else:
                     # For individual chats, send to the recipient
                     if not message_request.recipient:
-                        from jarvis.errors import validation_required
+                        from jarvis.core.exceptions import validation_required
+
                         raise validation_required("recipient")
                     result = await run_in_threadpool(
                         sender.send_message,
@@ -696,13 +697,13 @@ async def send_attachment(
             "Invalid file path: must exist and be within home directory",
             field="file_path",
             value=attachment_request.file_path,
-            cause=e
+            cause=e,
         )
     if not resolved.is_file():
         raise ValidationError(
             "Invalid file path: must be a regular file",
             field="file_path",
-            value=attachment_request.file_path
+            value=attachment_request.file_path,
         )
 
     sender = IMessageSender()
@@ -719,7 +720,8 @@ async def send_attachment(
                     )
                 else:
                     if not attachment_request.recipient:
-                        from jarvis.errors import validation_required
+                        from jarvis.core.exceptions import validation_required
+
                         raise validation_required("recipient")
                     result = await run_in_threadpool(
                         sender.send_attachment,

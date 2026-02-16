@@ -22,6 +22,7 @@ import json
 import logging
 import threading
 import time
+from typing import Any
 
 import mlx.core as mx
 import numpy as np
@@ -53,7 +54,7 @@ class NLICrossEncoder:
         self._encode_lock = threading.Lock()
         self.model: DebertaForSequenceClassification | None = None
         self.tokenizer: Tokenizer | None = None
-        self.config: dict | None = None
+        self.config: dict[str, Any] | None = None
         self._loaded = False
 
     def load_model(self) -> None:
@@ -110,6 +111,7 @@ class NLICrossEncoder:
                 raise FileNotFoundError(f"model.safetensors not found in {snapshot}")
 
             hf_weights = mx.load(str(weights_path))
+            assert isinstance(hf_weights, dict)
             converted = convert_hf_weights(hf_weights)
             self.model.load_weights(list(converted.items()))
             mx.eval(self.model.parameters())
@@ -186,6 +188,7 @@ class NLICrossEncoder:
         # Tokenize + forward pass under single GPU lock to prevent race
         # conditions on shared tokenizer state and Metal GPU.
         with gpu_context():
+            assert self.tokenizer is not None
             self.tokenizer.no_padding()
             encodings = self.tokenizer.encode_batch(
                 [(premise, hypothesis) for premise, hypothesis in pairs]
@@ -217,6 +220,7 @@ class NLICrossEncoder:
                 input_ids_mx = mx.array(input_ids)
                 attention_mask_mx = mx.array(attention_mask)
 
+                assert self.model is not None
                 logits = self.model(input_ids_mx, attention_mask_mx)
                 probs = mx.softmax(logits, axis=-1)
                 mx.eval(probs)

@@ -13,8 +13,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from jarvis.utils.datetime_utils import APPLE_EPOCH_OFFSET
 from jarvis.watcher import (
-    APPLE_EPOCH_OFFSET,
     DEBOUNCE_INTERVAL,
     POLL_INTERVAL,
     ChatDBWatcher,

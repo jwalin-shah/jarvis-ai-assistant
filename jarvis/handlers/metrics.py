@@ -23,10 +23,10 @@ class MetricsHandler(BaseHandler):
     @rpc_handler("Failed to get routing metrics")
     async def _get_routing_metrics(self) -> dict[str, Any]:
         """Get model routing statistics."""
-        from jarvis.router import get_reply_router
+        from jarvis.reply_service import get_reply_service
 
         # get_routing_stats returns StatsResponse which is compatible with dict[str, Any]
-        return get_reply_router().get_routing_stats()  # type: ignore[return-value]
+        return get_reply_service().get_routing_stats()
 
     @rpc_handler("Failed to get performance SLOs")
     async def _get_performance_slo(self) -> dict[str, Any]:

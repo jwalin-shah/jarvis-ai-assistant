@@ -51,7 +51,7 @@ JARVIS is a local-first AI assistant for iMessage on macOS. It reads messages, r
 make services-start
 
 # Individual
-uv run python -m jarvis.socket_server    # Socket server
+uv run python -m jarvis.interfaces.desktop    # Socket server
 uvicorn api.main:app --port 8742         # FastAPI
 ```
 

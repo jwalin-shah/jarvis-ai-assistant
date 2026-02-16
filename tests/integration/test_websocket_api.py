@@ -396,7 +396,7 @@ class TestWebSocketAuthentication:
 
         # Connect with token in query parameter (deprecated)
         # The warning is logged during connection, so we need to patch before connecting
-        with patch("api.routers.websocket.logger.warning") as mock_warning:
+        with patch("api.services.websocket_auth.logger.warning") as mock_warning:
             with auth_client.websocket_connect(f"/ws?token={_WS_AUTH_TOKEN}"):
                 # If we get here, auth succeeded
                 pass

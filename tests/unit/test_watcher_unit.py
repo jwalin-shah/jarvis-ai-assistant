@@ -4,7 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-from jarvis.watcher import APPLE_EPOCH_OFFSET, ChatDBWatcher
+from jarvis.utils.datetime_utils import APPLE_EPOCH_OFFSET
+from jarvis.watcher import ChatDBWatcher
 
 
 class MockBroadcastHandler:

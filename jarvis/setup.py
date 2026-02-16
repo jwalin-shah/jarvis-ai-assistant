@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import platform
-import subprocess
+import subprocess  # nosec B404
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -49,7 +49,7 @@ DEFAULT_MODEL_MEMORY_MB = 800
 class CheckStatus(Enum):
     """Status of a setup check."""
 
-    PASS = "pass"
+    PASS = "pass"  # nosec B105
     WARN = "warn"
     FAIL = "fail"
     SKIP = "skip"
@@ -701,7 +701,7 @@ def open_system_preferences_fda() -> bool:
 
     try:
         # macOS Ventura+ uses System Settings
-        subprocess.run(
+        subprocess.run(  # nosec B603 B607
             [
                 "open",
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
@@ -712,7 +712,7 @@ def open_system_preferences_fda() -> bool:
     except subprocess.CalledProcessError:
         # Fallback for older macOS
         try:
-            subprocess.run(
+            subprocess.run(  # nosec B603 B607
                 ["open", "/System/Library/PreferencePanes/Security.prefPane"],
                 check=True,
             )

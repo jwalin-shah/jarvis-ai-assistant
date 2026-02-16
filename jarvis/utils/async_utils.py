@@ -18,9 +18,7 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-async def run_in_thread(
-    func: Callable[P, R], *args: P.args, **kwargs: P.kwargs
-) -> R:
+async def run_in_thread(func: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
     """Run a synchronous function in a separate thread.
 
     Consistent wrapper around asyncio.to_thread with logging.
@@ -48,6 +46,7 @@ def sync_to_async(func: Callable[P, R]) -> Callable[P, Awaitable[R]]:
 
         await blocking_io_op(my_data)
     """
+
     @functools.wraps(func)
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         return await asyncio.to_thread(func, *args, **kwargs)
@@ -58,7 +57,7 @@ def sync_to_async(func: Callable[P, R]) -> Callable[P, Awaitable[R]]:
 def log_task_exception(
     task: asyncio.Task[Any],
     msg: str = "Background task failed",
-    logger_instance: logging.Logger | None = None
+    logger_instance: logging.Logger | None = None,
 ) -> None:
     """Callback for add_done_callback to log task exceptions.
 
@@ -78,8 +77,7 @@ def log_task_exception(
 
 
 def task_callback(
-    msg: str = "Background task failed",
-    logger_instance: logging.Logger | None = None
+    msg: str = "Background task failed", logger_instance: logging.Logger | None = None
 ) -> Callable[[asyncio.Task[Any]], None]:
     """Create a callback for add_done_callback with custom message.
 
@@ -91,9 +89,7 @@ def task_callback(
 
 
 async def wait_with_timeout(
-    awaitable: Awaitable[R],
-    timeout: float,
-    default: R | None = None
+    awaitable: Awaitable[R], timeout: float, default: R | None = None
 ) -> R | None:
     """Wait for an awaitable with a timeout, returning a default on timeout.
 

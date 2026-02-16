@@ -703,7 +703,7 @@ class FactExtractor:
                 # Dedup check
                 if rule.dedup:
                     key = (rule.category, subject.lower())
-                    if key in _extracted:
+                    if _extracted is not None and key in _extracted:
                         continue
 
                 fact_kwargs: dict[str, Any] = {
@@ -723,6 +723,8 @@ class FactExtractor:
                 facts.append(Fact(**fact_kwargs))
 
                 if rule.dedup:
+                    if _extracted is None:
+                        _extracted = set()
                     _extracted.add(key)
 
         return facts

@@ -10,7 +10,7 @@ from typing import Any
 from contracts.memory import MemoryMode
 from contracts.models import GenerationRequest, GenerationResponse
 from core.memory import get_memory_controller
-from jarvis.errors import ModelLoadError
+from jarvis.core.exceptions import ModelLoadError
 from models import get_generator
 
 logger = logging.getLogger(__name__)

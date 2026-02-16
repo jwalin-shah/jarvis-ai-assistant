@@ -1,6 +1,6 @@
 # Documentation Index
 
-> **Last Updated:** 2026-02-13
+> **Last Updated:** 2026-02-16
 
 ## Core
 
@@ -23,15 +23,23 @@
 - [TEXT_NORMALIZATION.md](./design/TEXT_NORMALIZATION.md) — Text preprocessing
 - [METRICS.md](./design/METRICS.md) — Metrics and observability design
 - [FEEDBACK.md](./design/FEEDBACK.md) — User feedback mechanism
+- [V2_ARCHITECTURE.md](./design/V2_ARCHITECTURE.md) — V2 architecture details
+- [fact_extraction_strategy.md](./design/fact_extraction_strategy.md) — Fact extraction design
+
+## Research
+
+[`docs/research/`](./research/) contains research findings:
+- [prompt_experiments.md](./research/prompt_experiments.md) — Prompt engineering learnings
 
 ## Standards & Guidelines
 
 | Doc | Purpose |
 |-----|---------|
-| [API_ERROR_HANDLING_STANDARD.md](./API_ERROR_HANDLING_STANDARD.md) | Error taxonomy, codes, retry semantics, payload schemas |
-| [PERFORMANCE_RULES.md](./PERFORMANCE_RULES.md) | N+1 prevention, latency thresholds, performance testing |
+| [PERFORMANCE.md](./PERFORMANCE.md) | **Consolidated**: Performance rules, N+1 prevention, optimizations, model memory management |
 | [TESTING_GUIDELINES.md](./TESTING_GUIDELINES.md) | Test patterns, fixtures, mock strategies, pytest conventions |
 | [PROMPT_MODEL_GOVERNANCE_POLICY.md](./PROMPT_MODEL_GOVERNANCE_POLICY.md) | Prompt/model versioning, evaluation gates, change management |
+| [SECURITY.md](./SECURITY.md) | Security guidelines and best practices |
+| [FACADE_MIGRATION.md](./FACADE_MIGRATION.md) | Canonical import mapping after facade retirement |
 
 ## Operations
 
@@ -39,28 +47,25 @@
 |-----|---------|
 | [RUNBOOK.md](./RUNBOOK.md) | On-call procedures, alert responses, recovery steps |
 | [RELIABILITY_FRAMEWORK.md](./RELIABILITY_FRAMEWORK.md) | Offline mode, degradation policies, resilience testing |
-| [OBSERVABILITY_ROADMAP.md](./OBSERVABILITY_ROADMAP.md) | Metrics, logging, tracing, SLOs, dashboards |
-| [RELEASE_READINESS_CHECKLIST.md](./RELEASE_READINESS_CHECKLIST.md) | Pre-release verification gates |
-
-## Roadmaps & Plans
-
-| Doc | Purpose |
-|-----|---------|
-| [REPOSITORY_MODERNIZATION_ROADMAP.md](./REPOSITORY_MODERNIZATION_ROADMAP.md) | 90-day complexity reduction plan |
-| [DEV_PRODUCTIVITY_PLAN.md](./DEV_PRODUCTIVITY_PLAN.md) | Developer experience improvements |
-| [FACT_KG_ROADMAP.md](./FACT_KG_ROADMAP.md) | Fact extraction & knowledge graph roadmap |
+| [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | Common issues and solutions |
 
 ## Reference
 
 | Doc | Purpose |
 |-----|---------|
-| [V4_MIGRATION_REPORT.md](./V4_MIGRATION_REPORT.md) | V4 Fact Extraction design decisions, findings, and lessons learned |
 | [COMPONENT_CATALOG.md](./COMPONENT_CATALOG.md) | Svelte component reference (41 components) |
 | [EXTRACTOR_BAKEOFF.md](./EXTRACTOR_BAKEOFF.md) | Fact extraction approach comparison |
-| [SQL_OPTIMIZATION_REPORT.md](./SQL_OPTIMIZATION_REPORT.md) | SQL query optimization findings |
-| [DATABASE_QUERY_AUDIT.md](./DATABASE_QUERY_AUDIT.md) | File-by-file DB query audit and N+1 prevention checklist |
-| [REUSE_AND_LOAD_UNLOAD_AUDIT.md](./REUSE_AND_LOAD_UNLOAD_AUDIT.md) | Segmentation/extraction reuse, prompt consistency, model load/unload |
-| [PERFORMANCE_OPTIMIZATIONS.md](./PERFORMANCE_OPTIMIZATIONS.md) | Performance optimization notes |
+| [fact_extraction_review.md](./fact_extraction_review.md) | Fact extraction analysis and findings |
+| [CLEANUP_SUMMARY.md](./CLEANUP_SUMMARY.md) | Codebase cleanup documentation (2026-02-15) |
+
+## Archived
+
+[`docs/archived/`](./archived/) contains historical/completed documents:
+- Performance: `PERFORMANCE_OPTIMIZATIONS.md`, `PERFORMANCE_RULES.md`, `REUSE_AND_LOAD_UNLOAD_AUDIT.md`
+- Roadmaps: `FACT_KG_ROADMAP.md`, `OBSERVABILITY_ROADMAP.md`, `REPOSITORY_MODERNIZATION_ROADMAP.md`, `DEV_PRODUCTIVITY_PLAN.md`
+- Audit Reports: `SQL_OPTIMIZATION_REPORT.md`, `DATABASE_QUERY_AUDIT.md`, `API_ERROR_HANDLING_STANDARD.md`
+- Migration: `V4_MIGRATION_REPORT.md`
+- Release: `RELEASE_READINESS_CHECKLIST.md`
 
 ## Runtime
 

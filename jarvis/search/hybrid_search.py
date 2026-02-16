@@ -8,8 +8,9 @@ Reciprocal Rank Fusion (RRF) to provide the best of both worlds:
 
 from __future__ import annotations
 
+import json
 import logging
-import pickle
+import pickle  # nosec B403
 import sqlite3
 import threading
 from pathlib import Path
@@ -50,7 +51,7 @@ class HybridSearcher:
 
         try:
             with open(_BM25_CACHE_FILE, "rb") as f:
-                cached = pickle.load(f)
+                cached = pickle.load(f)  # nosec B301
                 metadata = cached.get("metadata")
                 if isinstance(metadata, dict):
                     return metadata
@@ -102,7 +103,7 @@ class HybridSearcher:
                 return False
 
             with open(_BM25_CACHE_FILE, "rb") as f:
-                cached = pickle.load(f)
+                cached = pickle.load(f)  # nosec B301
                 self.bm25_searcher = cached["searcher"]
                 self._cache_metadata = cached_meta
                 logger.info("Loaded BM25 index from cache (%d chunks)", cached_meta["chunk_count"])
@@ -210,8 +211,8 @@ class HybridSearcher:
             rrf_scores[res.rowid] = rrf_scores.get(res.rowid, 0.0) + (1.0 / (k + rank))
 
         # Keyword ranks
-        for rank, res in enumerate(bm25_results, 1):
-            rrf_scores[res.rowid] = rrf_scores.get(res.rowid, 0.0) + (1.0 / (k + rank))
+        for rank, bm25_res in enumerate(bm25_results, 1):
+            rrf_scores[bm25_res.rowid] = rrf_scores.get(bm25_res.rowid, 0.0) + (1.0 / (k + rank))
 
         # 4. Sort by fused score
         sorted_rowids = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[:limit]
@@ -242,24 +243,20 @@ class HybridSearcher:
             return []
 
         try:
-            from jarvis.search.vec_search import _validate_placeholders
-
             # Batch fetch in chunks to stay within SQLite parameter limits
             all_rows = []
             for i in range(0, len(rowids), 900):
                 batch = rowids[i : i + 900]
-                placeholders = ",".join("?" * len(batch))
-                _validate_placeholders(placeholders)
 
                 with self.vec_searcher.db.connection() as conn:
                     rows = conn.execute(
-                        f"""
+                        """
                         SELECT rowid, chat_id, context_text, reply_text,
                                topic_label
                         FROM vec_chunks
-                        WHERE rowid IN ({placeholders})
+                        WHERE rowid IN (SELECT value FROM json_each(?))
                         """,
-                        batch,
+                        (json.dumps(batch),),
                     ).fetchall()
                     all_rows.extend(rows)
 
