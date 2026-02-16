@@ -41,7 +41,24 @@ class ModelManager:
         """Prepare system resources for a specific model type.
 
         Unloads conflicting models to ensure enough RAM is available.
+        Also checks system-wide memory pressure.
         """
+        # If already at red/critical pressure, unload everything regardless of type
+        from core.memory.controller import get_memory_controller
+
+        pressure = get_memory_controller().get_state().pressure_level
+        if pressure in ("red", "critical"):
+            logger.warning(
+                "High memory pressure (%s) detected during prepare_for(%s). "
+                "Unloading all models.",
+                pressure,
+                model_type,
+            )
+            self.unload_all()
+            # If we were just unloading to clear pressure, we're done
+            if self._active_type == model_type:
+                return
+
         if self._active_type == model_type:
             return
 

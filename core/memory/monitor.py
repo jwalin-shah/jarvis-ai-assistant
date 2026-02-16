@@ -73,20 +73,20 @@ class MemoryMonitor:
         """Determine memory pressure level based on usage percentage.
 
         Pressure levels:
-        - green: <70% usage (normal operation)
-        - yellow: 70-85% usage (moderate pressure)
-        - red: 85-95% usage (high pressure)
-        - critical: >95% usage (critical, should free memory)
+        - green: <75% usage (normal operation)
+        - yellow: 75-88% usage (moderate pressure)
+        - red: 88-97% usage (high pressure)
+        - critical: >97% usage (critical, must free memory)
 
         Returns:
             Pressure level string: "green", "yellow", "red", or "critical"
         """
         percent = self.get_percent_used()
-        if percent >= 95:
+        if percent >= 97:
             return "critical"
-        elif percent >= 85:
+        elif percent >= 88:
             return "red"
-        elif percent >= 70:
+        elif percent >= 75:
             return "yellow"
         else:
             return "green"
