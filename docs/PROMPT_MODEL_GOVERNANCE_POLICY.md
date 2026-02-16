@@ -13,6 +13,7 @@
 This document establishes the governance framework for managing prompts, model configurations, and ML artifacts in the JARVIS AI Assistant. It ensures controlled, traceable, and reversible changes to all AI/ML components that affect user-facing behavior.
 
 **Scope:**
+
 - All prompt templates in `jarvis/prompts/`
 - Few-shot examples and style configurations
 - Model weights and configurations in `models/`
@@ -20,6 +21,7 @@ This document establishes the governance framework for managing prompts, model c
 - Embedding model selections and configurations
 
 **Target Environment:**
+
 - Apple Silicon (M1/M2/M3), 8GB RAM minimum
 - Local-first, privacy-preserving inference
 - MLX-based generation with sub-second latency targets
@@ -32,11 +34,11 @@ This document establishes the governance framework for managing prompts, model c
 
 Prompts follow **Semantic Versioning** (MAJOR.MINOR.PATCH):
 
-| Level | Trigger | Example |
-|-------|---------|---------|
+| Level     | Trigger                                                                          | Example           |
+| --------- | -------------------------------------------------------------------------------- | ----------------- |
 | **MAJOR** | Breaking change to output format, new required parameters, removed functionality | `1.0.0` → `2.0.0` |
-| **MINOR** | New features, additional optional parameters, new prompt templates | `1.0.0` → `1.1.0` |
-| **PATCH** | Bug fixes, wording improvements, example updates, threshold tuning | `1.0.0` → `1.0.1` |
+| **MINOR** | New features, additional optional parameters, new prompt templates               | `1.0.0` → `1.1.0` |
+| **PATCH** | Bug fixes, wording improvements, example updates, threshold tuning               | `1.0.0` → `1.0.1` |
 
 ### 2.2 Source of Truth
 
@@ -107,14 +109,14 @@ REPLY_PROMPT_METADATA = PromptMetadata(
 
 ### 2.5 Change Classification
 
-| Change Type | Version Bump | Approval Required | Testing Required |
-|-------------|--------------|-------------------|------------------|
-| Fix typo in system message | PATCH | 1 reviewer | Unit tests |
-| Add new few-shot examples | PATCH | 1 reviewer | Eval pipeline |
-| Modify tone detection logic | MINOR | 2 reviewers | Full eval + A/B |
-| New prompt template | MINOR | 2 reviewers | Full eval + benchmarks |
-| Remove/deprecate template | MAJOR | Eng Lead + Product | Migration plan |
-| Change output format/schema | MAJOR | Eng Lead + Product | Contract tests |
+| Change Type                 | Version Bump | Approval Required  | Testing Required       |
+| --------------------------- | ------------ | ------------------ | ---------------------- |
+| Fix typo in system message  | PATCH        | 1 reviewer         | Unit tests             |
+| Add new few-shot examples   | PATCH        | 1 reviewer         | Eval pipeline          |
+| Modify tone detection logic | MINOR        | 2 reviewers        | Full eval + A/B        |
+| New prompt template         | MINOR        | 2 reviewers        | Full eval + benchmarks |
+| Remove/deprecate template   | MAJOR        | Eng Lead + Product | Migration plan         |
+| Change output format/schema | MAJOR        | Eng Lead + Product | Contract tests         |
 
 ---
 
@@ -126,33 +128,33 @@ All prompt changes must pass automated evaluation gates before merge:
 
 #### 3.1.1 Static Analysis Gates
 
-| Gate | Tool/Method | Threshold | Enforcement |
-|------|-------------|-----------|-------------|
-| Version Updated | `grep PROMPT_VERSION` | Must change if template changes | Hard block |
-| Date Updated | `grep PROMPT_LAST_UPDATED` | Must match commit date | Hard block |
-| Template Syntax | Python `str.format()` | No missing placeholders | Hard block |
-| Token Estimation | `estimate_tokens()` | <1500 tokens for prompts | Hard block |
-| JSON Validity | `json.loads()` | All example JSON valid | Hard block |
+| Gate             | Tool/Method                | Threshold                       | Enforcement |
+| ---------------- | -------------------------- | ------------------------------- | ----------- |
+| Version Updated  | `grep PROMPT_VERSION`      | Must change if template changes | Hard block  |
+| Date Updated     | `grep PROMPT_LAST_UPDATED` | Must match commit date          | Hard block  |
+| Template Syntax  | Python `str.format()`      | No missing placeholders         | Hard block  |
+| Token Estimation | `estimate_tokens()`        | <1500 tokens for prompts        | Hard block  |
+| JSON Validity    | `json.loads()`             | All example JSON valid          | Hard block  |
 
 #### 3.1.2 Functional Evaluation Gates
 
-| Gate | Command | Threshold | Max Time |
-|------|---------|-----------|----------|
-| Prompt Render Test | `pytest tests/unit/test_prompts.py` | 100% pass | 30s |
-| Category Classification | `evals/eval_pipeline.py` | ≥90% accuracy | 60s |
-| Anti-AI Detection | `evals/eval_pipeline.py` | ≥90% clean | 30s |
-| Style Match Score | LLM judge eval | ≥7.0/10 average | 120s |
-| Response Length | `evals/eval_pipeline.py` | <80 chars average | 30s |
+| Gate                    | Command                             | Threshold         | Max Time |
+| ----------------------- | ----------------------------------- | ----------------- | -------- |
+| Prompt Render Test      | `pytest tests/unit/test_prompts.py` | 100% pass         | 30s      |
+| Category Classification | `evals/eval_pipeline.py`            | ≥90% accuracy     | 60s      |
+| Anti-AI Detection       | `evals/eval_pipeline.py`            | ≥90% clean        | 30s      |
+| Style Match Score       | LLM judge eval                      | ≥7.0/10 average   | 120s     |
+| Response Length         | `evals/eval_pipeline.py`            | <80 chars average | 30s      |
 
 #### 3.1.3 Quality Benchmark Gates
 
-| Metric | Threshold | Test File | Enforcement |
-|--------|-----------|-----------|-------------|
-| Prompt Pass Rate | ≥80% | `evals/promptfoo.yaml` | Hard block |
-| Anti-AI Score | ≥90% | promptfoo anti-AI checks | Hard block |
-| Style Match | ≥75% | LLM rubric evaluation | Soft gate |
-| Brevity Score | <80 chars avg | JavaScript assertions | Soft gate |
-| Category Accuracy | ≥85% | `evals/eval_pipeline.py` | Hard block |
+| Metric            | Threshold     | Test File                | Enforcement |
+| ----------------- | ------------- | ------------------------ | ----------- |
+| Prompt Pass Rate  | ≥80%          | `evals/promptfoo.yaml`   | Hard block  |
+| Anti-AI Score     | ≥90%          | promptfoo anti-AI checks | Hard block  |
+| Style Match       | ≥75%          | LLM rubric evaluation    | Soft gate   |
+| Brevity Score     | <80 chars avg | JavaScript assertions    | Soft gate   |
+| Category Accuracy | ≥85%          | `evals/eval_pipeline.py` | Hard block  |
 
 ### 3.2 A/B Testing Gates (For Major Changes)
 
@@ -183,12 +185,12 @@ AB_TEST_CONFIG = {
 
 ### 3.3 Evaluation Dataset Management
 
-| Dataset | Location | Update Frequency | Approval |
-|---------|----------|------------------|----------|
-| Gold eval set | `evals/eval_dataset.jsonl` | Per release | Eng Lead |
-| Regression tests | `evals/regression_tests.jsonl` | Continuous | 2 reviewers |
-| Few-shot examples | `jarvis/prompts/` | As needed | 1 reviewer |
-| A/B test results | `evals/ab_tests/` | Per experiment | Product + Eng |
+| Dataset           | Location                       | Update Frequency | Approval      |
+| ----------------- | ------------------------------ | ---------------- | ------------- |
+| Gold eval set     | `evals/eval_dataset.jsonl`     | Per release      | Eng Lead      |
+| Regression tests  | `evals/regression_tests.jsonl` | Continuous       | 2 reviewers   |
+| Few-shot examples | `jarvis/prompts/`              | As needed        | 1 reviewer    |
+| A/B test results  | `evals/ab_tests/`              | Per experiment   | Product + Eng |
 
 ### 3.4 Evaluation Pipeline
 
@@ -219,6 +221,7 @@ python evals/eval_pipeline.py --save-baseline results/prompt_baseline_v1.0.0.jso
 ```
 
 Baseline includes:
+
 - Per-category accuracy rates
 - Anti-AI violation rates
 - Average response lengths
@@ -228,16 +231,16 @@ Baseline includes:
 
 ### 4.2 Regression Detection Matrix
 
-| Metric | Warning Threshold | Block Threshold | Action |
-|--------|-------------------|-----------------|--------|
-| Category Accuracy | -5% | -10% | Investigate / Block |
-| Anti-AI Violations | +5% absolute | +10% absolute | Investigate / Block |
-| Avg Response Length | +20% | +50% | Review / Block |
-| Latency p95 | +10% | +25% | Optimize / Block |
-| LLM Judge Score | -0.5 points | -1.0 points | Review / Block |
-| Output Similarity* | <0.85 | <0.70 | Review / Block |
+| Metric              | Warning Threshold | Block Threshold | Action              |
+| ------------------- | ----------------- | --------------- | ------------------- |
+| Category Accuracy   | -5%               | -10%            | Investigate / Block |
+| Anti-AI Violations  | +5% absolute      | +10% absolute   | Investigate / Block |
+| Avg Response Length | +20%              | +50%            | Review / Block      |
+| Latency p95         | +10%              | +25%            | Optimize / Block    |
+| LLM Judge Score     | -0.5 points       | -1.0 points     | Review / Block      |
+| Output Similarity\* | <0.85             | <0.70           | Review / Block      |
 
-*Cosine similarity between old and new outputs on same inputs
+\*Cosine similarity between old and new outputs on same inputs
 
 ### 4.3 Automated Regression Testing
 
@@ -300,14 +303,14 @@ class FewShotExample:
 
 ### 5.1 Rollback Triggers
 
-| Trigger | Condition | Response Time |
-|---------|-----------|---------------|
+| Trigger  | Condition                           | Response Time      |
+| -------- | ----------------------------------- | ------------------ |
 | Critical | >20% increase in anti-AI violations | Immediate (<5 min) |
-| Critical | Category accuracy drops below 70% | Immediate (<5 min) |
-| High | Judge score drops by >1.5 points | <30 min |
-| High | Latency p95 increases >50% | <30 min |
-| Medium | Style match score drops >10% | <4 hours |
-| Low | Cosmetic output differences | Next release |
+| Critical | Category accuracy drops below 70%   | Immediate (<5 min) |
+| High     | Judge score drops by >1.5 points    | <30 min            |
+| High     | Latency p95 increases >50%          | <30 min            |
+| Medium   | Style match score drops >10%        | <4 hours           |
+| Low      | Cosmetic output differences         | Next release       |
 
 ### 5.2 Rollback Mechanisms
 
@@ -359,12 +362,12 @@ git tag prompt-v1.0.1
 
 After any rollback, verify:
 
-| Check | Command | Threshold |
-|-------|---------|-----------|
-| Version correct | `grep PROMPT_VERSION jarvis/prompts/` | Matches target |
-| Tests pass | `make test` | 100% of regression tests |
-| Baseline restored | `evals/eval_pipeline.py` | Within 2% of baseline |
-| No data loss | Check user feedback DB | No missing records |
+| Check             | Command                               | Threshold                |
+| ----------------- | ------------------------------------- | ------------------------ |
+| Version correct   | `grep PROMPT_VERSION jarvis/prompts/` | Matches target           |
+| Tests pass        | `make test`                           | 100% of regression tests |
+| Baseline restored | `evals/eval_pipeline.py`              | Within 2% of baseline    |
+| No data loss      | Check user feedback DB                | No missing records       |
 
 ### 5.4 Rollback Decision Tree
 
@@ -390,12 +393,12 @@ Issue Detected
 
 ### 6.1 Change Classification
 
-| Type | Examples | Workflow | SLA |
-|------|----------|----------|-----|
-| **Trivial** | Typo fixes, comment updates | Fast-track | 1 hour |
-| **Routine** | New examples, threshold tuning | Standard | 1 day |
-| **Substantial** | New templates, major rewrites | Full process | 3 days |
-| **Emergency** | Hotfixes for production issues | Emergency | 30 min |
+| Type            | Examples                       | Workflow     | SLA    |
+| --------------- | ------------------------------ | ------------ | ------ |
+| **Trivial**     | Typo fixes, comment updates    | Fast-track   | 1 hour |
+| **Routine**     | New examples, threshold tuning | Standard     | 1 day  |
+| **Substantial** | New templates, major rewrites  | Full process | 3 days |
+| **Emergency**   | Hotfixes for production issues | Emergency    | 30 min |
 
 ### 6.2 Standard Workflow
 
@@ -441,6 +444,7 @@ Evaluation: +5% category accuracy, no regression"
 ```
 
 **Checklist:**
+
 - [ ] Version constants updated
 - [ ] Local tests pass
 - [ ] Evaluation shows improvement or parity
@@ -450,41 +454,48 @@ Evaluation: +5% category accuracy, no regression"
 
 **PR Template for Prompt Changes:**
 
-```markdown
+````markdown
 ## Prompt Change Summary
 
-| Field | Value |
-|-------|-------|
-| **Type** | PATCH / MINOR / MAJOR |
-| **Version** | 1.0.0 → 1.1.0 |
-| **Affected Templates** | reply_generation, threaded_reply |
-| **Categories Impacted** | planning, logistics |
+| Field                   | Value                            |
+| ----------------------- | -------------------------------- |
+| **Type**                | PATCH / MINOR / MAJOR            |
+| **Version**             | 1.0.0 → 1.1.0                    |
+| **Affected Templates**  | reply_generation, threaded_reply |
+| **Categories Impacted** | planning, logistics              |
 
 ## Changes
+
 - Added 3 new few-shot examples for planning threads
 - Improved context truncation logic
 
 ## Evaluation Results
-| Metric | Before | After | Delta |
-|--------|--------|-------|-------|
-| Category Accuracy | 87% | 92% | +5% ✅ |
-| Anti-AI Clean | 94% | 95% | +1% ✅ |
-| Avg Length | 42 chars | 45 chars | +3 ⚠️ |
-| Latency p95 | 180ms | 175ms | -5ms ✅ |
+
+| Metric            | Before   | After    | Delta   |
+| ----------------- | -------- | -------- | ------- |
+| Category Accuracy | 87%      | 92%      | +5% ✅  |
+| Anti-AI Clean     | 94%      | 95%      | +1% ✅  |
+| Avg Length        | 42 chars | 45 chars | +3 ⚠️   |
+| Latency p95       | 180ms    | 175ms    | -5ms ✅ |
 
 ## Testing
+
 - [ ] Unit tests pass
 - [ ] Regression tests pass
 - [ ] A/B test configured (if MINOR/MAJOR)
 - [ ] Rollback plan documented
 
 ## Rollback Plan
+
 Revert to commit `abc123`:
+
 ```bash
 git revert HEAD
 git push
 ```
-```
+````
+
+````
 
 #### Phase 3: Test (CI/CD)
 
@@ -497,27 +508,27 @@ jobs:
     steps:
       - name: Version Check
         run: python scripts/check_prompt_version.py
-      
+
       - name: Static Analysis
         run: |
           python -c "from jarvis.prompts import PROMPT_VERSION; print(f'Version: {PROMPT_VERSION}')"
           python scripts/validate_prompt_templates.py
-      
+
       - name: Unit Tests
         run: pytest tests/unit/test_prompts.py -v
-      
+
       - name: Regression Tests
         run: pytest tests/unit/test_prompt_regression.py -v
-      
+
       - name: Evaluation Pipeline
         run: |
           python evals/eval_pipeline.py --save-results results/eval_${{ github.sha }}.json
           python scripts/check_regression.py --baseline results/prompt_baseline.json --current results/eval_${{ github.sha }}.json
-      
+
       - name: A/B Test Setup (if MINOR/MAJOR)
         if: contains(github.event.pull_request.labels.*.name, 'prompt-minor') || contains(github.event.pull_request.labels.*.name, 'prompt-major')
         run: python scripts/setup_ab_test.py --pr ${{ github.event.number }}
-```
+````
 
 #### Phase 4: A/B Testing (If Required)
 
@@ -544,14 +555,15 @@ SUCCESS_CRITERIA = {
 ```
 
 **A/B Test Report Template:**
+
 ```markdown
 ## A/B Test Results: prompt_v1.1.0
 
-| Metric | Control (v1.0.0) | Treatment (v1.1.0) | Delta | Pass? |
-|--------|-----------------|-------------------|-------|-------|
-| Acceptance Rate | 78% | 81% | +3% | ✅ |
-| Anti-AI Rate | 6% | 4% | -2% | ✅ |
-| Latency p95 | 185ms | 178ms | -4% | ✅ |
+| Metric          | Control (v1.0.0) | Treatment (v1.1.0) | Delta | Pass? |
+| --------------- | ---------------- | ------------------ | ----- | ----- |
+| Acceptance Rate | 78%              | 81%                | +3%   | ✅    |
+| Anti-AI Rate    | 6%               | 4%                 | -2%   | ✅    |
+| Latency p95     | 185ms            | 178ms              | -4%   | ✅    |
 
 **Decision:** PROMOTE v1.1.0 to 100% traffic
 ```
@@ -647,6 +659,7 @@ models/
 ```
 
 **Metadata Format:**
+
 ```json
 {
   "model_name": "category_svm_rbf",
@@ -671,12 +684,12 @@ models/
 
 ### 7.2 Model Gates
 
-| Gate | Check | Threshold | Enforcement |
-|------|-------|-----------|-------------|
-| Accuracy | Validation set | ≥85% | Hard block |
-| Latency | Inference time | <50ms p99 | Hard block |
-| Size | Model file | <100MB | Soft gate |
-| Compatibility | Prompt version | Compatible | Hard block |
+| Gate          | Check          | Threshold  | Enforcement |
+| ------------- | -------------- | ---------- | ----------- |
+| Accuracy      | Validation set | ≥85%       | Hard block  |
+| Latency       | Inference time | <50ms p99  | Hard block  |
+| Size          | Model file     | <100MB     | Soft gate   |
+| Compatibility | Prompt version | Compatible | Hard block  |
 
 ### 7.3 Threshold Management
 
@@ -691,12 +704,13 @@ thresholds:
   request: 0.55
   emotion: 0.60
   statement: 0.35
-  
+
 version: "2026-01-15"
 calibration_dataset: "evals/calibration_v2.jsonl"
 ```
 
 Changes to thresholds require:
+
 1. Calibration on held-out dataset
 2. Evaluation on full eval set
 3. Approval from 2 reviewers
@@ -727,34 +741,34 @@ All changes are logged to `logs/prompt_audit.log`:
 
 ### 8.2 Compliance Checks
 
-| Check | Frequency | Owner |
-|-------|-----------|-------|
-| Version alignment | Per PR | CI/CD |
-| Evaluation freshness | Weekly | ML Eng |
-| Baseline currency | Monthly | ML Eng |
-| Audit log review | Quarterly | Security |
+| Check                | Frequency | Owner    |
+| -------------------- | --------- | -------- |
+| Version alignment    | Per PR    | CI/CD    |
+| Evaluation freshness | Weekly    | ML Eng   |
+| Baseline currency    | Monthly   | ML Eng   |
+| Audit log review     | Quarterly | Security |
 
 ### 8.3 Required Records
 
-| Record | Location | Retention |
-|--------|----------|-----------|
-| Prompt versions | `evals/prompt_versions.json` | Permanent |
-| Evaluation results | `results/eval_*.json` | 1 year |
-| A/B test results | `evals/ab_tests/` | 2 years |
-| Audit logs | `logs/prompt_audit.log` | 3 years |
+| Record             | Location                     | Retention |
+| ------------------ | ---------------------------- | --------- |
+| Prompt versions    | `evals/prompt_versions.json` | Permanent |
+| Evaluation results | `results/eval_*.json`        | 1 year    |
+| A/B test results   | `evals/ab_tests/`            | 2 years   |
+| Audit logs         | `logs/prompt_audit.log`      | 3 years   |
 
 ---
 
 ## 9. ROLES AND RESPONSIBILITIES
 
-| Role | Responsibilities | Escalation |
-|------|------------------|------------|
-| **ML Engineer** | Implement changes, run evaluations, write tests | Engineering Lead |
-| **Reviewer** | Review PRs, verify evaluations, check baselines | Engineering Lead |
-| **Engineering Lead** | Approve MINOR/MAJOR changes, handle exceptions | CTO |
-| **Product Manager** | Approve A/B tests, review user-facing changes | Engineering Lead |
-| **Release Manager** | Coordinate releases, verify rollback plans | CTO |
-| **On-Call Engineer** | Handle incidents, execute rollbacks | Engineering Lead |
+| Role                 | Responsibilities                                | Escalation       |
+| -------------------- | ----------------------------------------------- | ---------------- |
+| **ML Engineer**      | Implement changes, run evaluations, write tests | Engineering Lead |
+| **Reviewer**         | Review PRs, verify evaluations, check baselines | Engineering Lead |
+| **Engineering Lead** | Approve MINOR/MAJOR changes, handle exceptions  | CTO              |
+| **Product Manager**  | Approve A/B tests, review user-facing changes   | Engineering Lead |
+| **Release Manager**  | Coordinate releases, verify rollback plans      | CTO              |
+| **On-Call Engineer** | Handle incidents, execute rollbacks             | Engineering Lead |
 
 ---
 
@@ -784,32 +798,32 @@ git revert HEAD && git push
 
 ### 10.2 Decision Matrix
 
-| Situation | Version Bump | Tests | A/B Test | Approval |
-|-----------|--------------|-------|----------|----------|
-| Fix typo | PATCH | Unit | No | 1 reviewer |
-| New examples | PATCH | Full eval | No | 1 reviewer |
-| New template | MINOR | Full eval | Yes | 2 reviewers |
-| Remove template | MAJOR | Full eval + migration | Yes | Eng Lead + Product |
-| Output format change | MAJOR | Contract tests + full eval | Yes | Eng Lead + Product |
-| Emergency fix | PATCH | Minimal | No | Post-hoc review |
+| Situation            | Version Bump | Tests                      | A/B Test | Approval           |
+| -------------------- | ------------ | -------------------------- | -------- | ------------------ |
+| Fix typo             | PATCH        | Unit                       | No       | 1 reviewer         |
+| New examples         | PATCH        | Full eval                  | No       | 1 reviewer         |
+| New template         | MINOR        | Full eval                  | Yes      | 2 reviewers        |
+| Remove template      | MAJOR        | Full eval + migration      | Yes      | Eng Lead + Product |
+| Output format change | MAJOR        | Contract tests + full eval | Yes      | Eng Lead + Product |
+| Emergency fix        | PATCH        | Minimal                    | No       | Post-hoc review    |
 
 ### 10.3 Glossary
 
-| Term | Definition |
-|------|------------|
-| **Prompt Template** | A structured string with placeholders for dynamic content |
-| **Few-Shot Example** | Example input/output pairs provided in the prompt |
+| Term                  | Definition                                                  |
+| --------------------- | ----------------------------------------------------------- |
+| **Prompt Template**   | A structured string with placeholders for dynamic content   |
+| **Few-Shot Example**  | Example input/output pairs provided in the prompt           |
 | **Anti-AI Violation** | Output containing phrases that sound artificially generated |
-| **Category Accuracy** | Percentage of correct intent classifications |
-| **A/B Test** | Controlled experiment comparing two versions |
-| **Baseline** | Established performance metrics for comparison |
-| **Regression** | Degradation in performance compared to baseline |
+| **Category Accuracy** | Percentage of correct intent classifications                |
+| **A/B Test**          | Controlled experiment comparing two versions                |
+| **Baseline**          | Established performance metrics for comparison              |
+| **Regression**        | Degradation in performance compared to baseline             |
 
 ### 10.4 Changelog
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.0 | 2026-02-10 | Initial governance policy |
+| Version | Date       | Changes                   |
+| ------- | ---------- | ------------------------- |
+| 1.0.0   | 2026-02-10 | Initial governance policy |
 
 ---
 

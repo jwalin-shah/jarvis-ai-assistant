@@ -25,7 +25,7 @@ class MyExtractor(ExtractorAdapter):
     def extract_from_text(self, text: str, message_id: int, ...) -> list[ExtractedCandidate]:
         # Implementation
         ...
-    
+
     def extract_batch(self, messages: list[dict], ...) -> list[ExtractionResult]:
         # Batch implementation
         ...
@@ -119,6 +119,7 @@ Phase 1 exit gate (from roadmap):
 > Select primary extractor and fallback extractor with written benchmark evidence.
 
 The bakeoff script produces a recommendation based on:
+
 1. F0.5 score ranking
 2. Recall >= 0.40 floor
 3. Per-slice performance analysis
@@ -148,11 +149,11 @@ class MyExtractor(ExtractorAdapter):
     def __init__(self, config: dict | None = None):
         super().__init__("my_extractor", config)
         # Initialize
-    
+
     def extract_from_text(self, text, message_id, **kwargs) -> list[ExtractedCandidate]:
         # Implementation
         ...
-    
+
     # ... other required methods
 
 register_extractor("my_extractor", MyExtractor)

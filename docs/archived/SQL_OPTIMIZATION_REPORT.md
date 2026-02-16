@@ -52,12 +52,15 @@ SELECT category, subject, predicate, value, confidence FROM contact_facts WHERE 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `archive/scripts/experiment_clustering.py:191`
@@ -69,12 +72,15 @@ SELECT message.text, message.attributedBody, message.is_from_me FROM message WHE
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `core/health/schema.py:180`
@@ -86,12 +92,15 @@ SELECT name FROM sqlite_master WHERE type='table' ORDER BY name
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `evals/benchmarks/templates/mine.py:123`
@@ -103,12 +112,15 @@ SELECT text FROM message WHERE is_from_me = 1 AND text IS NOT NULL AND text != '
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `evals/rag_eval.py:271`
@@ -120,12 +132,15 @@ SELECT rowid, trigger_text, response_text FROM vec_chunks WHERE trigger_text IS 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/avatar.py:144`
@@ -137,13 +152,16 @@ SELECT ZABCDRECORD.ZTHUMBNAILIMAGEDATA as image_data, ZABCDRECORD.ZFIRSTNAME as 
 ```
 
 **Issues found**
+
 - LIKE predicate may bypass indexes for leading-wildcard search values.
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - Prefer prefix-search patterns or FTS for substring matching.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/avatar.py:195`
@@ -155,13 +173,16 @@ SELECT ZABCDRECORD.ZTHUMBNAILIMAGEDATA as image_data, ZABCDRECORD.ZFIRSTNAME as 
 ```
 
 **Issues found**
+
 - Potential non-sargable predicate: function-wrapped column in WHERE.
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - Use an expression index or normalized shadow column for this predicate.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:50`
@@ -173,12 +194,15 @@ WITH message_ranked AS ( SELECT cmj.chat_id, m.text, m.attributedBody, m.date, R
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:89`
@@ -190,12 +214,15 @@ SELECT message.ROWID as id, chat.guid as chat_id, COALESCE(handle.id, 'me') as s
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:117`
@@ -207,13 +234,16 @@ SELECT message.ROWID as id, chat.guid as chat_id, COALESCE(handle.id, 'me') as s
 ```
 
 **Issues found**
+
 - LIKE predicate may bypass indexes for leading-wildcard search values.
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - Prefer prefix-search patterns or FTS for substring matching.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:140`
@@ -225,12 +255,15 @@ SELECT message.ROWID as id, chat.guid as chat_id, COALESCE(handle.id, 'me') as s
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:161`
@@ -242,12 +275,15 @@ SELECT attachment.ROWID as attachment_id, attachment.filename, attachment.mime_t
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:172`
@@ -259,12 +295,15 @@ SELECT attachment.ROWID as attachment_id, attachment.filename, attachment.mime_t
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:184`
@@ -276,12 +315,15 @@ SELECT attachment.ROWID as attachment_id, attachment.filename, attachment.mime_t
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:200`
@@ -293,12 +335,15 @@ SELECT attachment.ROWID as attachment_id, attachment.filename, attachment.mime_t
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:230`
@@ -310,12 +355,15 @@ SELECT COUNT(*) as total_count, COALESCE(SUM(attachment.total_bytes), 0) as tota
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:252`
@@ -327,12 +375,15 @@ SELECT chat.guid as chat_id, chat.display_name, COUNT(DISTINCT attachment.ROWID)
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:267`
@@ -344,12 +395,15 @@ SELECT message.ROWID as id, message.associated_message_type, message.date, messa
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:279`
@@ -361,12 +415,15 @@ SELECT message.ROWID as id, message.associated_message_type, message.associated_
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:292`
@@ -378,12 +435,15 @@ SELECT message.ROWID as id, message.guid FROM message WHERE message.ROWID IN ({p
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:297`
@@ -395,12 +455,15 @@ SELECT message.ROWID as id FROM message WHERE message.guid = ? LIMIT 1
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/queries.py:303`
@@ -412,12 +475,15 @@ SELECT message.ROWID as id, chat.guid as chat_id, COALESCE(handle.id, 'me') as s
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/reader.py:863`
@@ -429,12 +495,15 @@ SELECT ZABCDPHONENUMBER.ZFULLNUMBER as identifier, ZABCDRECORD.ZFIRSTNAME as fir
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/reader.py:884`
@@ -446,12 +515,15 @@ SELECT ZABCDEMAILADDRESS.ZADDRESS as identifier, ZABCDRECORD.ZFIRSTNAME as first
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/reader.py:962`
@@ -463,12 +535,15 @@ SELECT 1 FROM chat LIMIT 1
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/reader.py:1011`
@@ -480,12 +555,15 @@ SELECT 1 FROM chat LIMIT 1
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `integrations/imessage/reader.py:1762`
@@ -497,12 +575,15 @@ SELECT guid FROM message WHERE ROWID = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/_cli_main.py:677`
@@ -514,12 +595,15 @@ SELECT COUNT(*) as cnt FROM vec_chunks
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/classifiers/relationship_classifier.py:452`
@@ -531,13 +615,16 @@ SELECT c.chat_identifier, c.display_name, (SELECT COUNT(*) FROM chat_handle_join
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 - JOIN efficiency: correlated COUNT subqueries per chat row can degrade on large datasets.
 
 **Optimized query / approach**
+
 - Rewrite as grouped JOIN aggregation (single pass) instead of correlated subqueries.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/contacts/fact_extractor.py:782`
@@ -549,13 +636,16 @@ SELECT id, display_name FROM contacts
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 - Potential N+1: `_resolve_person_to_contact()` runs this contacts query once per extracted person entity.
 
 **Optimized query / approach**
+
 - Load contacts once per message/batch and reuse in-memory matching for all entities.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/contacts/fact_storage.py:65`
@@ -567,12 +657,15 @@ SELECT COUNT(*) FROM contact_facts WHERE contact_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/contacts/fact_storage.py:72`
@@ -584,12 +677,15 @@ INSERT OR IGNORE INTO contact_facts (contact_id, category, subject, predicate, v
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/contacts/fact_storage.py:84`
@@ -601,12 +697,15 @@ SELECT COUNT(*) FROM contact_facts WHERE contact_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/contacts/fact_storage.py:109`
@@ -618,12 +717,15 @@ SELECT category, subject, predicate, value, confidence, source_text, source_mess
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/contacts/fact_storage.py:146`
@@ -635,12 +737,15 @@ SELECT contact_id, category, subject, predicate, value, confidence, source_text,
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/contacts/fact_storage.py:181`
@@ -652,12 +757,15 @@ DELETE FROM contact_facts WHERE contact_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/contacts/fact_storage.py:199`
@@ -669,12 +777,15 @@ SELECT COUNT(*) FROM contact_facts
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/artifacts.py:42`
@@ -686,12 +797,15 @@ INSERT OR REPLACE INTO pair_artifacts (pair_id, context_json, gate_a_reason, gat
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/artifacts.py:70`
@@ -703,12 +817,15 @@ SELECT * FROM pair_artifacts WHERE pair_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/artifacts.py:86`
@@ -720,12 +837,15 @@ DELETE FROM pair_artifacts
 ```
 
 **Issues found**
+
 - Full-table delete detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/artifacts.py:115`
@@ -737,12 +857,15 @@ INSERT OR REPLACE INTO contact_style_targets (contact_id, median_reply_length, p
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/artifacts.py:136`
@@ -754,12 +877,15 @@ SELECT * FROM contact_style_targets WHERE contact_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/artifacts.py:197`
@@ -771,12 +897,15 @@ INSERT INTO pairs (contact_id, trigger_text, response_text, trigger_timestamp, r
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/artifacts.py:231`
@@ -788,12 +917,15 @@ INSERT INTO pair_artifacts (pair_id, context_json, gate_a_reason, gate_c_scores_
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/clusters.py:30`
@@ -805,12 +937,15 @@ INSERT INTO clusters (name, description, example_triggers, example_responses) VA
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/clusters.py:42`
@@ -822,12 +957,15 @@ SELECT * FROM clusters WHERE name = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/clusters.py:61`
@@ -839,12 +977,15 @@ SELECT * FROM clusters WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/clusters.py:70`
@@ -856,12 +997,15 @@ SELECT * FROM clusters WHERE name = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/clusters.py:79`
@@ -873,12 +1017,15 @@ SELECT * FROM clusters ORDER BY name
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/clusters.py:88`
@@ -890,12 +1037,15 @@ UPDATE clusters SET name = ?, description = ? WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/clusters.py:93`
@@ -907,12 +1057,15 @@ UPDATE clusters SET name = ? WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/clusters.py:102`
@@ -924,12 +1077,15 @@ UPDATE pair_embeddings SET cluster_id = NULL
 ```
 
 **Issues found**
+
 - Full-table update detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/clusters.py:103`
@@ -941,12 +1097,15 @@ DELETE FROM clusters
 ```
 
 **Issues found**
+
 - Full-table delete detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/clusters.py:131`
@@ -958,12 +1117,15 @@ SELECT * FROM clusters WHERE id IN ({expr})
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/contacts.py:54`
@@ -975,12 +1137,15 @@ SELECT id FROM contacts WHERE chat_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/contacts.py:59`
@@ -992,12 +1157,15 @@ UPDATE contacts SET display_name = ?, phone_or_email = ?, relationship = ?, styl
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/contacts.py:91`
@@ -1009,12 +1177,15 @@ INSERT INTO contacts (chat_id, display_name, phone_or_email, relationship, style
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/contacts.py:126`
@@ -1026,12 +1197,15 @@ SELECT id, chat_id, display_name, phone_or_email, relationship, style_notes, han
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/contacts.py:152`
@@ -1043,12 +1217,15 @@ SELECT id, chat_id, display_name, phone_or_email, relationship, style_notes, han
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/contacts.py:164`
@@ -1060,12 +1237,15 @@ SELECT id, chat_id, display_name, phone_or_email, relationship, style_notes, han
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/contacts.py:182`
@@ -1077,12 +1257,15 @@ SELECT id, chat_id, display_name, phone_or_email, relationship, style_notes, han
 ```
 
 **Issues found**
+
 - Missing index candidate(s): contacts.phone_or_email
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_contacts_phone_or_email ON contacts(phone_or_email);`
 
 ### `jarvis/db/contacts.py:195`
@@ -1094,12 +1277,15 @@ SELECT id, chat_id, display_name, phone_or_email, relationship, style_notes, han
 ```
 
 **Issues found**
+
 - Potential non-sargable predicate: function-wrapped column in WHERE.
 
 **Optimized query / approach**
+
 - Use an expression index or normalized shadow column for this predicate.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/contacts.py:206`
@@ -1111,12 +1297,15 @@ SELECT id, chat_id, display_name, phone_or_email, relationship, style_notes, han
 ```
 
 **Issues found**
+
 - Potential non-sargable predicate: function-wrapped column in WHERE.
 
 **Optimized query / approach**
+
 - Use an expression index or normalized shadow column for this predicate.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/contacts.py:221`
@@ -1128,12 +1317,15 @@ SELECT id, chat_id, display_name, phone_or_email, relationship, style_notes, han
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/contacts.py:233`
@@ -1145,12 +1337,15 @@ SELECT chat_id FROM contacts WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/contacts.py:238`
@@ -1162,12 +1357,15 @@ DELETE FROM pair_embeddings WHERE pair_id IN (SELECT id FROM pairs WHERE contact
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/contacts.py:244`
@@ -1179,12 +1377,15 @@ DELETE FROM pairs WHERE contact_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/contacts.py:245`
@@ -1196,12 +1397,15 @@ DELETE FROM contacts WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/core.py:186`
@@ -1213,12 +1417,15 @@ SELECT name FROM sqlite_master WHERE type='table' AND name IN ('vec_chunks', 've
 ```
 
 **Issues found**
+
 - Potential N+1: query executes inside a loop.
 
 **Optimized query / approach**
+
 - Fetch all required rows in one query (`IN (...)`, JOIN, or prefetch) instead of per-iteration calls.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/core.py:193`
@@ -1230,12 +1437,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0( embedding int8[384] di
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/core.py:217`
@@ -1247,12 +1457,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_messages USING vec0( embedding int8[384] 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/core.py:232`
@@ -1264,12 +1477,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_binary USING vec0( embedding bit[384], +c
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/core.py:257`
@@ -1281,12 +1497,15 @@ SELECT version FROM schema_version ORDER BY version DESC LIMIT 1
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/core.py:390`
@@ -1298,12 +1517,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0( embedding int8[384] di
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/core.py:411`
@@ -1315,12 +1537,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_messages USING vec0( embedding int8[384] 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/core.py:423`
@@ -1332,12 +1557,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_binary USING vec0( embedding bit[384], +c
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/core.py:446`
@@ -1349,12 +1577,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_binary USING vec0( embedding bit[384], +c
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/core.py:470`
@@ -1366,12 +1597,15 @@ INSERT OR REPLACE INTO schema_version (version) VALUES (?)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/core.py:500`
@@ -1383,12 +1617,15 @@ SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/core.py:513`
@@ -1400,12 +1637,15 @@ SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/embeddings.py:25`
@@ -1417,12 +1657,15 @@ INSERT OR REPLACE INTO pair_embeddings (pair_id, faiss_id, cluster_id, index_ver
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/embeddings.py:43`
@@ -1434,12 +1677,15 @@ INSERT OR REPLACE INTO pair_embeddings (pair_id, faiss_id, cluster_id, index_ver
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/embeddings.py:59`
@@ -1451,12 +1697,15 @@ SELECT * FROM pair_embeddings WHERE pair_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/embeddings.py:76`
@@ -1468,12 +1717,15 @@ SELECT p.* FROM pairs p JOIN pair_embeddings e ON p.id = e.pair_id WHERE e.faiss
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/embeddings.py:85`
@@ -1485,12 +1737,15 @@ SELECT p.* FROM pairs p JOIN pair_embeddings e ON p.id = e.pair_id WHERE e.faiss
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/embeddings.py:122`
@@ -1502,12 +1757,15 @@ SELECT p.*, e.faiss_id FROM pairs p JOIN pair_embeddings e ON p.id = e.pair_id W
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/embeddings.py:131`
@@ -1519,12 +1777,15 @@ SELECT p.*, e.faiss_id FROM pairs p JOIN pair_embeddings e ON p.id = e.pair_id W
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/embeddings.py:166`
@@ -1536,12 +1797,15 @@ SELECT * FROM pair_embeddings WHERE pair_id IN ({expr})
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/embeddings.py:213`
@@ -1553,13 +1817,16 @@ SELECT p.*, e.faiss_id, e.cluster_id as embedding_cluster_id, c.name as cluster_
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pair_embeddings.cluster_id
 - JOIN efficiency risk: join/filter columns include non-indexed fields.
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pair_embeddings_cluster_id ON pair_embeddings(cluster_id);`
 
 ### `jarvis/db/embeddings.py:225`
@@ -1571,13 +1838,16 @@ SELECT p.*, e.faiss_id, e.cluster_id as embedding_cluster_id, c.name as cluster_
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pair_embeddings.cluster_id
 - JOIN efficiency risk: join/filter columns include non-indexed fields.
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pair_embeddings_cluster_id ON pair_embeddings(cluster_id);`
 
 ### `jarvis/db/embeddings.py:254`
@@ -1589,12 +1859,15 @@ DELETE FROM pair_embeddings WHERE index_version = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/embeddings.py:259`
@@ -1606,12 +1879,15 @@ DELETE FROM pair_embeddings
 ```
 
 **Issues found**
+
 - Full-table delete detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/embeddings.py:266`
@@ -1623,12 +1899,15 @@ SELECT COUNT(*) as cnt FROM pair_embeddings WHERE index_version = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/embeddings.py:271`
@@ -1640,12 +1919,15 @@ SELECT COUNT(*) as cnt FROM pair_embeddings
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/index_versions.py:29`
@@ -1657,12 +1939,15 @@ UPDATE index_versions SET is_active = FALSE
 ```
 
 **Issues found**
+
 - Full-table update detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/index_versions.py:31`
@@ -1674,12 +1959,15 @@ INSERT INTO index_versions (version_id, model_name, embedding_dim, num_vectors, 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/index_versions.py:53`
@@ -1691,12 +1979,15 @@ SELECT * FROM index_versions WHERE is_active = TRUE LIMIT 1
 ```
 
 **Issues found**
+
 - Missing index candidate(s): index_versions.is_active
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_index_versions_is_active ON index_versions(is_active);`
 
 ### `jarvis/db/index_versions.py:71`
@@ -1708,12 +1999,15 @@ UPDATE index_versions SET is_active = FALSE
 ```
 
 **Issues found**
+
 - Full-table update detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/index_versions.py:72`
@@ -1725,12 +2019,15 @@ UPDATE index_versions SET is_active = TRUE WHERE version_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/index_versions.py:81`
@@ -1742,12 +2039,15 @@ SELECT * FROM index_versions ORDER BY created_at DESC
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/pairs.py:46`
@@ -1759,12 +2059,15 @@ SELECT content_hash FROM pairs WHERE content_hash IN ({expr})
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/pairs.py:95`
@@ -1776,12 +2079,15 @@ INSERT INTO pairs (contact_id, trigger_text, response_text, trigger_timestamp, r
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/pairs.py:213`
@@ -1793,12 +2099,15 @@ INSERT OR IGNORE INTO pairs (contact_id, trigger_text, response_text, trigger_ti
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/pairs.py:250`
@@ -1810,12 +2119,15 @@ SELECT id, contact_id, trigger_text, response_text, trigger_timestamp, response_
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/pairs.py:273`
@@ -1827,12 +2139,15 @@ SELECT id, contact_id, trigger_text, response_text, trigger_timestamp, response_
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/pairs.py:310`
@@ -1844,12 +2159,15 @@ SELECT id, contact_id, trigger_text, response_text, trigger_timestamp, response_
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/pairs.py:332`
@@ -1861,12 +2179,15 @@ SELECT COUNT(*) as cnt FROM pairs WHERE quality_score >= ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/pairs.py:345`
@@ -1878,12 +2199,15 @@ UPDATE pairs SET quality_score = ?, flags_json = ? WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/pairs.py:350`
@@ -1895,12 +2219,15 @@ UPDATE pairs SET quality_score = ? WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/pairs.py:359`
@@ -1912,12 +2239,15 @@ DELETE FROM pair_embeddings
 ```
 
 **Issues found**
+
 - Full-table delete detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/pairs.py:360`
@@ -1929,12 +2259,15 @@ DELETE FROM pairs
 ```
 
 **Issues found**
+
 - Full-table delete detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/pairs.py:377`
@@ -1946,12 +2279,15 @@ UPDATE pairs SET trigger_da_type = ?, trigger_da_conf = ?, response_da_type = ?,
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/pairs.py:405`
@@ -1963,12 +2299,15 @@ UPDATE pairs SET cluster_id = ? WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:4`
@@ -1980,12 +2319,15 @@ CREATE TABLE IF NOT EXISTS schema_version ( version INTEGER PRIMARY KEY, applied
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:9`
@@ -1997,12 +2339,15 @@ CREATE TABLE IF NOT EXISTS contacts ( id INTEGER PRIMARY KEY, chat_id TEXT UNIQU
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:22`
@@ -2014,12 +2359,15 @@ CREATE TABLE IF NOT EXISTS contact_style_targets ( contact_id INTEGER PRIMARY KE
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:32`
@@ -2031,12 +2379,15 @@ CREATE TABLE IF NOT EXISTS pairs ( id INTEGER PRIMARY KEY, contact_id INTEGER RE
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:75`
@@ -2048,12 +2399,15 @@ CREATE TABLE IF NOT EXISTS pair_artifacts ( pair_id INTEGER PRIMARY KEY REFERENC
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:85`
@@ -2065,12 +2419,15 @@ CREATE TABLE IF NOT EXISTS clusters ( id INTEGER PRIMARY KEY, name TEXT UNIQUE N
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:95`
@@ -2082,12 +2439,15 @@ CREATE TABLE IF NOT EXISTS pair_embeddings ( pair_id INTEGER PRIMARY KEY REFEREN
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:104`
@@ -2099,12 +2459,15 @@ CREATE TABLE IF NOT EXISTS index_versions ( id INTEGER PRIMARY KEY, version_id T
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:117`
@@ -2116,12 +2479,15 @@ CREATE INDEX IF NOT EXISTS idx_pairs_contact ON pairs(contact_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:120`
@@ -2133,12 +2499,15 @@ CREATE INDEX IF NOT EXISTS idx_pairs_chat ON pairs(chat_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:121`
@@ -2150,12 +2519,15 @@ CREATE INDEX IF NOT EXISTS idx_pairs_quality ON pairs(quality_score)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:122`
@@ -2167,12 +2539,15 @@ CREATE INDEX IF NOT EXISTS idx_pairs_validity ON pairs(validity_status)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:123`
@@ -2184,12 +2559,15 @@ CREATE INDEX IF NOT EXISTS idx_contacts_chat ON contacts(chat_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:124`
@@ -2201,12 +2579,15 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_index ON pair_embeddings(index_version
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:125`
@@ -2218,12 +2599,15 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_faiss ON pair_embeddings(faiss_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:126`
@@ -2235,12 +2619,15 @@ CREATE INDEX IF NOT EXISTS idx_pairs_trigger_text ON pairs(contact_id, LOWER(TRI
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:129`
@@ -2252,12 +2639,15 @@ CREATE INDEX IF NOT EXISTS idx_pairs_timestamp ON pairs(trigger_timestamp DESC)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:130`
@@ -2269,12 +2659,15 @@ CREATE INDEX IF NOT EXISTS idx_pairs_source_timestamp ON pairs(source_timestamp 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:131`
@@ -2286,12 +2679,15 @@ CREATE INDEX IF NOT EXISTS idx_contacts_id ON contacts(id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:132`
@@ -2303,12 +2699,15 @@ CREATE INDEX IF NOT EXISTS idx_pairs_chat_timestamp ON pairs(chat_id, trigger_ti
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:135`
@@ -2320,12 +2719,15 @@ CREATE INDEX IF NOT EXISTS idx_pairs_contact_quality ON pairs(contact_id, qualit
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:136`
@@ -2337,12 +2739,15 @@ CREATE INDEX IF NOT EXISTS idx_pairs_content_hash ON pairs(content_hash)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:138`
@@ -2354,12 +2759,15 @@ CREATE TABLE IF NOT EXISTS scheduled_drafts ( id TEXT PRIMARY KEY, draft_id TEXT
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:159`
@@ -2371,12 +2779,15 @@ CREATE TABLE IF NOT EXISTS contact_timing_prefs ( contact_id INTEGER PRIMARY KEY
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:171`
@@ -2388,12 +2799,15 @@ CREATE TABLE IF NOT EXISTS send_queue ( id TEXT PRIMARY KEY, scheduled_draft_id 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:183`
@@ -2405,12 +2819,15 @@ CREATE TABLE IF NOT EXISTS contact_facts ( id INTEGER PRIMARY KEY AUTOINCREMENT,
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:201`
@@ -2422,12 +2839,15 @@ CREATE INDEX IF NOT EXISTS idx_facts_contact ON contact_facts(contact_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:203`
@@ -2439,12 +2859,15 @@ CREATE INDEX IF NOT EXISTS idx_facts_category ON contact_facts(category)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:204`
@@ -2456,12 +2879,15 @@ CREATE INDEX IF NOT EXISTS idx_facts_linked_contact ON contact_facts(linked_cont
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:205`
@@ -2473,12 +2899,15 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_contact ON scheduled_drafts(contact_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:208`
@@ -2490,12 +2919,15 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_status ON scheduled_drafts(status)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:209`
@@ -2507,12 +2939,15 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_send_at ON scheduled_drafts(send_at)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:210`
@@ -2524,12 +2959,15 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_priority ON scheduled_drafts(priority, 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:211`
@@ -2541,12 +2979,15 @@ CREATE INDEX IF NOT EXISTS idx_send_queue_status ON send_queue(status)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/schema.py:212`
@@ -2558,12 +2999,15 @@ CREATE INDEX IF NOT EXISTS idx_send_queue_scheduled ON send_queue(scheduled_draf
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/search.py:43`
@@ -2575,12 +3019,15 @@ SELECT trigger_da_type, COUNT(*) as cnt FROM pairs WHERE trigger_da_type IS NOT 
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.trigger_da_type
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_trigger_da_type ON pairs(trigger_da_type);`
 
 ### `jarvis/db/search.py:51`
@@ -2592,12 +3039,15 @@ SELECT response_da_type, COUNT(*) as cnt FROM pairs WHERE response_da_type IS NO
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.response_da_type
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_response_da_type ON pairs(response_da_type);`
 
 ### `jarvis/db/search.py:59`
@@ -2609,12 +3059,15 @@ SELECT COUNT(*) as cnt FROM pairs WHERE trigger_da_type IS NOT NULL
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.trigger_da_type
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_trigger_da_type ON pairs(trigger_da_type);`
 
 ### `jarvis/db/search.py:242`
@@ -2626,12 +3079,15 @@ SELECT contact_id, COUNT(*) as pair_count FROM pairs WHERE contact_id IS NOT NUL
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/search.py:269`
@@ -2643,12 +3099,15 @@ UPDATE pairs SET is_holdout = FALSE
 ```
 
 **Issues found**
+
 - Full-table update detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/search.py:277`
@@ -2660,12 +3119,15 @@ UPDATE pairs SET is_holdout = TRUE WHERE contact_id IN ({expr})
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/search.py:283`
@@ -2677,12 +3139,15 @@ SELECT COUNT(*) as cnt FROM pairs WHERE is_holdout = FALSE
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 
 ### `jarvis/db/search.py:286`
@@ -2694,12 +3159,15 @@ SELECT COUNT(*) as cnt FROM pairs WHERE is_holdout = TRUE
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 
 ### `jarvis/db/search.py:308`
@@ -2711,12 +3179,15 @@ SELECT * FROM pairs WHERE is_holdout = FALSE AND quality_score >= ? ORDER BY tri
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 
 ### `jarvis/db/search.py:317`
@@ -2728,12 +3199,15 @@ SELECT * FROM pairs WHERE is_holdout = FALSE AND quality_score >= ? ORDER BY tri
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 
 ### `jarvis/db/search.py:334`
@@ -2745,12 +3219,15 @@ SELECT * FROM pairs WHERE is_holdout = TRUE AND quality_score >= ? ORDER BY trig
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 
 ### `jarvis/db/search.py:343`
@@ -2762,12 +3239,15 @@ SELECT * FROM pairs WHERE is_holdout = TRUE AND quality_score >= ? ORDER BY trig
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 
 ### `jarvis/db/search.py:360`
@@ -2779,12 +3259,15 @@ SELECT COUNT(*) as cnt FROM pairs WHERE is_holdout = FALSE
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 
 ### `jarvis/db/search.py:364`
@@ -2796,12 +3279,15 @@ SELECT COUNT(*) as cnt FROM pairs WHERE is_holdout = TRUE
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 
 ### `jarvis/db/search.py:368`
@@ -2813,12 +3299,15 @@ SELECT COUNT(DISTINCT contact_id) as cnt FROM pairs WHERE is_holdout = FALSE AND
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 
 ### `jarvis/db/search.py:377`
@@ -2830,12 +3319,15 @@ SELECT COUNT(DISTINCT contact_id) as cnt FROM pairs WHERE is_holdout = TRUE AND 
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 
 ### `jarvis/db/search.py:395`
@@ -2847,12 +3339,15 @@ SELECT * FROM pairs WHERE validity_status = 'valid' AND quality_score >= ? ORDER
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/search.py:434`
@@ -2864,12 +3359,15 @@ SELECT * FROM pairs WHERE response_da_type = ? AND response_da_conf >= ? AND qua
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout, pairs.response_da_conf, pairs.response_da_type
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 - `CREATE INDEX IF NOT EXISTS idx_pairs_response_da_conf ON pairs(response_da_conf);`
 - `CREATE INDEX IF NOT EXISTS idx_pairs_response_da_type ON pairs(response_da_type);`
@@ -2883,12 +3381,15 @@ SELECT * FROM pairs WHERE response_da_type = ? AND response_da_conf >= ? AND qua
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.response_da_conf, pairs.response_da_type
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_response_da_conf ON pairs(response_da_conf);`
 - `CREATE INDEX IF NOT EXISTS idx_pairs_response_da_type ON pairs(response_da_type);`
 
@@ -2901,12 +3402,15 @@ SELECT * FROM pairs WHERE trigger_da_type = ? AND trigger_da_conf >= ? AND quali
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout, pairs.trigger_da_conf, pairs.trigger_da_type
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 - `CREATE INDEX IF NOT EXISTS idx_pairs_trigger_da_conf ON pairs(trigger_da_conf);`
 - `CREATE INDEX IF NOT EXISTS idx_pairs_trigger_da_type ON pairs(trigger_da_type);`
@@ -2920,12 +3424,15 @@ SELECT * FROM pairs WHERE trigger_da_type = ? AND trigger_da_conf >= ? AND quali
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.trigger_da_conf, pairs.trigger_da_type
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_trigger_da_conf ON pairs(trigger_da_conf);`
 - `CREATE INDEX IF NOT EXISTS idx_pairs_trigger_da_type ON pairs(trigger_da_type);`
 
@@ -2938,12 +3445,15 @@ SELECT * FROM pairs WHERE trigger_da_type = ? AND response_da_type = ? AND trigg
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout, pairs.response_da_conf, pairs.response_da_type, pairs.trigger_da_conf, pairs.trigger_da_type
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 - `CREATE INDEX IF NOT EXISTS idx_pairs_response_da_conf ON pairs(response_da_conf);`
 - `CREATE INDEX IF NOT EXISTS idx_pairs_response_da_type ON pairs(response_da_type);`
@@ -2959,12 +3469,15 @@ SELECT * FROM pairs WHERE trigger_da_type = ? AND response_da_type = ? AND trigg
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.response_da_conf, pairs.response_da_type, pairs.trigger_da_conf, pairs.trigger_da_type
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_response_da_conf ON pairs(response_da_conf);`
 - `CREATE INDEX IF NOT EXISTS idx_pairs_response_da_type ON pairs(response_da_type);`
 - `CREATE INDEX IF NOT EXISTS idx_pairs_trigger_da_conf ON pairs(trigger_da_conf);`
@@ -2979,12 +3492,15 @@ SELECT * FROM pairs WHERE response_da_type = ? AND response_da_conf >= ? AND qua
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.is_holdout, pairs.response_da_conf, pairs.response_da_type
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_is_holdout ON pairs(is_holdout);`
 - `CREATE INDEX IF NOT EXISTS idx_pairs_response_da_conf ON pairs(response_da_conf);`
 - `CREATE INDEX IF NOT EXISTS idx_pairs_response_da_type ON pairs(response_da_type);`
@@ -2998,12 +3514,15 @@ SELECT trigger_da_type, response_da_type, COUNT(*) as cnt FROM pairs WHERE trigg
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.response_da_type, pairs.trigger_da_type
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_response_da_type ON pairs(response_da_type);`
 - `CREATE INDEX IF NOT EXISTS idx_pairs_trigger_da_type ON pairs(trigger_da_type);`
 
@@ -3016,12 +3535,15 @@ SELECT COUNT(*) as cnt FROM contacts
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/stats.py:39`
@@ -3033,12 +3555,15 @@ SELECT COUNT(*) as cnt FROM pairs
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/stats.py:42`
@@ -3050,12 +3575,15 @@ SELECT COUNT(*) as cnt FROM pairs WHERE quality_score >= 0.5
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/stats.py:46`
@@ -3067,12 +3595,15 @@ SELECT COUNT(*) as cnt FROM clusters
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/stats.py:50`
@@ -3084,12 +3615,15 @@ SELECT COUNT(*) as cnt FROM pair_embeddings
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/stats.py:58`
@@ -3101,12 +3635,15 @@ SELECT c.display_name, COUNT(p.id) as pair_count FROM contacts c LEFT JOIN pairs
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/stats.py:81`
@@ -3118,12 +3655,15 @@ SELECT COUNT(*) as cnt FROM pairs WHERE validity_status IS NOT NULL
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/stats.py:88`
@@ -3135,12 +3675,15 @@ SELECT COUNT(*) as cnt FROM pairs WHERE validity_status = ?
 ```
 
 **Issues found**
+
 - Potential N+1: query executes inside a loop.
 
 **Optimized query / approach**
+
 - Fetch all required rows in one query (`IN (...)`, JOIN, or prefetch) instead of per-iteration calls.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/db/stats.py:95`
@@ -3152,12 +3695,15 @@ SELECT COUNT(*) as cnt FROM pairs WHERE gate_a_passed = FALSE
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.gate_a_passed
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_gate_a_passed ON pairs(gate_a_passed);`
 
 ### `jarvis/db/stats.py:99`
@@ -3169,12 +3715,15 @@ SELECT gate_a_reason, COUNT(*) as cnt FROM pair_artifacts WHERE gate_a_reason IS
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pair_artifacts.gate_a_reason
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pair_artifacts_gate_a_reason ON pair_artifacts(gate_a_reason);`
 
 ### `jarvis/db/stats.py:111`
@@ -3186,12 +3735,15 @@ SELECT CASE WHEN gate_b_score >= 0.62 THEN 'accept' WHEN gate_b_score >= 0.48 TH
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.gate_b_score
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_gate_b_score ON pairs(gate_b_score);`
 
 ### `jarvis/db/stats.py:128`
@@ -3203,12 +3755,15 @@ SELECT gate_c_verdict, COUNT(*) as cnt FROM pairs WHERE gate_c_verdict IS NOT NU
 ```
 
 **Issues found**
+
 - Missing index candidate(s): pairs.gate_c_verdict
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_pairs_gate_c_verdict ON pairs(gate_c_verdict);`
 
 ### `jarvis/eval/feedback.py:153`
@@ -3220,12 +3775,15 @@ CREATE TABLE IF NOT EXISTS feedback ( id INTEGER PRIMARY KEY, message_id TEXT NO
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:166`
@@ -3237,12 +3795,15 @@ CREATE TABLE IF NOT EXISTS feedback_schema_version ( version INTEGER PRIMARY KEY
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:172`
@@ -3254,12 +3815,15 @@ CREATE INDEX IF NOT EXISTS idx_feedback_message ON feedback(message_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:175`
@@ -3271,12 +3835,15 @@ CREATE INDEX IF NOT EXISTS idx_feedback_suggestion ON feedback(suggestion_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:176`
@@ -3288,12 +3855,15 @@ CREATE INDEX IF NOT EXISTS idx_feedback_action ON feedback(action)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:177`
@@ -3305,12 +3875,15 @@ CREATE INDEX IF NOT EXISTS idx_feedback_timestamp ON feedback(timestamp DESC)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:178`
@@ -3322,12 +3895,15 @@ CREATE INDEX IF NOT EXISTS idx_feedback_contact ON feedback(contact_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:179`
@@ -3339,12 +3915,15 @@ CREATE INDEX IF NOT EXISTS idx_feedback_timestamp_date ON feedback(DATE(timestam
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:253`
@@ -3356,12 +3935,15 @@ SELECT name FROM sqlite_master WHERE type='table' AND name='feedback_schema_vers
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:259`
@@ -3373,12 +3955,15 @@ SELECT name FROM sqlite_master WHERE type='table' AND name='feedback'
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:265`
@@ -3390,12 +3975,15 @@ SELECT MAX(version) FROM feedback_schema_version
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:290`
@@ -3407,12 +3995,15 @@ CREATE TABLE IF NOT EXISTS feedback_schema_version ( version INTEGER PRIMARY KEY
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:298`
@@ -3424,12 +4015,15 @@ INSERT OR REPLACE INTO feedback_schema_version (version) VALUES (?)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:319`
@@ -3441,12 +4035,15 @@ INSERT INTO feedback_schema_version (version) VALUES (?)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:383`
@@ -3458,12 +4055,15 @@ INSERT INTO feedback (message_id, suggestion_id, action, timestamp, metadata_jso
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:460`
@@ -3475,12 +4075,15 @@ INSERT INTO feedback (message_id, suggestion_id, action, timestamp, metadata_jso
 ```
 
 **Issues found**
+
 - Potential N+1: query executes inside a loop.
 
 **Optimized query / approach**
+
 - Batch parameters and use `executemany()` where possible.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:518`
@@ -3492,12 +4095,15 @@ SELECT id, message_id, suggestion_id, action, timestamp, metadata_json, contact_
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:543`
@@ -3509,12 +4115,15 @@ SELECT id, message_id, suggestion_id, action, timestamp, metadata_json, contact_
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:568`
@@ -3526,12 +4135,15 @@ SELECT id, message_id, suggestion_id, action, timestamp, metadata_json, contact_
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:597`
@@ -3543,12 +4155,15 @@ SELECT id, message_id, suggestion_id, action, timestamp, metadata_json, contact_
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:712`
@@ -3560,12 +4175,15 @@ SELECT COUNT(*) FROM feedback
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:743`
@@ -3577,12 +4195,15 @@ DELETE FROM feedback WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:753`
@@ -3594,12 +4215,15 @@ DELETE FROM feedback
 ```
 
 **Issues found**
+
 - Full-table delete detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:764`
@@ -3611,12 +4235,15 @@ SELECT COUNT(*) FROM feedback
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:767`
@@ -3628,12 +4255,15 @@ SELECT action, COUNT(*) as count FROM feedback GROUP BY action
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:800`
@@ -3645,12 +4275,15 @@ SELECT DATE(timestamp) as date, COUNT(*) as total, SUM(CASE WHEN action = 'accep
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/eval/feedback.py:840`
@@ -3662,12 +4295,15 @@ SELECT contact_id, COUNT(*) as total, SUM(CASE WHEN action = 'accepted' THEN 1 E
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/graph/builder.py:233`
@@ -3679,12 +4315,15 @@ SELECT id, chat_id, display_name, phone_or_email, relationship, style_notes, han
 ```
 
 **Issues found**
+
 - Missing index candidate(s): contacts.display_name
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_contacts_display_name ON contacts(display_name);`
 
 ### `jarvis/graph/knowledge_graph.py:104`
@@ -3696,12 +4335,15 @@ SELECT contact_id, contact_name, relationship, message_count FROM contact_profil
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/graph/knowledge_graph.py:139`
@@ -3713,12 +4355,15 @@ SELECT contact_id, category, subject, predicate, value, confidence FROM contact_
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/observability/metrics_router.py:135`
@@ -3730,12 +4375,15 @@ CREATE TABLE IF NOT EXISTS routing_metrics ( id INTEGER PRIMARY KEY AUTOINCREMEN
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/observability/metrics_router.py:172`
@@ -3747,12 +4395,15 @@ CREATE INDEX IF NOT EXISTS idx_routing_metrics_timestamp ON routing_metrics(time
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/observability/metrics_router.py:178`
@@ -3764,12 +4415,15 @@ CREATE INDEX IF NOT EXISTS idx_routing_metrics_decision ON routing_metrics(routi
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/observability/metrics_router.py:259`
@@ -3781,12 +4435,15 @@ INSERT INTO routing_metrics ( timestamp, query_hash, routing_decision, similarit
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/observability/metrics_router.py:459`
@@ -3798,12 +4455,15 @@ SELECT COUNT(*) as cnt FROM routing_metrics {expr}
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/observability/metrics_router.py:571`
@@ -3815,12 +4475,15 @@ SELECT * FROM routing_metrics ORDER BY timestamp DESC
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/observability/metrics_validation.py:131`
@@ -3832,12 +4495,15 @@ SELECT timestamp, query_hash, routing_decision FROM routing_metrics WHERE timest
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/observability/metrics_validation.py:137`
@@ -3849,12 +4515,15 @@ SELECT timestamp, query_hash, routing_decision FROM routing_metrics
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/cache.py:270`
@@ -3866,12 +4535,15 @@ CREATE TABLE IF NOT EXISTS cache_entries ( key TEXT PRIMARY KEY, value BLOB NOT 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/cache.py:281`
@@ -3883,12 +4555,15 @@ CREATE INDEX IF NOT EXISTS idx_cache_created_at ON cache_entries(created_at)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/cache.py:283`
@@ -3900,12 +4575,15 @@ CREATE INDEX IF NOT EXISTS idx_cache_accessed_at ON cache_entries(accessed_at)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/cache.py:284`
@@ -3917,12 +4595,15 @@ CREATE INDEX IF NOT EXISTS idx_cache_ttl ON cache_entries(created_at, ttl_second
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/cache.py:301`
@@ -3934,12 +4615,15 @@ SELECT key, value, value_type, created_at, accessed_at, ttl_seconds, access_coun
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/cache.py:344`
@@ -3951,12 +4635,15 @@ UPDATE cache_entries SET accessed_at = ?, access_count = access_count + 1 WHERE 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/cache.py:368`
@@ -3968,12 +4655,15 @@ INSERT OR REPLACE INTO cache_entries (key, value, value_type, created_at, access
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/cache.py:399`
@@ -3985,12 +4675,15 @@ DELETE FROM cache_entries WHERE key = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/cache.py:414`
@@ -4002,13 +4695,16 @@ DELETE FROM cache_entries WHERE tags_json LIKE ?
 ```
 
 **Issues found**
+
 - LIKE predicate may bypass indexes for leading-wildcard search values.
 - Missing index candidate(s): cache_entries.tags_json
 
 **Optimized query / approach**
+
 - Prefer prefix-search patterns or FTS for substring matching.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_cache_entries_tags_json ON cache_entries(tags_json);`
 
 ### `jarvis/prefetch/cache.py:431`
@@ -4020,12 +4716,15 @@ DELETE FROM cache_entries WHERE (? - created_at) > ttl_seconds
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/cache.py:444`
@@ -4037,12 +4736,15 @@ DELETE FROM cache_entries
 ```
 
 **Issues found**
+
 - Full-table delete detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/cache.py:450`
@@ -4054,12 +4756,15 @@ SELECT key FROM cache_entries
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/cache.py:456`
@@ -4071,12 +4776,15 @@ SELECT COUNT(*) as entries, SUM(size_bytes) as total_bytes, AVG(access_count) as
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/predictor.py:233`
@@ -4088,12 +4796,15 @@ SELECT chat.guid as chat_id, COUNT(*) as msg_count, MAX(message.date) as last_ms
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/prefetch/predictor.py:353`
@@ -4105,12 +4816,15 @@ SELECT chat.guid as chat_id, message.date as msg_date FROM message JOIN chat_mes
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/router.py:438`
@@ -4122,12 +4836,15 @@ SELECT COUNT(*) as cnt FROM vec_chunks
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:410`
@@ -4139,12 +4856,15 @@ CREATE TABLE IF NOT EXISTS message_embeddings ( message_id INTEGER PRIMARY KEY, 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:423`
@@ -4156,12 +4876,15 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_chat_id ON message_embeddings(chat_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:427`
@@ -4173,12 +4896,15 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_timestamp ON message_embeddings(timest
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:429`
@@ -4190,12 +4916,15 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_sender ON message_embeddings(sender)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:431`
@@ -4207,12 +4936,15 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_is_from_me ON message_embeddings(is_fr
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:433`
@@ -4224,12 +4956,15 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_text_hash ON message_embeddings(text_h
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:435`
@@ -4241,12 +4976,15 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_chat_timestamp ON message_embeddings(c
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:439`
@@ -4258,12 +4996,15 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_sender_time ON message_embeddings(is_f
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:441`
@@ -4275,12 +5016,15 @@ CREATE TABLE IF NOT EXISTS relationship_profiles ( contact_id TEXT PRIMARY KEY, 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:449`
@@ -4292,12 +5036,15 @@ CREATE TABLE IF NOT EXISTS index_stats ( stat_key TEXT PRIMARY KEY, stat_value T
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:490`
@@ -4309,12 +5056,15 @@ SELECT 1 FROM message_embeddings WHERE message_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:503`
@@ -4326,12 +5076,15 @@ INSERT INTO message_embeddings (message_id, chat_id, embedding, text_hash, sende
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:554`
@@ -4343,12 +5096,15 @@ SELECT message_id FROM message_embeddings WHERE message_id IN ({expr})
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:593`
@@ -4360,12 +5116,15 @@ INSERT OR IGNORE INTO message_embeddings (message_id, chat_id, embedding, text_h
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:635`
@@ -4377,12 +5136,15 @@ SELECT message_id, chat_id, embedding, text_preview, sender, sender_name, timest
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:743`
@@ -4394,12 +5156,15 @@ SELECT message_id, chat_id, text_preview, sender, sender_name, timestamp, is_fro
 ```
 
 **Issues found**
+
 - Potential N+1: query executes inside a loop.
 
 **Optimized query / approach**
+
 - Fetch all required rows in one query (`IN (...)`, JOIN, or prefetch) instead of per-iteration calls.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:848`
@@ -4411,12 +5176,15 @@ SELECT COUNT(*) as total, SUM(CASE WHEN is_from_me = 1 THEN 1 ELSE 0 END) as sen
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:867`
@@ -4428,12 +5196,15 @@ SELECT text_preview, is_from_me FROM message_embeddings WHERE chat_id = ? ORDER 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:965`
@@ -4445,12 +5216,15 @@ SELECT timestamp, is_from_me FROM message_embeddings WHERE chat_id = ? ORDER BY 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:1006`
@@ -4462,12 +5236,15 @@ SELECT COUNT(*) FROM message_embeddings
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:1007`
@@ -4479,12 +5256,15 @@ SELECT COUNT(DISTINCT chat_id) FROM message_embeddings
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:1010`
@@ -4496,12 +5276,15 @@ SELECT MIN(timestamp) FROM message_embeddings
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:1011`
@@ -4513,12 +5296,15 @@ SELECT MAX(timestamp) FROM message_embeddings
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:1025`
@@ -4530,12 +5316,15 @@ DELETE FROM message_embeddings
 ```
 
 **Issues found**
+
 - Full-table delete detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:1026`
@@ -4547,12 +5336,15 @@ DELETE FROM relationship_profiles
 ```
 
 **Issues found**
+
 - Full-table delete detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/embeddings.py:1027`
@@ -4564,12 +5356,15 @@ DELETE FROM index_stats
 ```
 
 **Issues found**
+
 - Full-table delete detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/ingest.py:27`
@@ -4581,14 +5376,17 @@ SELECT p.ZFULLNUMBER as identifier, c.ZFIRSTNAME as first_name, c.ZLASTNAME as l
 ```
 
 **Issues found**
+
 - Potential N+1: query executes inside a loop.
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - Fetch all required rows in one query (`IN (...)`, JOIN, or prefetch) instead of per-iteration calls.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:123`
@@ -4600,12 +5398,15 @@ CREATE TABLE IF NOT EXISTS schema_version ( version INTEGER PRIMARY KEY )
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:132`
@@ -4617,12 +5418,15 @@ SELECT version FROM schema_version LIMIT 1
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:138`
@@ -4634,12 +5438,15 @@ CREATE TABLE IF NOT EXISTS embeddings ( message_id INTEGER PRIMARY KEY, chat_id 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:149`
@@ -4651,12 +5458,15 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_chat_id ON embeddings(chat_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:155`
@@ -4668,12 +5478,15 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_text_hash ON embeddings(text_hash)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:163`
@@ -4685,12 +5498,15 @@ DELETE FROM schema_version
 ```
 
 **Issues found**
+
 - Full-table delete detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:164`
@@ -4702,12 +5518,15 @@ INSERT INTO schema_version (version) VALUES (?)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:181`
@@ -4719,12 +5538,15 @@ SELECT embedding FROM embeddings WHERE message_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:205`
@@ -4736,12 +5558,15 @@ SELECT message_id, embedding FROM embeddings WHERE message_id IN ({expr})
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:231`
@@ -4753,12 +5578,15 @@ INSERT OR REPLACE INTO embeddings (message_id, chat_id, text_hash, embedding, cr
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:262`
@@ -4770,12 +5598,15 @@ INSERT OR REPLACE INTO embeddings (message_id, chat_id, text_hash, embedding, cr
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:289`
@@ -4787,12 +5618,15 @@ DELETE FROM embeddings WHERE message_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:303`
@@ -4804,12 +5638,15 @@ DELETE FROM embeddings WHERE chat_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:313`
@@ -4821,12 +5658,15 @@ DELETE FROM embeddings
 ```
 
 **Issues found**
+
 - Full-table delete detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:324`
@@ -4838,12 +5678,15 @@ SELECT COUNT(*) as count FROM embeddings
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/semantic_search.py:329`
@@ -4855,12 +5698,15 @@ SELECT SUM(LENGTH(embedding)) as size FROM embeddings
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:113`
@@ -4872,12 +5718,15 @@ SELECT name FROM sqlite_master WHERE type='table' AND name='vec_messages'
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:137`
@@ -4889,12 +5738,15 @@ INSERT INTO vec_messages( rowid, embedding, chat_id, text_preview, sender, times
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:200`
@@ -4906,12 +5758,15 @@ INSERT INTO vec_messages( rowid, embedding, chat_id, text_preview, sender, times
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:287`
@@ -4923,12 +5778,15 @@ INSERT INTO vec_chunks( embedding, contact_id, chat_id, response_da_type, source
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:327`
@@ -4940,12 +5798,15 @@ INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8) VALUES (vec_bit(?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:411`
@@ -4957,12 +5818,15 @@ INSERT INTO vec_chunks( embedding, contact_id, chat_id, response_da_type, source
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:463`
@@ -4974,12 +5838,15 @@ INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8) VALUES (vec_bit(?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:484`
@@ -4991,12 +5858,15 @@ SELECT rowid FROM vec_chunks WHERE chat_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:495`
@@ -5008,12 +5878,15 @@ DELETE FROM vec_binary WHERE chunk_rowid IN ({expr})
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:502`
@@ -5025,12 +5898,15 @@ DELETE FROM vec_chunks WHERE chat_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:592`
@@ -5042,12 +5918,15 @@ SELECT rowid, distance, chat_id, trigger_text, response_text, response_da_type, 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:673`
@@ -5059,12 +5938,15 @@ SELECT rowid, chunk_rowid, embedding_int8 FROM vec_binary WHERE embedding MATCH 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:707`
@@ -5076,12 +5958,15 @@ SELECT rowid, chat_id, trigger_text, response_text, response_da_type, response_d
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:757`
@@ -5093,12 +5978,15 @@ SELECT name FROM sqlite_master WHERE type='table' AND name='vec_binary'
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:765`
@@ -5110,12 +5998,15 @@ SELECT COUNT(*) FROM vec_binary
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:771`
@@ -5127,12 +6018,15 @@ SELECT rowid, embedding FROM vec_chunks
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:786`
@@ -5144,12 +6038,15 @@ INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8) VALUES (vec_bit(?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:795`
@@ -5161,12 +6058,15 @@ INSERT INTO vec_binary(embedding, chunk_rowid, embedding_int8) VALUES (vec_bit(?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:813`
@@ -5178,12 +6078,15 @@ SELECT count(*) FROM vec_messages
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/search/vec_search.py:816`
@@ -5195,12 +6098,15 @@ SELECT count(DISTINCT chat_id) FROM vec_messages
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/setup.py:231`
@@ -5212,12 +6118,15 @@ SELECT name FROM sqlite_master WHERE type='table'
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/auto_tagger.py:514`
@@ -5229,15 +6138,18 @@ SELECT t.id, t.name, COUNT(*) as count FROM tags t JOIN conversation_tags ct ON 
 ```
 
 **Issues found**
+
 - Potential N+1: query executes inside a loop.
 - LIKE predicate may bypass indexes for leading-wildcard search values.
 - Missing index candidate(s): tag_usage_history.action, tag_usage_history.context_json
 - JOIN efficiency risk: join/filter columns include non-indexed fields.
 
 **Optimized query / approach**
+
 - Fetch all required rows in one query (`IN (...)`, JOIN, or prefetch) instead of per-iteration calls.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_tag_usage_history_action ON tag_usage_history(action);`
 - `CREATE INDEX IF NOT EXISTS idx_tag_usage_history_context_json ON tag_usage_history(context_json);`
 
@@ -5250,12 +6162,15 @@ INSERT INTO tag_usage_history (tag_id, chat_id, action, context_json, created_at
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:70`
@@ -5267,12 +6182,15 @@ CREATE TABLE IF NOT EXISTS tags ( id INTEGER PRIMARY KEY, name TEXT NOT NULL, co
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:85`
@@ -5284,12 +6202,15 @@ CREATE TABLE IF NOT EXISTS conversation_tags ( chat_id TEXT NOT NULL, tag_id INT
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:95`
@@ -5301,12 +6222,15 @@ CREATE TABLE IF NOT EXISTS smart_folders ( id INTEGER PRIMARY KEY, name TEXT NOT
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:108`
@@ -5318,12 +6242,15 @@ CREATE TABLE IF NOT EXISTS tag_rules ( id INTEGER PRIMARY KEY, name TEXT NOT NUL
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:122`
@@ -5335,12 +6262,15 @@ CREATE TABLE IF NOT EXISTS tag_usage_history ( id INTEGER PRIMARY KEY, tag_id IN
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:132`
@@ -5352,12 +6282,15 @@ CREATE INDEX IF NOT EXISTS idx_tags_parent ON tags(parent_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:135`
@@ -5369,12 +6302,15 @@ CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:136`
@@ -5386,12 +6322,15 @@ CREATE INDEX IF NOT EXISTS idx_conv_tags_chat ON conversation_tags(chat_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:137`
@@ -5403,12 +6342,15 @@ CREATE INDEX IF NOT EXISTS idx_conv_tags_tag ON conversation_tags(tag_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:138`
@@ -5420,12 +6362,15 @@ CREATE INDEX IF NOT EXISTS idx_tag_rules_trigger ON tag_rules(trigger, is_enable
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:139`
@@ -5437,12 +6382,15 @@ CREATE INDEX IF NOT EXISTS idx_tag_usage_tag ON tag_usage_history(tag_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:140`
@@ -5454,12 +6402,15 @@ CREATE INDEX IF NOT EXISTS idx_tag_usage_chat ON tag_usage_history(chat_id)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:267`
@@ -5471,12 +6422,15 @@ SELECT name FROM sqlite_master WHERE type='table' AND name='tags'
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:279`
@@ -5488,12 +6442,15 @@ INSERT OR IGNORE INTO smart_folders (name, icon, color, rules_json, is_default, 
 ```
 
 **Issues found**
+
 - Potential N+1: query executes inside a loop.
 
 **Optimized query / approach**
+
 - Batch parameters and use `executemany()` where possible.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:297`
@@ -5505,12 +6462,15 @@ INSERT OR IGNORE INTO tags (name, color, icon, is_system, sort_order) VALUES (?,
 ```
 
 **Issues found**
+
 - Potential N+1: query executes inside a loop.
 
 **Optimized query / approach**
+
 - Batch parameters and use `executemany()` where possible.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:351`
@@ -5522,12 +6482,15 @@ INSERT INTO tags (name, color, icon, parent_id, description, aliases_json, creat
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:384`
@@ -5539,12 +6502,15 @@ SELECT * FROM tags WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:397`
@@ -5556,12 +6522,15 @@ SELECT * FROM tags WHERE name = ? AND parent_id IS NULL
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:401`
@@ -5573,12 +6542,15 @@ SELECT * FROM tags WHERE name = ? AND parent_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:440`
@@ -5590,12 +6562,15 @@ SELECT * FROM tags WHERE {expr} ORDER BY sort_order, name
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:517`
@@ -5607,12 +6582,15 @@ UPDATE tags SET {expr} WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:532`
@@ -5624,12 +6602,15 @@ DELETE FROM tags WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:563`
@@ -5641,13 +6622,16 @@ SELECT * FROM tags WHERE LOWER(name) LIKE ? OR LOWER(aliases_json) LIKE ? ORDER 
 ```
 
 **Issues found**
+
 - Potential non-sargable predicate: function-wrapped column in WHERE.
 - LIKE predicate may bypass indexes for leading-wildcard search values.
 
 **Optimized query / approach**
+
 - Use an expression index or normalized shadow column for this predicate.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:603`
@@ -5659,12 +6643,15 @@ INSERT INTO conversation_tags (chat_id, tag_id, added_by, confidence, added_at) 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:624`
@@ -5676,12 +6663,15 @@ DELETE FROM conversation_tags WHERE chat_id = ? AND tag_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:641`
@@ -5693,12 +6683,15 @@ SELECT t.*, ct.added_at, ct.added_by, ct.confidence FROM tags t JOIN conversatio
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:669`
@@ -5710,12 +6703,15 @@ SELECT chat_id FROM conversation_tags WHERE tag_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:698`
@@ -5727,12 +6723,15 @@ SELECT chat_id FROM conversation_tags WHERE tag_id IN ({expr}) GROUP BY chat_id 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:708`
@@ -5744,12 +6743,15 @@ SELECT DISTINCT chat_id FROM conversation_tags WHERE tag_id IN ({expr})
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:736`
@@ -5761,12 +6763,15 @@ INSERT INTO conversation_tags (chat_id, tag_id, added_by, added_at) VALUES (?, ?
 ```
 
 **Issues found**
+
 - Potential N+1: query executes inside a loop.
 
 **Optimized query / approach**
+
 - Batch parameters and use `executemany()` where possible.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:767`
@@ -5778,12 +6783,15 @@ DELETE FROM conversation_tags WHERE chat_id IN ({expr}) AND tag_id IN ({expr})
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:791`
@@ -5795,12 +6803,15 @@ DELETE FROM conversation_tags WHERE chat_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:796`
@@ -5812,12 +6823,15 @@ INSERT INTO conversation_tags (chat_id, tag_id, added_by, added_at) VALUES (?, ?
 ```
 
 **Issues found**
+
 - Potential N+1: query executes inside a loop.
 
 **Optimized query / approach**
+
 - Batch parameters and use `executemany()` where possible.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:819`
@@ -5829,12 +6843,15 @@ INSERT INTO smart_folders (name, icon, color, rules_json, created_at, updated_at
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:846`
@@ -5846,12 +6863,15 @@ SELECT * FROM smart_folders WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:859`
@@ -5863,12 +6883,15 @@ SELECT * FROM smart_folders ORDER BY is_default DESC, sort_order, name
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:863`
@@ -5880,12 +6903,15 @@ SELECT * FROM smart_folders WHERE is_default = FALSE ORDER BY sort_order, name
 ```
 
 **Issues found**
+
 - Missing index candidate(s): smart_folders.is_default
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_smart_folders_is_default ON smart_folders(is_default);`
 
 ### `jarvis/tags/manager.py:911`
@@ -5897,12 +6923,15 @@ UPDATE smart_folders SET {expr} WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:926`
@@ -5914,12 +6943,15 @@ DELETE FROM smart_folders WHERE id = ? AND is_default = FALSE
 ```
 
 **Issues found**
+
 - Missing index candidate(s): smart_folders.is_default
 
 **Optimized query / approach**
+
 - Keep query shape and add supporting index(es) below.
 
 **Suggested indexes**
+
 - `CREATE INDEX IF NOT EXISTS idx_smart_folders_is_default ON smart_folders(is_default);`
 
 ### `jarvis/tags/manager.py:942`
@@ -5931,12 +6963,15 @@ INSERT INTO tag_rules (name, trigger, conditions_json, tag_ids_json, priority, i
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:966`
@@ -5948,12 +6983,15 @@ SELECT * FROM tag_rules WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:987`
@@ -5965,12 +7003,15 @@ SELECT * FROM tag_rules WHERE {expr} ORDER BY priority DESC, name
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:999`
@@ -5982,12 +7023,15 @@ UPDATE tag_rules SET name = ?, trigger = ?, conditions_json = ?, tag_ids_json = 
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:1022`
@@ -5999,12 +7043,15 @@ DELETE FROM tag_rules WHERE id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:1028`
@@ -6016,12 +7063,15 @@ UPDATE tag_rules SET last_triggered_at = ?, trigger_count = trigger_count + 1 WH
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:1046`
@@ -6033,12 +7083,15 @@ SELECT COUNT(*) FROM tags
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:1049`
@@ -6050,12 +7103,15 @@ SELECT chat_id, COUNT(*) as count FROM conversation_tags GROUP BY chat_id
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:1060`
@@ -6067,12 +7123,15 @@ SELECT t.id, t.name, COUNT(ct.chat_id) as usage_count FROM tags t LEFT JOIN conv
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:1087`
@@ -6084,12 +7143,15 @@ SELECT t.*, COUNT(*) as co_count FROM tags t JOIN conversation_tags ct ON t.id =
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/tags/manager.py:1163`
@@ -6101,12 +7163,15 @@ INSERT INTO tag_usage_history (tag_id, chat_id, action, context_json, created_at
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/watcher.py:533`
@@ -6118,12 +7183,15 @@ SELECT name FROM sqlite_master WHERE type='table'
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/watcher.py:575`
@@ -6135,12 +7203,15 @@ SELECT MAX(ROWID) FROM message
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `jarvis/watcher.py:632`
@@ -6152,12 +7223,15 @@ SELECT message.ROWID as id, chat.guid as chat_id, COALESCE(handle.id, 'me') as s
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `scripts/build_fact_goldset.py:354`
@@ -6169,12 +7243,15 @@ SELECT m.ROWID AS message_id, m.text AS message_text, m.date AS message_date_raw
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `scripts/build_fact_goldset.py:375`
@@ -6186,12 +7263,15 @@ SELECT m.ROWID AS message_id, m.text AS message_text, m.date AS message_date_raw
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `scripts/extract_and_validate_facts.py:102`
@@ -6203,12 +7283,15 @@ SELECT m.text, m.ROWID, c.chat_identifier FROM message m JOIN chat_message_join 
 ```
 
 **Issues found**
+
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `scripts/prepare_gliner_training.py:148`
@@ -6220,13 +7303,16 @@ SELECT m.text, m.date, c.display_name FROM message m JOIN chat_message_join cmj 
 ```
 
 **Issues found**
+
 - Potential non-sargable predicate: function-wrapped column in WHERE.
 - JOIN index coverage not fully verifiable for external-schema tables.
 
 **Optimized query / approach**
+
 - Use an expression index or normalized shadow column for this predicate.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_db.py:64`
@@ -6238,12 +7324,15 @@ SELECT name FROM sqlite_master WHERE type='table' ORDER BY name
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_db.py:86`
@@ -6255,12 +7344,15 @@ SELECT version FROM schema_version
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_db.py:1027`
@@ -6272,12 +7364,15 @@ UPDATE pairs SET is_holdout = FALSE
 ```
 
 **Issues found**
+
 - Full-table update detected (verify intent).
 
 **Optimized query / approach**
+
 - If not maintenance/reset behavior, add WHERE predicates.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_db.py:1044`
@@ -6289,12 +7384,15 @@ UPDATE pairs SET is_holdout = TRUE WHERE contact_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_db.py:1061`
@@ -6306,12 +7404,15 @@ UPDATE pairs SET is_holdout = TRUE WHERE contact_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_db.py:1111`
@@ -6323,12 +7424,15 @@ UPDATE pairs SET is_holdout = TRUE WHERE contact_id = ?
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_db.py:1912`
@@ -6340,12 +7444,15 @@ INSERT INTO contacts (display_name, chat_id) VALUES (?, ?)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_db.py:1917`
@@ -6357,12 +7464,15 @@ INSERT INTO contacts (display_name, chat_id) VALUES (?, ?)
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_embeddings.py:238`
@@ -6374,12 +7484,15 @@ SELECT name FROM sqlite_master WHERE type='table'
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_feedback.py:57`
@@ -6391,12 +7504,15 @@ SELECT name FROM sqlite_master WHERE type='table' AND name='feedback'
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_feedback.py:84`
@@ -6408,12 +7524,15 @@ SELECT name FROM sqlite_master WHERE type='index'
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_feedback.py:104`
@@ -6425,12 +7544,15 @@ SELECT version FROM feedback_schema_version ORDER BY version DESC LIMIT 1
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_metrics_router.py:95`
@@ -6442,12 +7564,15 @@ SELECT COUNT(*) FROM routing_metrics
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_metrics_router.py:116`
@@ -6459,12 +7584,15 @@ SELECT COUNT(*) FROM routing_metrics
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_metrics_router.py:135`
@@ -6476,12 +7604,15 @@ SELECT COUNT(*) FROM routing_metrics
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_metrics_router.py:151`
@@ -6493,12 +7624,15 @@ SELECT name FROM sqlite_master WHERE type='table'
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_metrics_router.py:156`
@@ -6510,12 +7644,15 @@ SELECT name FROM sqlite_master WHERE type='index'
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_metrics_router.py:179`
@@ -6527,12 +7664,15 @@ SELECT * FROM routing_metrics
 ```
 
 **Issues found**
+
 - Potential full-table scan: SELECT without WHERE/LIMIT.
 
 **Optimized query / approach**
+
 - Add WHERE and/or LIMIT when full scan is not required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_metrics_router.py:219`
@@ -6544,12 +7684,15 @@ SELECT COUNT(*) FROM routing_metrics
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_metrics_router.py:243`
@@ -6561,12 +7704,15 @@ SELECT COUNT(*) FROM routing_metrics
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_metrics_router.py:406`
@@ -6578,12 +7724,15 @@ SELECT COUNT(*) FROM routing_metrics
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_metrics_router.py:427`
@@ -6595,12 +7744,15 @@ SELECT COUNT(*) FROM routing_metrics
 ```
 
 **Issues found**
+
 - Potential full-table scan: `COUNT(*)` without WHERE filter.
 
 **Optimized query / approach**
+
 - Keep for explicit global metrics only; otherwise add selective filters.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:206`
@@ -6612,12 +7764,15 @@ CREATE TABLE message ( ROWID INTEGER PRIMARY KEY, text TEXT, date INTEGER, is_fr
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:218`
@@ -6629,12 +7784,15 @@ CREATE TABLE chat ( ROWID INTEGER PRIMARY KEY, guid TEXT, display_name TEXT )
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:227`
@@ -6646,12 +7804,15 @@ CREATE TABLE handle ( ROWID INTEGER PRIMARY KEY, id TEXT )
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:235`
@@ -6663,12 +7824,15 @@ CREATE TABLE chat_message_join ( chat_id INTEGER, message_id INTEGER )
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:243`
@@ -6680,12 +7844,15 @@ CREATE TABLE chat_handle_join ( chat_id INTEGER, handle_id INTEGER )
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:272`
@@ -6697,12 +7864,15 @@ CREATE TABLE message ( ROWID INTEGER PRIMARY KEY, text TEXT, date INTEGER, is_fr
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:284`
@@ -6714,12 +7884,15 @@ CREATE TABLE chat ( ROWID INTEGER PRIMARY KEY, guid TEXT, display_name TEXT, ser
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:294`
@@ -6731,12 +7904,15 @@ CREATE TABLE handle ( ROWID INTEGER PRIMARY KEY, id TEXT )
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:302`
@@ -6748,12 +7924,15 @@ CREATE TABLE chat_message_join ( chat_id INTEGER, message_id INTEGER )
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:310`
@@ -6765,12 +7944,15 @@ CREATE TABLE chat_handle_join ( chat_id INTEGER, handle_id INTEGER )
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:869`
@@ -6782,12 +7964,15 @@ CREATE TABLE message ( ROWID INTEGER PRIMARY KEY, custom_column TEXT )
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:877`
@@ -6799,12 +7984,15 @@ CREATE TABLE chat ( ROWID INTEGER PRIMARY KEY )
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:884`
@@ -6816,12 +8004,15 @@ CREATE TABLE handle ( ROWID INTEGER PRIMARY KEY )
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:891`
@@ -6833,12 +8024,15 @@ CREATE TABLE chat_message_join ( chat_id INTEGER, message_id INTEGER )
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
+
 - None.
 
 ### `tests/unit/test_setup.py:899`
@@ -6850,11 +8044,13 @@ CREATE TABLE chat_handle_join ( chat_id INTEGER, handle_id INTEGER )
 ```
 
 **Issues found**
+
 - No material issue detected.
 
 **Optimized query / approach**
+
 - No query rewrite required.
 
 **Suggested indexes**
-- None.
 
+- None.

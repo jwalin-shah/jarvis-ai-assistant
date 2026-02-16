@@ -38,11 +38,11 @@ bash tools/multi-agent/hub.sh teardown
 
 ## Lane Architecture
 
-| Lane | Default Agent | Branch | Ownership |
-|------|---------------|--------|-----------|
-| A | codex | lane-a/app | `desktop/`, `api/`, `jarvis/router.py`, `jarvis/prompts.py`, `jarvis/retrieval/` |
-| B | claude | lane-b/ml | `models/`, `jarvis/classifiers/`, `jarvis/extractors/`, `jarvis/graph/`, `scripts/train`, `scripts/extract` |
-| C | gemini | lane-c/qa | `tests/`, `benchmarks/`, `evals/` |
+| Lane | Default Agent | Branch     | Ownership                                                                                                   |
+| ---- | ------------- | ---------- | ----------------------------------------------------------------------------------------------------------- |
+| A    | codex         | lane-a/app | `desktop/`, `api/`, `jarvis/router.py`, `jarvis/prompts.py`, `jarvis/retrieval/`                            |
+| B    | claude        | lane-b/ml  | `models/`, `jarvis/classifiers/`, `jarvis/extractors/`, `jarvis/graph/`, `scripts/train`, `scripts/extract` |
+| C    | gemini        | lane-c/qa  | `tests/`, `benchmarks/`, `evals/`                                                                           |
 
 Shared paths (require cross-lane approval): `jarvis/contracts/`
 
@@ -107,13 +107,14 @@ LANE_C_AGENT=opencode bash tools/multi-agent/hub.sh setup
 
 The system automatically reviews completed lanes and reworks rejected ones:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HUB_AUTO_REVIEW` | `1` | Auto-trigger review when lane completes |
-| `HUB_AUTO_REWORK` | `1` | Auto-rework rejected lanes with feedback |
-| `HUB_MAX_RETRIES` | `3` | Max rework attempts before manual intervention |
+| Variable          | Default | Description                                    |
+| ----------------- | ------- | ---------------------------------------------- |
+| `HUB_AUTO_REVIEW` | `1`     | Auto-trigger review when lane completes        |
+| `HUB_AUTO_REWORK` | `1`     | Auto-rework rejected lanes with feedback       |
+| `HUB_MAX_RETRIES` | `3`     | Max rework attempts before manual intervention |
 
 Disable for manual control:
+
 ```bash
 HUB_AUTO_REVIEW=0 HUB_AUTO_REWORK=0 bash tools/multi-agent/hub.sh dispatch tasks/big.md
 ```
@@ -134,17 +135,22 @@ bash tools/multi-agent/hub.sh rework a
 
 ```markdown
 ## Lane A
+
 Specific task for Lane A. Use markdown.
+
 - Bullet points
 - Code examples
 
 ## Lane B
+
 IDLE
 
 ## Lane C
+
 Another task here.
 
 ## Shared Notes (optional)
+
 Any content after all 3 lanes is ignored by the parser.
 ```
 
@@ -153,6 +159,7 @@ Use `IDLE` (case-insensitive) to skip a lane.
 ## Common Workflows
 
 ### Parallel Feature Development
+
 ```bash
 bash tools/multi-agent/hub.sh setup
 bash tools/multi-agent/hub.sh dispatch tasks/feature-x.md
@@ -161,6 +168,7 @@ bash tools/multi-agent/hub.sh merge
 ```
 
 ### Fire-and-Forget Standalone Tasks
+
 ```bash
 # Run multiple audits in parallel
 bash tools/multi-agent/hub.sh run codex "Audit SQL queries"
@@ -170,6 +178,7 @@ bash tools/multi-agent/hub.sh watch        # Monitor all tasks
 ```
 
 ### Mixed Workflow (Lanes + Standalone)
+
 ```bash
 bash tools/multi-agent/hub.sh setup
 bash tools/multi-agent/hub.sh dispatch tasks/refactor.md

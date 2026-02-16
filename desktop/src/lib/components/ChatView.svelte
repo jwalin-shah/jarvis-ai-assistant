@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { tick } from "svelte";
-  import { jarvis } from "../socket/client";
+  import { tick } from 'svelte';
+  import { jarvis } from '../socket/client';
 
   interface ChatMessage {
-    role: "user" | "assistant";
+    role: 'user' | 'assistant';
     content: string;
   }
 
   let messages = $state<ChatMessage[]>([]);
-  let inputText = $state("");
+  let inputText = $state('');
   let isGenerating = $state(false);
-  let streamingContent = $state("");
+  let streamingContent = $state('');
   let messagesAreaRef = $state<HTMLDivElement | null>(null);
   let inputRef = $state<HTMLTextAreaElement | null>(null);
 
@@ -19,7 +19,7 @@
     if (messagesAreaRef) {
       messagesAreaRef.scrollTo({
         top: messagesAreaRef.scrollHeight,
-        behavior: instant ? "instant" : "smooth",
+        behavior: instant ? 'instant' : 'smooth',
       });
     }
   }
@@ -29,23 +29,23 @@
     if (!text || isGenerating) return;
 
     // Add user message
-    messages.push({ role: "user", content: text });
-    inputText = "";
+    messages.push({ role: 'user', content: text });
+    inputText = '';
     isGenerating = true;
-    streamingContent = "";
+    streamingContent = '';
     await scrollToBottom(true);
 
     // Reset textarea height
-    if (inputRef) inputRef.style.height = "auto";
+    if (inputRef) inputRef.style.height = 'auto';
 
     // Safety timeout to prevent stuck input (30 seconds)
     const safetyTimeout = setTimeout(() => {
       if (isGenerating) {
-        console.warn("[Chat] Safety timeout triggered - resetting input state");
+        console.warn('[Chat] Safety timeout triggered - resetting input state');
         isGenerating = false;
         messages.push({
-          role: "assistant",
-          content: "Response timed out. Please try again.",
+          role: 'assistant',
+          content: 'Response timed out. Please try again.',
         });
       }
     }, 30000);
@@ -57,8 +57,8 @@
         content: m.content,
       }));
 
-      console.log("[Chat] Starting chatStream with history length:", history.length);
-      
+      console.log('[Chat] Starting chatStream with history length:', history.length);
+
       await jarvis.chatStream(text, history, (token) => {
         streamingContent += token;
         // Auto-scroll during streaming
@@ -67,16 +67,16 @@
         }
       });
 
-      console.log("[Chat] chatStream completed successfully");
-      
+      console.log('[Chat] chatStream completed successfully');
+
       // Finalize assistant message
-      messages.push({ role: "assistant", content: streamingContent.trim() });
-      streamingContent = "";
+      messages.push({ role: 'assistant', content: streamingContent.trim() });
+      streamingContent = '';
     } catch (error) {
-      console.error("[Chat] Error in chatStream:", error);
+      console.error('[Chat] Error in chatStream:', error);
       messages.push({
-        role: "assistant",
-        content: "Sorry, something went wrong. Please try again.",
+        role: 'assistant',
+        content: 'Sorry, something went wrong. Please try again.',
       });
     } finally {
       clearTimeout(safetyTimeout);
@@ -88,13 +88,13 @@
 
   function clearChat() {
     messages = [];
-    streamingContent = "";
+    streamingContent = '';
     isGenerating = false;
     inputRef?.focus();
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       sendMessage();
     }
@@ -102,21 +102,35 @@
 
   function autoResize(event: Event) {
     const target = event.target as HTMLTextAreaElement;
-    target.style.height = "auto";
-    target.style.height = Math.min(target.scrollHeight, 150) + "px";
+    target.style.height = 'auto';
+    target.style.height = Math.min(target.scrollHeight, 150) + 'px';
   }
 </script>
 
 <div class="chat-container">
   <div class="chat-header">
     <div class="header-title">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        width="20"
+        height="20"
+      >
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
       <span>Chat</span>
     </div>
     <button class="new-chat-btn" onclick={clearChat} title="New Chat">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        width="16"
+        height="16"
+      >
         <line x1="12" y1="5" x2="12" y2="19"></line>
         <line x1="5" y1="12" x2="19" y2="12"></line>
       </svg>
@@ -128,7 +142,14 @@
     {#if messages.length === 0 && !streamingContent}
       <div class="empty-state">
         <div class="empty-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            width="48"
+            height="48"
+          >
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
         </div>
@@ -137,7 +158,11 @@
       </div>
     {:else}
       {#each messages as msg}
-        <div class="message" class:user={msg.role === "user"} class:assistant={msg.role === "assistant"}>
+        <div
+          class="message"
+          class:user={msg.role === 'user'}
+          class:assistant={msg.role === 'assistant'}
+        >
           <div class="bubble">
             {msg.content}
           </div>
@@ -171,7 +196,14 @@
         disabled={!inputText.trim() || isGenerating}
         title="Send (Enter)"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          width="18"
+          height="18"
+        >
           <line x1="22" y1="2" x2="11" y2="13"></line>
           <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
         </svg>
@@ -314,7 +346,9 @@
   }
 
   @keyframes blink {
-    50% { opacity: 0; }
+    50% {
+      opacity: 0;
+    }
   }
 
   .input-area {

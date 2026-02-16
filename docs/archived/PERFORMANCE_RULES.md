@@ -8,13 +8,13 @@
 
 Development built code without performance testing against realistic data (400k messages). Result: 5 critical performance bugs:
 
-| Issue | Impact | Root Cause |
-|-------|--------|-----------|
-| Conversations query | 1400ms startup | 5 correlated subqueries |
-| Message loading | 500ms per page | N+1 on attachments/reactions |
-| Fact extraction | 150ms per batch | N individual INSERTs |
-| Search filtering | 5x data wastage | Post-query filtering in code |
-| Graph building | 200ms startup | Sequential add_node() calls |
+| Issue               | Impact          | Root Cause                   |
+| ------------------- | --------------- | ---------------------------- |
+| Conversations query | 1400ms startup  | 5 correlated subqueries      |
+| Message loading     | 500ms per page  | N+1 on attachments/reactions |
+| Fact extraction     | 150ms per batch | N individual INSERTs         |
+| Search filtering    | 5x data wastage | Post-query filtering in code |
+| Graph building      | 200ms startup   | Sequential add_node() calls  |
 
 **Common pattern**: Doing per-item operations (query/insert/call) instead of batch operations.
 
@@ -28,6 +28,7 @@ Development built code without performance testing against realistic data (400k 
 
 ```markdown
 ## Performance Checklist
+
 - [ ] **Database queries**: No loops containing `db.query()` or `db.execute()`
 - [ ] **Subqueries**: Uses CTEs/JOINs, not correlated subqueries
 - [ ] **Batch operations**: Uses `executemany()` not loop with `execute()`
@@ -87,6 +88,7 @@ LATENCY_THRESHOLDS = {
 ```
 
 **Usage in code:**
+
 ```python
 from jarvis.utils.latency_tracker import track_latency
 
@@ -96,11 +98,13 @@ with track_latency("conversations_fetch", limit=50):
 ```
 
 **Automatic test for every PR:**
+
 ```bash
 make test -k performance    # Runs performance_baseline.py tests
 ```
 
 If a test fails:
+
 ```
 AssertionError: getConversations too slow: 1200.5ms
 (indicates N+1 query pattern)
@@ -111,6 +115,7 @@ AssertionError: getConversations too slow: 1200.5ms
 ### 3. Continuous Monitoring
 
 **Socket server tracks all operations:**
+
 ```python
 async def _list_conversations(self, limit: int = 50):
     with track_latency("conversations_fetch", limit=limit):
@@ -120,6 +125,7 @@ async def _list_conversations(self, limit: int = 50):
 ```
 
 **Dashboard metrics** (can be wired to monitoring system):
+
 ```python
 tracker = get_tracker()
 print(tracker.summary())
@@ -133,6 +139,7 @@ print(tracker.summary())
 ```
 
 **Alerts on slow operations:**
+
 ```
 [WARNING] [LATENCY] conversations_fetch took 1203.5ms (threshold: 100ms)
 - possible N+1 pattern. Metadata: {'limit': 50}
@@ -143,6 +150,7 @@ print(tracker.summary())
 ### 4. Automated Detection
 
 **Git pre-commit hook** (`.git/hooks/pre-commit`):
+
 ```bash
 # Catches obvious N+1 patterns before commit
 if git diff --cached | grep -E "for .* in .*:\n.*db\\.query\\(|for .* in .*:\n.*await db"; then
@@ -152,6 +160,7 @@ fi
 ```
 
 **Run before submitting PR:**
+
 ```bash
 make verify    # Runs lint + typecheck + test + performance checks
 ```
@@ -176,6 +185,7 @@ def test_get_conversations_performance():
 ```
 
 **If test fails, investigate immediately:**
+
 1. Profile the operation: Which query is slow?
 2. Check for N+1 pattern: Loop with database calls?
 3. Fix the root cause, not symptom
@@ -197,6 +207,7 @@ def test_get_conversations_performance():
 - [ ] Commit message explains performance impact
 
 **Example commit message:**
+
 ```
 Fix N+1 query on message attachments (30x speedup)
 

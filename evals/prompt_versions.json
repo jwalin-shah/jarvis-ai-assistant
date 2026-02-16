@@ -121,13 +121,7 @@
     {
       "name": "thread_examples",
       "version": "1.0.0",
-      "collections": [
-        "logistics",
-        "warm",
-        "planning",
-        "social",
-        "brief"
-      ],
+      "collections": ["logistics", "warm", "planning", "social", "brief"],
       "description": "Thread-topic specific examples"
     }
   ],

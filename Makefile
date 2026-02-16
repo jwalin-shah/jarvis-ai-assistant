@@ -177,11 +177,11 @@ endif
 
 # Quick health check - validates imports and basic connectivity
 health-check:
-	@uv run python scripts/health_check.py
+	@uv run python scripts/production/health_check.py
 
 # Full self-test - validates all system components (more thorough)
 self-test:
-	@uv run python scripts/self_test.py
+	@uv run python scripts/production/self_test.py
 
 # Pre-flight check before committing
 preflight: health-check test-fast
@@ -237,21 +237,21 @@ typecheck:
 
 guardrails:
 	@echo "Running legacy import and module size guardrails..."
-	uv run python scripts/check_retired_imports.py
-	uv run python scripts/check_module_size.py
+	uv run python scripts/analysis/check_retired_imports.py
+	uv run python scripts/analysis/check_module_size.py
 
 backfill-smoke:
 	@echo "Running backfill entrypoint smoke checks..."
-	uv run python scripts/backfill_complete.py --help
-	uv run python scripts/backfill_complete.py --limit 1 --window 50 --skip-facts --workers 1 --extract-slots 1 --force
-	uv run python scripts/backfill_complete.py --limit 1 --window 50 --skip-segments --workers 1 --extract-slots 1 --force
+	uv run python scripts/production/backfill_complete.py --help
+	uv run python scripts/production/backfill_complete.py --limit 1 --window 50 --skip-facts --workers 1 --extract-slots 1 --force
+	uv run python scripts/production/backfill_complete.py --limit 1 --window 50 --skip-segments --workers 1 --extract-slots 1 --force
 
 ci-fast:
 	@echo "Running fast CI gate..."
 	uv run ruff check .
 	uv run mypy jarvis/ core/ models/ integrations/ api/ --ignore-missing-imports
-	uv run python scripts/check_retired_imports.py
-	uv run python scripts/check_module_size.py
+	uv run python scripts/analysis/check_retired_imports.py
+	uv run python scripts/analysis/check_module_size.py
 	uv run python -m compileall -q jarvis scripts api models core integrations contracts
 	uv run pytest --override-ini addopts='' tests/unit/test_tasks.py tests/unit/test_fact_extractor.py tests/unit/test_watcher_resegmentation.py -q
 	$(MAKE) backfill-smoke
@@ -495,7 +495,7 @@ fuse-models:
 
 # Step 5: Generate ORPO preference pairs with Gemini
 generate-prefs:
-	uv run python scripts/generate_preference_pairs.py
+	uv run python scripts/archived/generate_preference_pairs.py
 
 # Step 6: ORPO preference alignment on SFT-fused model
 finetune-orpo:
@@ -535,7 +535,7 @@ prepare-personal:
 
 # Step 3: Generate fine-tuning configs
 generate-ft-configs:
-	uv run python scripts/generate_ft_configs.py
+	uv run python scripts/training/generate_ft_configs.py
 
 # Step 4: Fine-tune all variants
 finetune-personal:
@@ -596,7 +596,7 @@ clean-all: clean
 # ============================================================================
 
 launch:
-	@./scripts/launch.sh
+	@./scripts/production/launch.sh
 
 api-dev:
 	uv run uvicorn api.main:app --reload --port 8742
@@ -963,7 +963,7 @@ endif
 ifndef END_CONDITION
 	$(error END_CONDITION is required.)
 endif
-	@./scripts/autonomous_loop.sh \
+	@./scripts/production/autonomous_loop.sh \
 		--prompt "$(PROMPT)" \
 		--end-condition "$(END_CONDITION)" \
 		--max-iterations $(or $(MAX_ITER),20) \
@@ -980,7 +980,7 @@ endif
 ifndef END_CONDITION
 	$(error END_CONDITION is required.)
 endif
-	@./scripts/autonomous_loop.sh \
+	@./scripts/production/autonomous_loop.sh \
 		--prompt-file "$(PROMPT_FILE)" \
 		--end-condition "$(END_CONDITION)" \
 		--max-iterations $(or $(MAX_ITER),20) \
@@ -1009,7 +1009,7 @@ auto-loop-dry:
 ifndef PROMPT
 	$(error PROMPT is required.)
 endif
-	@./scripts/autonomous_loop.sh \
+	@./scripts/production/autonomous_loop.sh \
 		--prompt "$(PROMPT)" \
 		--end-condition "$(or $(END_CONDITION),Task complete)" \
 		$(if $(AGENT),--agent $(AGENT)) \

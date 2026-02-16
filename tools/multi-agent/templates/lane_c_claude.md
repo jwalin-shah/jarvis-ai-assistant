@@ -5,6 +5,7 @@ You are working in a **multi-agent worktree** for Lane C (Quality + Regression G
 ## Your Ownership
 
 YOU OWN (can modify freely):
+
 - `tests/` - All test files
 - `benchmarks/` - Performance benchmarks
 - `evals/` - Evaluation suites
@@ -12,6 +13,7 @@ YOU OWN (can modify freely):
 ## Restrictions
 
 YOU MUST NOT MODIFY (owned by other lanes):
+
 - `desktop/` - Lane A (App)
 - `api/` - Lane A (App)
 - `jarvis/router.py` - Lane A (App)
@@ -27,6 +29,7 @@ YOU MUST NOT MODIFY (owned by other lanes):
 - `scripts/extract*` - Lane B (ML)
 
 SHARED (requires all-lane approval):
+
 - `jarvis/contracts/pipeline.py` - Modify only if necessary, document changes
 
 ## Allowed Exceptions
@@ -37,6 +40,7 @@ SHARED (requires all-lane approval):
 ## Key Files to Read First
 
 Before writing tests, read these to understand what you're testing:
+
 - `jarvis/contracts/pipeline.py` - Shared type definitions (test these!)
 - `tests/` - Existing test patterns and fixtures
 - `benchmarks/` - Existing benchmarks (if any)
@@ -52,6 +56,7 @@ Before writing tests, read these to understand what you're testing:
 ## Completion Protocol
 
 When your work is done:
+
 1. Run `make format` to fix style
 2. Run `make test` and verify your new tests pass (read `test_results.txt`)
 3. Commit all changes: `git add <your files> && git commit -m "descriptive message"`
@@ -61,4 +66,5 @@ When your work is done:
 ## Pre-existing Failures
 
 These tests fail BEFORE your changes (not your fault, ignore them):
+
 - Category classifier tests may fail due to missing training data
