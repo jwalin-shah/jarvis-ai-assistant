@@ -6,22 +6,22 @@
  * window focus, navigation, and prefetch drafts.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { get } from "svelte/store";
-import type { Conversation, Message } from "../../src/lib/api/types";
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { get } from 'svelte/store';
+import type { Conversation, Message } from '../../src/lib/api/types';
 
 // ---------------------------------------------------------------------------
 // Mocks - declared before any module that imports them
 // ---------------------------------------------------------------------------
 
-vi.mock("../../src/lib/api/client", () => ({
+vi.mock('../../src/lib/api/client', () => ({
   api: {
     getConversations: vi.fn(),
     getMessages: vi.fn(),
   },
 }));
 
-vi.mock("../../src/lib/db", () => ({
+vi.mock('../../src/lib/db', () => ({
   initDatabases: vi.fn(),
   isDirectAccessAvailable: vi.fn(() => false),
   getConversations: vi.fn(),
@@ -33,7 +33,7 @@ vi.mock("../../src/lib/db", () => ({
   isContactsCacheLoaded: vi.fn(() => false),
 }));
 
-vi.mock("../../src/lib/socket", () => ({
+vi.mock('../../src/lib/socket', () => ({
   jarvis: {
     connect: vi.fn(() => Promise.resolve(false)),
     disconnect: vi.fn(),
@@ -49,13 +49,13 @@ vi.mock("../../src/lib/socket", () => ({
 
 function makeConversation(overrides: Partial<Conversation> = {}): Conversation {
   return {
-    chat_id: "chat-1",
-    participants: ["alice"],
-    display_name: "Alice",
-    last_message_date: "2024-01-01T00:00:00Z",
+    chat_id: 'chat-1',
+    participants: ['alice'],
+    display_name: 'Alice',
+    last_message_date: '2024-01-01T00:00:00Z',
     message_count: 10,
     is_group: false,
-    last_message_text: "Hello",
+    last_message_text: 'Hello',
     ...overrides,
   };
 }
@@ -63,11 +63,11 @@ function makeConversation(overrides: Partial<Conversation> = {}): Conversation {
 function makeMessage(overrides: Partial<Message> = {}): Message {
   return {
     id: 1,
-    chat_id: "chat-1",
-    sender: "alice",
-    sender_name: "Alice",
-    text: "Hello",
-    date: "2024-01-01T00:00:00Z",
+    chat_id: 'chat-1',
+    sender: 'alice',
+    sender_name: 'Alice',
+    text: 'Hello',
+    date: '2024-01-01T00:00:00Z',
     is_from_me: false,
     attachments: [],
     reply_to_id: null,
@@ -83,34 +83,34 @@ function makeMessage(overrides: Partial<Message> = {}): Message {
 // Module-level references re-imported in each beforeEach
 // ---------------------------------------------------------------------------
 
-type ConversationsModule = typeof import("../../src/lib/stores/conversations.svelte");
+type ConversationsModule = typeof import('../../src/lib/stores/conversations.svelte');
 
 let mod: ConversationsModule;
-let conversationsStore: ConversationsModule["conversationsStore"];
-let highlightedMessageId: ConversationsModule["highlightedMessageId"];
-let scrollToMessageId: ConversationsModule["scrollToMessageId"];
+let conversationsStore: ConversationsModule['conversationsStore'];
+let highlightedMessageId: ConversationsModule['highlightedMessageId'];
+let scrollToMessageId: ConversationsModule['scrollToMessageId'];
 
-let markConversationAsNew: ConversationsModule["markConversationAsNew"];
-let clearNewMessageIndicator: ConversationsModule["clearNewMessageIndicator"];
-let addOptimisticMessage: ConversationsModule["addOptimisticMessage"];
-let updateOptimisticMessage: ConversationsModule["updateOptimisticMessage"];
-let removeOptimisticMessage: ConversationsModule["removeOptimisticMessage"];
-let clearOptimisticMessages: ConversationsModule["clearOptimisticMessages"];
-let clearPrefetchedDraft: ConversationsModule["clearPrefetchedDraft"];
-let fetchConversations: ConversationsModule["fetchConversations"];
-let fetchMessages: ConversationsModule["fetchMessages"];
-let selectConversation: ConversationsModule["selectConversation"];
-let loadMoreMessages: ConversationsModule["loadMoreMessages"];
-let pollMessages: ConversationsModule["pollMessages"];
-let clearSelection: ConversationsModule["clearSelection"];
-let invalidateMessageCache: ConversationsModule["invalidateMessageCache"];
-let startConversationPolling: ConversationsModule["startConversationPolling"];
-let stopConversationPolling: ConversationsModule["stopConversationPolling"];
-let startMessagePolling: ConversationsModule["startMessagePolling"];
-let stopMessagePolling: ConversationsModule["stopMessagePolling"];
-let navigateToMessage: ConversationsModule["navigateToMessage"];
-let initializePolling: ConversationsModule["initializePolling"];
-let handleNewMessagePush: ConversationsModule["handleNewMessagePush"];
+let markConversationAsNew: ConversationsModule['markConversationAsNew'];
+let clearNewMessageIndicator: ConversationsModule['clearNewMessageIndicator'];
+let addOptimisticMessage: ConversationsModule['addOptimisticMessage'];
+let updateOptimisticMessage: ConversationsModule['updateOptimisticMessage'];
+let removeOptimisticMessage: ConversationsModule['removeOptimisticMessage'];
+let clearOptimisticMessages: ConversationsModule['clearOptimisticMessages'];
+let clearPrefetchedDraft: ConversationsModule['clearPrefetchedDraft'];
+let fetchConversations: ConversationsModule['fetchConversations'];
+let fetchMessages: ConversationsModule['fetchMessages'];
+let selectConversation: ConversationsModule['selectConversation'];
+let loadMoreMessages: ConversationsModule['loadMoreMessages'];
+let pollMessages: ConversationsModule['pollMessages'];
+let clearSelection: ConversationsModule['clearSelection'];
+let invalidateMessageCache: ConversationsModule['invalidateMessageCache'];
+let startConversationPolling: ConversationsModule['startConversationPolling'];
+let stopConversationPolling: ConversationsModule['stopConversationPolling'];
+let startMessagePolling: ConversationsModule['startMessagePolling'];
+let stopMessagePolling: ConversationsModule['stopMessagePolling'];
+let navigateToMessage: ConversationsModule['navigateToMessage'];
+let initializePolling: ConversationsModule['initializePolling'];
+let handleNewMessagePush: ConversationsModule['handleNewMessagePush'];
 
 // Mock references
 let mockApi: {
@@ -129,23 +129,23 @@ beforeEach(async () => {
   vi.resetModules();
 
   // Re-import mocked dependencies
-  const apiMod = await import("../../src/lib/api/client");
+  const apiMod = await import('../../src/lib/api/client');
   mockApi = apiMod.api as unknown as typeof mockApi;
 
-  const dbMod = await import("../../src/lib/db");
+  const dbMod = await import('../../src/lib/db');
   mockDb = dbMod as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
-  const socketMod = await import("../../src/lib/socket");
+  const socketMod = await import('../../src/lib/socket');
   mockJarvis = socketMod.jarvis as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
   // Reset all mock call counts and implementations to fresh state
   mockApi.getConversations.mockReset();
   mockApi.getMessages.mockReset();
   Object.values(mockDb).forEach((fn) => {
-    if (typeof fn === "function" && "mockReset" in fn) fn.mockReset();
+    if (typeof fn === 'function' && 'mockReset' in fn) fn.mockReset();
   });
   Object.values(mockJarvis).forEach((fn) => {
-    if (typeof fn === "function" && "mockReset" in fn) fn.mockReset();
+    if (typeof fn === 'function' && 'mockReset' in fn) fn.mockReset();
   });
 
   // Restore default mock implementations after reset
@@ -156,7 +156,7 @@ beforeEach(async () => {
   mockJarvis.call.mockResolvedValue(null);
 
   // Import the module under test (fresh copy)
-  mod = await import("../../src/lib/stores/conversations.svelte");
+  mod = await import('../../src/lib/stores/conversations.svelte');
   conversationsStore = mod.conversationsStore;
   highlightedMessageId = mod.highlightedMessageId;
   scrollToMessageId = mod.scrollToMessageId;
@@ -192,8 +192,8 @@ afterEach(() => {
 // 1. Initial state
 // ==========================================================================
 
-describe("initial state", () => {
-  it("starts with correct default values", () => {
+describe('initial state', () => {
+  it('starts with correct default values', () => {
     expect(conversationsStore.conversations).toEqual([]);
     expect(conversationsStore.selectedChatId).toBeNull();
     expect(conversationsStore.messages).toEqual([]);
@@ -202,20 +202,20 @@ describe("initial state", () => {
     expect(conversationsStore.loadingMore).toBe(false);
     expect(conversationsStore.hasMore).toBe(false);
     expect(conversationsStore.error).toBeNull();
-    expect(conversationsStore.connectionStatus).toBe("disconnected");
+    expect(conversationsStore.connectionStatus).toBe('disconnected');
     expect(conversationsStore.unreadCounts.size).toBe(0);
     expect(conversationsStore.isWindowFocused).toBe(true);
     expect(conversationsStore.optimisticMessages).toEqual([]);
     expect(conversationsStore.prefetchedDraft).toBeNull();
   });
 
-  it("selectedConversation derived property returns null initially", () => {
+  it('selectedConversation derived property returns null initially', () => {
     expect(conversationsStore.selectedConversation).toBeNull();
   });
 
-  it("hasNewMessages returns false for any chatId", () => {
-    expect(conversationsStore.hasNewMessages("chat-1")).toBe(false);
-    expect(conversationsStore.hasNewMessages("nonexistent")).toBe(false);
+  it('hasNewMessages returns false for any chatId', () => {
+    expect(conversationsStore.hasNewMessages('chat-1')).toBe(false);
+    expect(conversationsStore.hasNewMessages('nonexistent')).toBe(false);
   });
 });
 
@@ -223,39 +223,39 @@ describe("initial state", () => {
 // 2. markConversationAsNew / clearNewMessageIndicator
 // ==========================================================================
 
-describe("markConversationAsNew / clearNewMessageIndicator", () => {
-  it("marks a conversation as having new messages", () => {
-    markConversationAsNew("chat-1");
-    expect(conversationsStore.hasNewMessages("chat-1")).toBe(true);
+describe('markConversationAsNew / clearNewMessageIndicator', () => {
+  it('marks a conversation as having new messages', () => {
+    markConversationAsNew('chat-1');
+    expect(conversationsStore.hasNewMessages('chat-1')).toBe(true);
   });
 
-  it("marking the same chatId twice is idempotent", () => {
-    markConversationAsNew("chat-1");
-    markConversationAsNew("chat-1");
-    expect(conversationsStore.hasNewMessages("chat-1")).toBe(true);
+  it('marking the same chatId twice is idempotent', () => {
+    markConversationAsNew('chat-1');
+    markConversationAsNew('chat-1');
+    expect(conversationsStore.hasNewMessages('chat-1')).toBe(true);
     expect(conversationsStore.unreadCounts.size).toBe(1);
   });
 
-  it("clearing removes from the set", () => {
-    markConversationAsNew("chat-1");
-    clearNewMessageIndicator("chat-1");
-    expect(conversationsStore.hasNewMessages("chat-1")).toBe(false);
+  it('clearing removes from the set', () => {
+    markConversationAsNew('chat-1');
+    clearNewMessageIndicator('chat-1');
+    expect(conversationsStore.hasNewMessages('chat-1')).toBe(false);
   });
 
-  it("clearing a non-existent chatId is a no-op", () => {
-    clearNewMessageIndicator("nonexistent");
+  it('clearing a non-existent chatId is a no-op', () => {
+    clearNewMessageIndicator('nonexistent');
     expect(conversationsStore.unreadCounts.size).toBe(0);
   });
 
-  it("multiple conversations can be marked independently", () => {
-    markConversationAsNew("chat-1");
-    markConversationAsNew("chat-2");
-    expect(conversationsStore.hasNewMessages("chat-1")).toBe(true);
-    expect(conversationsStore.hasNewMessages("chat-2")).toBe(true);
+  it('multiple conversations can be marked independently', () => {
+    markConversationAsNew('chat-1');
+    markConversationAsNew('chat-2');
+    expect(conversationsStore.hasNewMessages('chat-1')).toBe(true);
+    expect(conversationsStore.hasNewMessages('chat-2')).toBe(true);
 
-    clearNewMessageIndicator("chat-1");
-    expect(conversationsStore.hasNewMessages("chat-1")).toBe(false);
-    expect(conversationsStore.hasNewMessages("chat-2")).toBe(true);
+    clearNewMessageIndicator('chat-1');
+    expect(conversationsStore.hasNewMessages('chat-1')).toBe(false);
+    expect(conversationsStore.hasNewMessages('chat-2')).toBe(true);
   });
 });
 
@@ -263,53 +263,53 @@ describe("markConversationAsNew / clearNewMessageIndicator", () => {
 // 3. Optimistic message lifecycle
 // ==========================================================================
 
-describe("optimistic message lifecycle", () => {
+describe('optimistic message lifecycle', () => {
   it("addOptimisticMessage creates message with 'sending' status and returns unique ID", () => {
-    const id = addOptimisticMessage("Hello");
+    const id = addOptimisticMessage('Hello');
     expect(id).toMatch(/^optimistic-/);
 
     expect(conversationsStore.optimisticMessages).toHaveLength(1);
-    expect(conversationsStore.optimisticMessages[0].text).toBe("Hello");
-    expect(conversationsStore.optimisticMessages[0].status).toBe("sending");
+    expect(conversationsStore.optimisticMessages[0].text).toBe('Hello');
+    expect(conversationsStore.optimisticMessages[0].status).toBe('sending');
     expect(conversationsStore.optimisticMessages[0].id).toBe(id);
   });
 
-  it("multiple adds create unique IDs", () => {
-    const id1 = addOptimisticMessage("First");
-    const id2 = addOptimisticMessage("Second");
+  it('multiple adds create unique IDs', () => {
+    const id1 = addOptimisticMessage('First');
+    const id2 = addOptimisticMessage('Second');
     expect(id1).not.toBe(id2);
     expect(conversationsStore.optimisticMessages).toHaveLength(2);
   });
 
   it("updateOptimisticMessage changes status to 'sent'", () => {
-    const id = addOptimisticMessage("Hello");
-    updateOptimisticMessage(id, { status: "sent" });
+    const id = addOptimisticMessage('Hello');
+    updateOptimisticMessage(id, { status: 'sent' });
 
     const msg = conversationsStore.optimisticMessages[0];
-    expect(msg.status).toBe("sent");
+    expect(msg.status).toBe('sent');
   });
 
   it("updateOptimisticMessage changes status to 'failed' with error message", () => {
-    const id = addOptimisticMessage("Hello");
-    updateOptimisticMessage(id, { status: "failed", error: "Network error" });
+    const id = addOptimisticMessage('Hello');
+    updateOptimisticMessage(id, { status: 'failed', error: 'Network error' });
 
     const msg = conversationsStore.optimisticMessages[0];
-    expect(msg.status).toBe("failed");
-    expect(msg.error).toBe("Network error");
+    expect(msg.status).toBe('failed');
+    expect(msg.error).toBe('Network error');
   });
 
-  it("updateOptimisticMessage for non-existent ID is a no-op", () => {
-    addOptimisticMessage("Hello");
+  it('updateOptimisticMessage for non-existent ID is a no-op', () => {
+    addOptimisticMessage('Hello');
     // Should not throw
-    updateOptimisticMessage("nonexistent-id", { status: "sent" });
+    updateOptimisticMessage('nonexistent-id', { status: 'sent' });
     const msgs = conversationsStore.optimisticMessages;
     expect(msgs).toHaveLength(1);
-    expect(msgs[0].status).toBe("sending"); // unchanged
+    expect(msgs[0].status).toBe('sending'); // unchanged
   });
 
-  it("removeOptimisticMessage removes the correct message", () => {
-    const id1 = addOptimisticMessage("First");
-    const id2 = addOptimisticMessage("Second");
+  it('removeOptimisticMessage removes the correct message', () => {
+    const id1 = addOptimisticMessage('First');
+    const id2 = addOptimisticMessage('Second');
     removeOptimisticMessage(id1);
 
     const msgs = conversationsStore.optimisticMessages;
@@ -317,15 +317,15 @@ describe("optimistic message lifecycle", () => {
     expect(msgs[0].id).toBe(id2);
   });
 
-  it("removeOptimisticMessage for non-existent ID does not crash", () => {
-    addOptimisticMessage("Hello");
-    removeOptimisticMessage("nonexistent");
+  it('removeOptimisticMessage for non-existent ID does not crash', () => {
+    addOptimisticMessage('Hello');
+    removeOptimisticMessage('nonexistent');
     expect(conversationsStore.optimisticMessages).toHaveLength(1);
   });
 
-  it("clearOptimisticMessages clears all", () => {
-    addOptimisticMessage("First");
-    addOptimisticMessage("Second");
+  it('clearOptimisticMessages clears all', () => {
+    addOptimisticMessage('First');
+    addOptimisticMessage('Second');
     clearOptimisticMessages();
     expect(conversationsStore.optimisticMessages).toEqual([]);
   });
@@ -335,8 +335,8 @@ describe("optimistic message lifecycle", () => {
 // 4. messagesWithOptimistic derived property
 // ==========================================================================
 
-describe("messagesWithOptimistic derived property", () => {
-  it("returns messages directly when no optimistic messages (short-circuit)", () => {
+describe('messagesWithOptimistic derived property', () => {
+  it('returns messages directly when no optimistic messages (short-circuit)', () => {
     const msgs = [makeMessage({ id: 1 }), makeMessage({ id: 2 })];
     conversationsStore.messages = msgs;
 
@@ -345,10 +345,10 @@ describe("messagesWithOptimistic derived property", () => {
     expect(result).toBe(msgs);
   });
 
-  it("appends optimistic messages with negative IDs and correct fields", () => {
+  it('appends optimistic messages with negative IDs and correct fields', () => {
     const msgs = [makeMessage({ id: 1 })];
     conversationsStore.messages = msgs;
-    addOptimisticMessage("Optimistic hello");
+    addOptimisticMessage('Optimistic hello');
 
     const result = conversationsStore.messagesWithOptimistic;
     expect(result).toHaveLength(2);
@@ -356,14 +356,14 @@ describe("messagesWithOptimistic derived property", () => {
     expect(result[0].id).toBe(1);
     // Optimistic message last with negative ID
     expect(result[1].id).toBeLessThan(0);
-    expect(result[1].text).toBe("Optimistic hello");
+    expect(result[1].text).toBe('Optimistic hello');
     expect(result[1].is_from_me).toBe(true);
   });
 
-  it("optimistic messages have _optimistic: true and correct status", () => {
+  it('optimistic messages have _optimistic: true and correct status', () => {
     conversationsStore.messages = [];
-    const optId = addOptimisticMessage("Test");
-    updateOptimisticMessage(optId, { status: "failed", error: "Oops" });
+    const optId = addOptimisticMessage('Test');
+    updateOptimisticMessage(optId, { status: 'failed', error: 'Oops' });
 
     const result = conversationsStore.messagesWithOptimistic;
     expect(result).toHaveLength(1);
@@ -375,8 +375,8 @@ describe("messagesWithOptimistic derived property", () => {
     };
     expect(optMsg._optimistic).toBe(true);
     expect(optMsg._optimisticId).toBe(optId);
-    expect(optMsg._optimisticStatus).toBe("failed");
-    expect(optMsg._optimisticError).toBe("Oops");
+    expect(optMsg._optimisticStatus).toBe('failed');
+    expect(optMsg._optimisticError).toBe('Oops');
   });
 });
 
@@ -384,10 +384,10 @@ describe("messagesWithOptimistic derived property", () => {
 // 5. fetchConversations
 // ==========================================================================
 
-describe("fetchConversations", () => {
+describe('fetchConversations', () => {
   it("sets loading=true and connectionStatus='connecting' before fetch", async () => {
     let capturedLoading = false;
-    let capturedStatus = "";
+    let capturedStatus = '';
 
     mockApi.getConversations.mockImplementation(
       () =>
@@ -401,72 +401,80 @@ describe("fetchConversations", () => {
     await fetchConversations();
 
     expect(capturedLoading).toBe(true);
-    expect(capturedStatus).toBe("connecting");
+    expect(capturedStatus).toBe('connecting');
   });
 
   it("on success: sets conversations, connectionStatus='connected', loading=false", async () => {
-    const convos = [makeConversation({ chat_id: "c1" })];
+    const convos = [makeConversation({ chat_id: 'c1' })];
     mockApi.getConversations.mockResolvedValueOnce(convos);
 
     await fetchConversations();
 
     expect(conversationsStore.conversations).toEqual(convos);
-    expect(conversationsStore.connectionStatus).toBe("connected");
+    expect(conversationsStore.connectionStatus).toBe('connected');
     expect(conversationsStore.loading).toBe(false);
     expect(conversationsStore.error).toBeNull();
   });
 
   it("on failure: sets error message and connectionStatus='disconnected'", async () => {
-    mockApi.getConversations.mockRejectedValueOnce(new Error("Network fail"));
+    mockApi.getConversations.mockRejectedValueOnce(new Error('Network fail'));
 
     await fetchConversations();
 
     expect(conversationsStore.loading).toBe(false);
-    expect(conversationsStore.error).toBe("Network fail");
-    expect(conversationsStore.connectionStatus).toBe("disconnected");
+    expect(conversationsStore.error).toBe('Network fail');
+    expect(conversationsStore.connectionStatus).toBe('disconnected');
   });
 
-  it("polling mode (isPolling=true) does not overwrite existing error", async () => {
+  it('polling mode (isPolling=true) does not overwrite existing error', async () => {
     // Set an existing error
-    conversationsStore.error = "Previous error";
+    conversationsStore.error = 'Previous error';
 
-    mockApi.getConversations.mockRejectedValueOnce(new Error("Poll fail"));
+    mockApi.getConversations.mockRejectedValueOnce(new Error('Poll fail'));
 
     await fetchConversations(true);
 
     // Should keep the previous error, not overwrite with poll failure
-    expect(conversationsStore.error).toBe("Previous error");
+    expect(conversationsStore.error).toBe('Previous error');
   });
 
-  it("new message detection: marks conversation as new when last_message_date increases", async () => {
+  it('new message detection: marks conversation as new when last_message_date increases', async () => {
     // First fetch to establish known dates
-    const convos1 = [makeConversation({ chat_id: "c1", last_message_date: "2024-01-01T00:00:00Z" })];
+    const convos1 = [
+      makeConversation({ chat_id: 'c1', last_message_date: '2024-01-01T00:00:00Z' }),
+    ];
     mockApi.getConversations.mockResolvedValueOnce(convos1);
     await fetchConversations();
 
     // Second fetch with updated date
-    const convos2 = [makeConversation({ chat_id: "c1", last_message_date: "2024-01-02T00:00:00Z" })];
+    const convos2 = [
+      makeConversation({ chat_id: 'c1', last_message_date: '2024-01-02T00:00:00Z' }),
+    ];
     mockApi.getConversations.mockResolvedValueOnce(convos2);
     await fetchConversations();
 
-    expect(conversationsStore.hasNewMessages("c1")).toBe(true);
+    expect(conversationsStore.hasNewMessages('c1')).toBe(true);
   });
 
-  it("new message detection: does NOT mark the currently selected conversation", async () => {
+  it('new message detection: does NOT mark the currently selected conversation', async () => {
     // Set c1 as selected
-    conversationsStore.selectedChatId = "c1";
+    conversationsStore.selectedChatId = 'c1';
 
     // First fetch to establish known dates
-    const convos1 = [makeConversation({ chat_id: "c1", last_message_date: "2024-01-01T00:00:00Z" })];
+    const convos1 = [
+      makeConversation({ chat_id: 'c1', last_message_date: '2024-01-01T00:00:00Z' }),
+    ];
     mockApi.getConversations.mockResolvedValueOnce(convos1);
     await fetchConversations();
 
     // Second fetch with updated date
-    const convos2 = [makeConversation({ chat_id: "c1", last_message_date: "2024-01-02T00:00:00Z" })];
+    const convos2 = [
+      makeConversation({ chat_id: 'c1', last_message_date: '2024-01-02T00:00:00Z' }),
+    ];
     mockApi.getConversations.mockResolvedValueOnce(convos2);
     await fetchConversations();
 
-    expect(conversationsStore.hasNewMessages("c1")).toBe(false);
+    expect(conversationsStore.hasNewMessages('c1')).toBe(false);
   });
 });
 
@@ -474,16 +482,16 @@ describe("fetchConversations", () => {
 // 6. fetchMessages
 // ==========================================================================
 
-describe("fetchMessages", () => {
-  it("returns messages in reverse chronological order (reversed)", async () => {
+describe('fetchMessages', () => {
+  it('returns messages in reverse chronological order (reversed)', async () => {
     const msgs = [
-      makeMessage({ id: 3, date: "2024-01-03" }),
-      makeMessage({ id: 2, date: "2024-01-02" }),
-      makeMessage({ id: 1, date: "2024-01-01" }),
+      makeMessage({ id: 3, date: '2024-01-03' }),
+      makeMessage({ id: 2, date: '2024-01-02' }),
+      makeMessage({ id: 1, date: '2024-01-01' }),
     ];
     mockApi.getMessages.mockResolvedValueOnce(msgs);
 
-    const result = await fetchMessages("chat-1");
+    const result = await fetchMessages('chat-1');
 
     // Should be reversed: oldest first
     expect(result[0].id).toBe(1);
@@ -491,28 +499,28 @@ describe("fetchMessages", () => {
     expect(result[2].id).toBe(3);
   });
 
-  it("falls back to HTTP when direct DB not available", async () => {
+  it('falls back to HTTP when direct DB not available', async () => {
     mockDb.isDirectAccessAvailable.mockReturnValue(false);
     const msgs = [makeMessage({ id: 1 })];
     mockApi.getMessages.mockResolvedValueOnce(msgs);
 
-    const result = await fetchMessages("chat-1");
-    expect(mockApi.getMessages).toHaveBeenCalledWith("chat-1", 20);
+    const result = await fetchMessages('chat-1');
+    expect(mockApi.getMessages).toHaveBeenCalledWith('chat-1', 20);
     expect(result).toHaveLength(1);
   });
 
-  it("returns empty array on error", async () => {
-    mockApi.getMessages.mockRejectedValueOnce(new Error("fail"));
+  it('returns empty array on error', async () => {
+    mockApi.getMessages.mockRejectedValueOnce(new Error('fail'));
 
-    const result = await fetchMessages("chat-1");
+    const result = await fetchMessages('chat-1');
     expect(result).toEqual([]);
   });
 
-  it("direct DB failure returns empty array (caught internally)", async () => {
+  it('direct DB failure returns empty array (caught internally)', async () => {
     mockDb.isDirectAccessAvailable.mockReturnValue(true);
-    mockDb.getMessages.mockRejectedValueOnce(new Error("DB fail"));
+    mockDb.getMessages.mockRejectedValueOnce(new Error('DB fail'));
 
-    const result = await fetchMessages("chat-1");
+    const result = await fetchMessages('chat-1');
     expect(result).toEqual([]);
   });
 });
@@ -521,8 +529,8 @@ describe("fetchMessages", () => {
 // 7. selectConversation
 // ==========================================================================
 
-describe("selectConversation", () => {
-  it("sets selectedChatId and loadingMessages=true", async () => {
+describe('selectConversation', () => {
+  it('sets selectedChatId and loadingMessages=true', async () => {
     let capturedState: { selectedChatId: string | null; loadingMessages: boolean } | null = null;
 
     mockApi.getMessages.mockImplementationOnce(() => {
@@ -533,82 +541,82 @@ describe("selectConversation", () => {
       return Promise.resolve([]);
     });
 
-    await selectConversation("chat-1");
+    await selectConversation('chat-1');
 
     expect(capturedState).not.toBeNull();
-    expect(capturedState!.selectedChatId).toBe("chat-1");
+    expect(capturedState!.selectedChatId).toBe('chat-1');
     expect(capturedState!.loadingMessages).toBe(true);
   });
 
-  it("loads messages and caches them", async () => {
+  it('loads messages and caches them', async () => {
     const msgs = [makeMessage({ id: 1 }), makeMessage({ id: 2 })];
     mockApi.getMessages.mockResolvedValueOnce(msgs);
 
-    await selectConversation("chat-1");
+    await selectConversation('chat-1');
 
     expect(conversationsStore.messages).toHaveLength(2);
     expect(conversationsStore.loadingMessages).toBe(false);
   });
 
-  it("uses cached messages on second select (cache hit)", async () => {
+  it('uses cached messages on second select (cache hit)', async () => {
     const msgs = [makeMessage({ id: 1 })];
     mockApi.getMessages.mockResolvedValueOnce(msgs);
 
     // First select: fetches
-    await selectConversation("chat-1");
+    await selectConversation('chat-1');
     expect(mockApi.getMessages).toHaveBeenCalledTimes(1);
 
     // Switch away then back - should use cache
-    conversationsStore.selectedChatId = "other";
-    await selectConversation("chat-1");
+    conversationsStore.selectedChatId = 'other';
+    await selectConversation('chat-1');
     expect(mockApi.getMessages).toHaveBeenCalledTimes(1); // Not called again
   });
 
-  it("clears new message indicator", async () => {
-    markConversationAsNew("chat-1");
+  it('clears new message indicator', async () => {
+    markConversationAsNew('chat-1');
     mockApi.getMessages.mockResolvedValueOnce([]);
 
-    await selectConversation("chat-1");
+    await selectConversation('chat-1');
 
-    expect(conversationsStore.hasNewMessages("chat-1")).toBe(false);
+    expect(conversationsStore.hasNewMessages('chat-1')).toBe(false);
   });
 
-  it("clears prefetched draft", async () => {
+  it('clears prefetched draft', async () => {
     conversationsStore.prefetchedDraft = {
-      chatId: "chat-1",
-      suggestions: [{ text: "Hi", confidence: 0.9 }],
+      chatId: 'chat-1',
+      suggestions: [{ text: 'Hi', confidence: 0.9 }],
     };
     mockApi.getMessages.mockResolvedValueOnce([]);
 
-    await selectConversation("chat-1");
+    await selectConversation('chat-1');
 
     expect(conversationsStore.prefetchedDraft).toBeNull();
   });
 
-  it("sets hasMore=false when fewer than PAGE_SIZE messages returned", async () => {
+  it('sets hasMore=false when fewer than PAGE_SIZE messages returned', async () => {
     // PAGE_SIZE is 20, return fewer
     const msgs = Array.from({ length: 5 }, (_, i) => makeMessage({ id: i + 1 }));
     mockApi.getMessages.mockResolvedValueOnce(msgs);
 
-    await selectConversation("chat-1");
+    await selectConversation('chat-1');
 
     expect(conversationsStore.hasMore).toBe(false);
   });
 
-  it("sets hasMore=true when PAGE_SIZE messages returned", async () => {
+  it('sets hasMore=true when PAGE_SIZE messages returned', async () => {
     // PAGE_SIZE is 20, return exactly 20
     const msgs = Array.from({ length: 20 }, (_, i) => makeMessage({ id: i + 1 }));
     mockApi.getMessages.mockResolvedValueOnce(msgs);
 
-    await selectConversation("chat-1");
+    await selectConversation('chat-1');
 
     expect(conversationsStore.hasMore).toBe(true);
   });
 
-  it("handles fetch returning empty (fetchMessages catches errors internally)", async () => {
-    mockApi.getMessages.mockRejectedValueOnce(new Error("Load failed"));
+  it('handles fetch returning empty (fetchMessages catches errors internally)', async () => {
+    mockApi.getMessages.mockRejectedValueOnce(new Error('Load failed'));
 
-    await selectConversation("chat-1");
+    await selectConversation('chat-1');
 
     // fetchMessages catches errors and returns [], so selectConversation succeeds
     expect(conversationsStore.loadingMessages).toBe(false);
@@ -621,14 +629,14 @@ describe("selectConversation", () => {
 // 8. loadMoreMessages
 // ==========================================================================
 
-describe("loadMoreMessages", () => {
-  it("returns false when no conversation selected", async () => {
+describe('loadMoreMessages', () => {
+  it('returns false when no conversation selected', async () => {
     const result = await loadMoreMessages();
     expect(result).toBe(false);
   });
 
-  it("returns false when already loading", async () => {
-    conversationsStore.selectedChatId = "chat-1";
+  it('returns false when already loading', async () => {
+    conversationsStore.selectedChatId = 'chat-1';
     conversationsStore.messages = [makeMessage()];
     conversationsStore.loadingMore = true;
     conversationsStore.hasMore = true;
@@ -637,8 +645,8 @@ describe("loadMoreMessages", () => {
     expect(result).toBe(false);
   });
 
-  it("returns false when hasMore is false", async () => {
-    conversationsStore.selectedChatId = "chat-1";
+  it('returns false when hasMore is false', async () => {
+    conversationsStore.selectedChatId = 'chat-1';
     conversationsStore.messages = [makeMessage()];
     conversationsStore.loadingMore = false;
     conversationsStore.hasMore = false;
@@ -647,8 +655,8 @@ describe("loadMoreMessages", () => {
     expect(result).toBe(false);
   });
 
-  it("returns false when messages array is empty", async () => {
-    conversationsStore.selectedChatId = "chat-1";
+  it('returns false when messages array is empty', async () => {
+    conversationsStore.selectedChatId = 'chat-1';
     conversationsStore.messages = [];
     conversationsStore.loadingMore = false;
     conversationsStore.hasMore = true;
@@ -657,17 +665,17 @@ describe("loadMoreMessages", () => {
     expect(result).toBe(false);
   });
 
-  it("prepends older messages to existing messages", async () => {
-    const existing = [makeMessage({ id: 10, date: "2024-01-10" })];
-    conversationsStore.selectedChatId = "chat-1";
+  it('prepends older messages to existing messages', async () => {
+    const existing = [makeMessage({ id: 10, date: '2024-01-10' })];
+    conversationsStore.selectedChatId = 'chat-1';
     conversationsStore.messages = existing;
     conversationsStore.loadingMore = false;
     conversationsStore.hasMore = true;
 
     // Older messages returned by API (newest first, will be reversed)
     const olderMsgs = [
-      makeMessage({ id: 2, date: "2024-01-02" }),
-      makeMessage({ id: 1, date: "2024-01-01" }),
+      makeMessage({ id: 2, date: '2024-01-02' }),
+      makeMessage({ id: 1, date: '2024-01-01' }),
     ];
     mockApi.getMessages.mockResolvedValueOnce(olderMsgs);
 
@@ -682,9 +690,9 @@ describe("loadMoreMessages", () => {
     expect(conversationsStore.loadingMore).toBe(false);
   });
 
-  it("sets hasMore=false when fewer than PAGE_SIZE returned", async () => {
-    const existing = [makeMessage({ id: 10, date: "2024-01-10" })];
-    conversationsStore.selectedChatId = "chat-1";
+  it('sets hasMore=false when fewer than PAGE_SIZE returned', async () => {
+    const existing = [makeMessage({ id: 10, date: '2024-01-10' })];
+    conversationsStore.selectedChatId = 'chat-1';
     conversationsStore.messages = existing;
     conversationsStore.loadingMore = false;
     conversationsStore.hasMore = true;
@@ -703,26 +711,26 @@ describe("loadMoreMessages", () => {
 // 9. pollMessages - delta detection
 // ==========================================================================
 
-describe("pollMessages - delta detection", () => {
-  it("returns empty when no conversation selected", async () => {
+describe('pollMessages - delta detection', () => {
+  it('returns empty when no conversation selected', async () => {
     const result = await pollMessages();
     expect(result).toEqual([]);
   });
 
-  it("returns empty when window not focused", async () => {
-    conversationsStore.selectedChatId = "chat-1";
+  it('returns empty when window not focused', async () => {
+    conversationsStore.selectedChatId = 'chat-1';
     conversationsStore.isWindowFocused = false;
 
     const result = await pollMessages();
     expect(result).toEqual([]);
   });
 
-  it("skips full fetch when global ROWID unchanged (delta optimization)", async () => {
+  it('skips full fetch when global ROWID unchanged (delta optimization)', async () => {
     mockDb.isDirectAccessAvailable.mockReturnValue(true);
     // Set up: lastKnownGlobalRowid starts at 0, getLastMessageRowid returns 100
     mockDb.getLastMessageRowid.mockResolvedValueOnce(100);
 
-    conversationsStore.selectedChatId = "chat-1";
+    conversationsStore.selectedChatId = 'chat-1';
     conversationsStore.isWindowFocused = true;
     conversationsStore.messages = [makeMessage({ id: 1 })];
     mockApi.getMessages.mockResolvedValueOnce([makeMessage({ id: 1 })]);
@@ -741,13 +749,13 @@ describe("pollMessages - delta detection", () => {
     expect(result).toEqual([]);
   });
 
-  it("returns new messages that were not in previous set", async () => {
+  it('returns new messages that were not in previous set', async () => {
     mockDb.isDirectAccessAvailable.mockReturnValue(false);
 
-    const existingMsg = makeMessage({ id: 1, text: "Old" });
-    const newMsg = makeMessage({ id: 2, text: "New" });
+    const existingMsg = makeMessage({ id: 1, text: 'Old' });
+    const newMsg = makeMessage({ id: 2, text: 'New' });
 
-    conversationsStore.selectedChatId = "chat-1";
+    conversationsStore.selectedChatId = 'chat-1';
     conversationsStore.isWindowFocused = true;
     conversationsStore.messages = [existingMsg];
 
@@ -760,17 +768,17 @@ describe("pollMessages - delta detection", () => {
     expect(result[0].id).toBe(2);
   });
 
-  it("discards results if user switched conversations during async fetch", async () => {
+  it('discards results if user switched conversations during async fetch', async () => {
     mockDb.isDirectAccessAvailable.mockReturnValue(false);
 
-    conversationsStore.selectedChatId = "chat-1";
+    conversationsStore.selectedChatId = 'chat-1';
     conversationsStore.isWindowFocused = true;
     conversationsStore.messages = [makeMessage({ id: 1 })];
 
     // During the fetch, the user switches conversations
     mockApi.getMessages.mockImplementationOnce(async () => {
       // Simulate switching conversation during async gap
-      conversationsStore.selectedChatId = "chat-2";
+      conversationsStore.selectedChatId = 'chat-2';
       return [makeMessage({ id: 1 }), makeMessage({ id: 2 })];
     });
 
@@ -785,9 +793,9 @@ describe("pollMessages - delta detection", () => {
 // 10. clearSelection
 // ==========================================================================
 
-describe("clearSelection", () => {
-  it("resets selectedChatId, messages, hasMore, loadingMore", () => {
-    conversationsStore.selectedChatId = "chat-1";
+describe('clearSelection', () => {
+  it('resets selectedChatId, messages, hasMore, loadingMore', () => {
+    conversationsStore.selectedChatId = 'chat-1';
     conversationsStore.messages = [makeMessage()];
     conversationsStore.hasMore = true;
     conversationsStore.loadingMore = true;
@@ -800,9 +808,9 @@ describe("clearSelection", () => {
     expect(conversationsStore.loadingMore).toBe(false);
   });
 
-  it("stops message polling", () => {
+  it('stops message polling', () => {
     // Start message polling first
-    conversationsStore.selectedChatId = "chat-1";
+    conversationsStore.selectedChatId = 'chat-1';
     conversationsStore.isWindowFocused = true;
     startMessagePolling();
 
@@ -821,36 +829,36 @@ describe("clearSelection", () => {
 // 11. invalidateMessageCache
 // ==========================================================================
 
-describe("invalidateMessageCache", () => {
-  it("invalidates specific chatId from cache", async () => {
+describe('invalidateMessageCache', () => {
+  it('invalidates specific chatId from cache', async () => {
     const msgs = [makeMessage({ id: 1 })];
     mockApi.getMessages.mockResolvedValue(msgs);
 
     // Populate cache
-    await selectConversation("chat-1");
+    await selectConversation('chat-1');
     expect(mockApi.getMessages).toHaveBeenCalledTimes(1);
 
     // Invalidate
-    invalidateMessageCache("chat-1");
+    invalidateMessageCache('chat-1');
 
     // Switch away so selectConversation doesn't early-return
-    conversationsStore.selectedChatId = "other";
+    conversationsStore.selectedChatId = 'other';
 
     // Next select should re-fetch
-    await selectConversation("chat-1");
+    await selectConversation('chat-1');
     expect(mockApi.getMessages).toHaveBeenCalledTimes(2);
   });
 
-  it("invalidates all when no chatId given", async () => {
+  it('invalidates all when no chatId given', async () => {
     const msgs = [makeMessage({ id: 1 })];
     mockApi.getMessages.mockResolvedValue(msgs);
 
     // Populate cache for chat-1
-    await selectConversation("chat-1");
+    await selectConversation('chat-1');
 
     // Populate cache for chat-2
     mockApi.getMessages.mockResolvedValue([makeMessage({ id: 2 })]);
-    await selectConversation("chat-2");
+    await selectConversation('chat-2');
 
     expect(mockApi.getMessages).toHaveBeenCalledTimes(2);
 
@@ -859,27 +867,27 @@ describe("invalidateMessageCache", () => {
 
     // Both should re-fetch
     mockApi.getMessages.mockResolvedValue([makeMessage({ id: 10 })]);
-    conversationsStore.selectedChatId = "other";
-    await selectConversation("chat-1");
+    conversationsStore.selectedChatId = 'other';
+    await selectConversation('chat-1');
     expect(mockApi.getMessages).toHaveBeenCalledTimes(3);
 
-    await selectConversation("chat-2");
+    await selectConversation('chat-2');
     expect(mockApi.getMessages).toHaveBeenCalledTimes(4);
   });
 
-  it("after invalidation, selectConversation fetches fresh data", async () => {
-    const staleMsg = makeMessage({ id: 1, text: "stale" });
+  it('after invalidation, selectConversation fetches fresh data', async () => {
+    const staleMsg = makeMessage({ id: 1, text: 'stale' });
     mockApi.getMessages.mockResolvedValueOnce([staleMsg]);
-    await selectConversation("chat-1");
+    await selectConversation('chat-1');
 
-    invalidateMessageCache("chat-1");
-    conversationsStore.selectedChatId = "other";
+    invalidateMessageCache('chat-1');
+    conversationsStore.selectedChatId = 'other';
 
-    const freshMsg = makeMessage({ id: 1, text: "fresh" });
+    const freshMsg = makeMessage({ id: 1, text: 'fresh' });
     mockApi.getMessages.mockResolvedValueOnce([freshMsg]);
-    await selectConversation("chat-1");
+    await selectConversation('chat-1');
 
-    expect(conversationsStore.messages[0].text).toBe("fresh");
+    expect(conversationsStore.messages[0].text).toBe('fresh');
   });
 });
 
@@ -887,8 +895,8 @@ describe("invalidateMessageCache", () => {
 // 12. Polling intervals
 // ==========================================================================
 
-describe("polling intervals", () => {
-  it("startConversationPolling sets up interval", () => {
+describe('polling intervals', () => {
+  it('startConversationPolling sets up interval', () => {
     mockApi.getConversations.mockResolvedValue([]);
 
     startConversationPolling();
@@ -901,7 +909,7 @@ describe("polling intervals", () => {
     expect(mockApi.getConversations).toHaveBeenCalledTimes(2);
   });
 
-  it("stopConversationPolling clears interval", () => {
+  it('stopConversationPolling clears interval', () => {
     mockApi.getConversations.mockResolvedValue([]);
 
     startConversationPolling();
@@ -914,7 +922,7 @@ describe("polling intervals", () => {
     expect(mockApi.getConversations).toHaveBeenCalledTimes(1);
   });
 
-  it("polls only when window is focused", () => {
+  it('polls only when window is focused', () => {
     mockApi.getConversations.mockResolvedValue([]);
 
     startConversationPolling();
@@ -936,7 +944,7 @@ describe("polling intervals", () => {
     expect(mockApi.getConversations).toHaveBeenCalledTimes(2);
   });
 
-  it("uses 30s interval when socket disconnected", () => {
+  it('uses 30s interval when socket disconnected', () => {
     mockApi.getConversations.mockResolvedValue([]);
 
     startConversationPolling();
@@ -951,8 +959,8 @@ describe("polling intervals", () => {
 // 13. Window focus
 // ==========================================================================
 
-describe("window focus", () => {
-  it("setting isWindowFocused=true allows polling to resume", () => {
+describe('window focus', () => {
+  it('setting isWindowFocused=true allows polling to resume', () => {
     mockApi.getConversations.mockResolvedValue([]);
 
     // Start unfocused
@@ -972,12 +980,12 @@ describe("window focus", () => {
     expect(mockApi.getConversations).toHaveBeenCalledTimes(2);
   });
 
-  it("setting isWindowFocused=false updates state", () => {
+  it('setting isWindowFocused=false updates state', () => {
     conversationsStore.isWindowFocused = false;
     expect(conversationsStore.isWindowFocused).toBe(false);
   });
 
-  it("idempotent when already in same state", () => {
+  it('idempotent when already in same state', () => {
     // Initial state: isWindowFocused = true
     expect(conversationsStore.isWindowFocused).toBe(true);
     conversationsStore.isWindowFocused = true;
@@ -989,21 +997,21 @@ describe("window focus", () => {
 // 14. navigateToMessage
 // ==========================================================================
 
-describe("navigateToMessage", () => {
-  it("selects conversation and sets scroll/highlight targets", async () => {
+describe('navigateToMessage', () => {
+  it('selects conversation and sets scroll/highlight targets', async () => {
     mockApi.getMessages.mockResolvedValueOnce([makeMessage({ id: 42 })]);
 
-    await navigateToMessage("chat-1", 42);
+    await navigateToMessage('chat-1', 42);
 
-    expect(conversationsStore.selectedChatId).toBe("chat-1");
+    expect(conversationsStore.selectedChatId).toBe('chat-1');
     expect(get(scrollToMessageId)).toBe(42);
     expect(get(highlightedMessageId)).toBe(42);
   });
 
-  it("clears highlight after 3 seconds", async () => {
+  it('clears highlight after 3 seconds', async () => {
     mockApi.getMessages.mockResolvedValueOnce([makeMessage({ id: 42 })]);
 
-    await navigateToMessage("chat-1", 42);
+    await navigateToMessage('chat-1', 42);
 
     expect(get(highlightedMessageId)).toBe(42);
 
@@ -1017,11 +1025,11 @@ describe("navigateToMessage", () => {
 // 15. clearPrefetchedDraft
 // ==========================================================================
 
-describe("clearPrefetchedDraft", () => {
-  it("clears draft when one exists", () => {
+describe('clearPrefetchedDraft', () => {
+  it('clears draft when one exists', () => {
     conversationsStore.prefetchedDraft = {
-      chatId: "chat-1",
-      suggestions: [{ text: "Hi", confidence: 0.9 }],
+      chatId: 'chat-1',
+      suggestions: [{ text: 'Hi', confidence: 0.9 }],
     };
 
     clearPrefetchedDraft();
@@ -1029,7 +1037,7 @@ describe("clearPrefetchedDraft", () => {
     expect(conversationsStore.prefetchedDraft).toBeNull();
   });
 
-  it("no-op when no draft exists", () => {
+  it('no-op when no draft exists', () => {
     expect(conversationsStore.prefetchedDraft).toBeNull();
     clearPrefetchedDraft();
     expect(conversationsStore.prefetchedDraft).toBeNull();
@@ -1040,53 +1048,53 @@ describe("clearPrefetchedDraft", () => {
 // 16. handleNewMessagePush (socket push handler)
 // ==========================================================================
 
-describe("handleNewMessagePush (socket push)", () => {
+describe('handleNewMessagePush (socket push)', () => {
   const newMsgEvent = {
     message_id: 99,
-    chat_id: "chat-2",
-    sender: "bob",
-    text_preview: "Hey there",
+    chat_id: 'chat-2',
+    sender: 'bob',
+    text_preview: 'Hey there',
     is_from_me: false,
   };
 
-  it("marks non-selected conversation as new", async () => {
-    conversationsStore.selectedChatId = "chat-1";
+  it('marks non-selected conversation as new', async () => {
+    conversationsStore.selectedChatId = 'chat-1';
     mockApi.getConversations.mockResolvedValue([]);
 
     await handleNewMessagePush(newMsgEvent);
 
-    expect(conversationsStore.hasNewMessages("chat-2")).toBe(true);
+    expect(conversationsStore.hasNewMessages('chat-2')).toBe(true);
   });
 
-  it("does NOT mark the selected conversation as new", async () => {
-    conversationsStore.selectedChatId = "chat-2";
+  it('does NOT mark the selected conversation as new', async () => {
+    conversationsStore.selectedChatId = 'chat-2';
     mockDb.isDirectAccessAvailable.mockReturnValue(false);
     mockApi.getMessages.mockResolvedValue([]);
     mockApi.getConversations.mockResolvedValue([]);
 
-    await handleNewMessagePush({ ...newMsgEvent, chat_id: "chat-2" });
+    await handleNewMessagePush({ ...newMsgEvent, chat_id: 'chat-2' });
 
-    expect(conversationsStore.hasNewMessages("chat-2")).toBe(false);
+    expect(conversationsStore.hasNewMessages('chat-2')).toBe(false);
   });
 
-  it("appends message via direct DB access (no duplicate)", async () => {
-    conversationsStore.selectedChatId = "chat-2";
-    conversationsStore.messages = [makeMessage({ id: 1, chat_id: "chat-2" })];
+  it('appends message via direct DB access (no duplicate)', async () => {
+    conversationsStore.selectedChatId = 'chat-2';
+    conversationsStore.messages = [makeMessage({ id: 1, chat_id: 'chat-2' })];
     mockDb.isDirectAccessAvailable.mockReturnValue(true);
 
-    const newMsg = makeMessage({ id: 99, chat_id: "chat-2", text: "Hey there" });
+    const newMsg = makeMessage({ id: 99, chat_id: 'chat-2', text: 'Hey there' });
     mockDb.getMessage.mockResolvedValueOnce(newMsg);
     mockApi.getConversations.mockResolvedValue([]);
 
-    await handleNewMessagePush({ ...newMsgEvent, chat_id: "chat-2" });
+    await handleNewMessagePush({ ...newMsgEvent, chat_id: 'chat-2' });
 
     expect(conversationsStore.messages).toHaveLength(2);
     expect(conversationsStore.messages[1].id).toBe(99);
   });
 
-  it("avoids duplicate message insertion", async () => {
-    conversationsStore.selectedChatId = "chat-2";
-    const existingMsg = makeMessage({ id: 99, chat_id: "chat-2" });
+  it('avoids duplicate message insertion', async () => {
+    conversationsStore.selectedChatId = 'chat-2';
+    const existingMsg = makeMessage({ id: 99, chat_id: 'chat-2' });
     conversationsStore.messages = [existingMsg];
     mockDb.isDirectAccessAvailable.mockReturnValue(true);
 
@@ -1094,32 +1102,32 @@ describe("handleNewMessagePush (socket push)", () => {
     mockDb.getMessage.mockResolvedValueOnce(existingMsg);
     mockApi.getConversations.mockResolvedValue([]);
 
-    await handleNewMessagePush({ ...newMsgEvent, chat_id: "chat-2" });
+    await handleNewMessagePush({ ...newMsgEvent, chat_id: 'chat-2' });
 
     // Should still be 1 message, not duplicated
     expect(conversationsStore.messages).toHaveLength(1);
   });
 
-  it("falls back to fetchMessages when direct access unavailable", async () => {
-    conversationsStore.selectedChatId = "chat-2";
-    conversationsStore.messages = [makeMessage({ id: 1, chat_id: "chat-2" })];
+  it('falls back to fetchMessages when direct access unavailable', async () => {
+    conversationsStore.selectedChatId = 'chat-2';
+    conversationsStore.messages = [makeMessage({ id: 1, chat_id: 'chat-2' })];
     mockDb.isDirectAccessAvailable.mockReturnValue(false);
 
     const freshMsgs = [
-      makeMessage({ id: 1, chat_id: "chat-2" }),
-      makeMessage({ id: 99, chat_id: "chat-2", text: "Hey there" }),
+      makeMessage({ id: 1, chat_id: 'chat-2' }),
+      makeMessage({ id: 99, chat_id: 'chat-2', text: 'Hey there' }),
     ];
     mockApi.getMessages.mockResolvedValueOnce(freshMsgs);
     mockApi.getConversations.mockResolvedValue([]);
 
-    await handleNewMessagePush({ ...newMsgEvent, chat_id: "chat-2" });
+    await handleNewMessagePush({ ...newMsgEvent, chat_id: 'chat-2' });
 
     expect(conversationsStore.messages).toHaveLength(2);
     expect(mockApi.getMessages).toHaveBeenCalled();
   });
 
-  it("always refreshes conversation list", async () => {
-    conversationsStore.selectedChatId = "chat-1";
+  it('always refreshes conversation list', async () => {
+    conversationsStore.selectedChatId = 'chat-1';
     mockApi.getConversations.mockResolvedValue([]);
 
     await handleNewMessagePush(newMsgEvent);
@@ -1127,11 +1135,11 @@ describe("handleNewMessagePush (socket push)", () => {
     expect(mockApi.getConversations).toHaveBeenCalled();
   });
 
-  it("initializePolling registers the new_message listener", async () => {
+  it('initializePolling registers the new_message listener', async () => {
     // initializePolling needs window.addEventListener
     const addSpy = vi.fn();
     const removeSpy = vi.fn();
-    vi.stubGlobal("window", {
+    vi.stubGlobal('window', {
       addEventListener: addSpy,
       removeEventListener: removeSpy,
     });
@@ -1144,7 +1152,7 @@ describe("handleNewMessagePush (socket push)", () => {
     const cleanup = await initializePolling();
 
     // jarvis.on should have been called with "new_message"
-    expect(mockJarvis.on).toHaveBeenCalledWith("new_message", expect.any(Function));
+    expect(mockJarvis.on).toHaveBeenCalledWith('new_message', expect.any(Function));
 
     cleanup();
     vi.unstubAllGlobals();

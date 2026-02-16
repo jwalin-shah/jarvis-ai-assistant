@@ -1,8 +1,6 @@
 {
   "_name_or_path": "BAAI/bge-small-en-v1.5",
-  "architectures": [
-    "BertModel"
-  ],
+  "architectures": ["BertModel"],
   "attention_probs_dropout_prob": 0.1,
   "classifier_dropout": null,
   "hidden_act": "gelu",

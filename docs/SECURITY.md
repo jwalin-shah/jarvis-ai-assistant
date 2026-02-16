@@ -26,13 +26,13 @@ JARVIS is a **local-first** application. All data stays on-device, all inference
 
 ### Assets Protected
 
-| Asset | Sensitivity | Protection |
-|-------|------------|------------|
-| iMessage database (chat.db) | High | Read-only access, no modifications |
-| Contact profiles (jarvis.db) | Medium | User-only file permissions (0600) |
-| WebSocket auth token | High | Generated per-session, file permissions (0600) |
-| Unix socket | Medium | User-only permissions (0600), `~/.jarvis/` directory (0700) |
-| Config file | Low | User-only permissions (0600) |
+| Asset                        | Sensitivity | Protection                                                  |
+| ---------------------------- | ----------- | ----------------------------------------------------------- |
+| iMessage database (chat.db)  | High        | Read-only access, no modifications                          |
+| Contact profiles (jarvis.db) | Medium      | User-only file permissions (0600)                           |
+| WebSocket auth token         | High        | Generated per-session, file permissions (0600)              |
+| Unix socket                  | Medium      | User-only permissions (0600), `~/.jarvis/` directory (0700) |
+| Config file                  | Low         | User-only permissions (0600)                                |
 
 ## IPC Security
 
@@ -66,6 +66,7 @@ JARVIS is a **local-first** application. All data stays on-device, all inference
 ### Path Validation
 
 All filesystem paths are validated via `jarvis.config.validate_path()`:
+
 - Rejects `../` traversal sequences
 - Rejects null bytes (`\x00`)
 - Resolves to absolute paths
@@ -82,15 +83,16 @@ All filesystem paths are validated via `jarvis.config.validate_path()`:
 ### Bandit
 
 Run static security analysis:
+
 ```bash
 uv run bandit -r jarvis/ api/ core/ -x tests/,tools/ -ll
 ```
 
 ### Known Exceptions
 
-| Finding | Location | Justification |
-|---------|----------|--------------|
-| B104 (bind all) | N/A | WebSocket binds to 127.0.0.1 only |
+| Finding              | Location                           | Justification                                  |
+| -------------------- | ---------------------------------- | ---------------------------------------------- |
+| B104 (bind all)      | N/A                                | WebSocket binds to 127.0.0.1 only              |
 | B608 (SQL injection) | `integrations/imessage/queries.py` | All queries use parameterized `?` placeholders |
 
 ## Vulnerability Disclosure

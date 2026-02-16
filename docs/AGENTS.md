@@ -1,6 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure
+
 - `jarvis/`: Core Python library (CLI, prompts, retrieval, response generation).
 - `api/`: FastAPI server.
 - `desktop/`: Tauri + Svelte desktop app (see `desktop/README.md`).
@@ -11,6 +12,7 @@
 - `docs/`: Design and architecture docs (see `docs/DESIGN.md`).
 
 ## Build, Test, and Development Commands
+
 - `make setup`: Install dependencies and configure git hooks.
 - `make api-dev`: Run the API server locally on port 8742.
 - `make desktop-setup`: Install desktop app dependencies.
@@ -22,6 +24,7 @@
 - `make help`: List all available commands.
 
 ## Coding Style & Naming Conventions
+
 - Python is formatted with Ruff (`make format`) and linted with Ruff (`make lint`).
 - Line length is 100 characters; target Python version is 3.11.
 - Lint rules include `E,F,I,N,W,UP` with `E741` ignored; ML scripts have specific per-file ignores.
@@ -29,11 +32,13 @@
 - All LLM prompts must live in `jarvis/prompts/`.
 
 ## Testing Guidelines
+
 - Tests run with `pytest` via `make test`; coverage includes `jarvis/`, `api/`, `models/`, `core/`, `integrations/`, `contracts/`, `benchmarks/`.
 - Test files are named `test_*.py` and test functions use `test_*`.
 - Use descriptive names like `test_expand_slang_preserves_capitalization`.
 
 ## Commit & Pull Request Guidelines
+
 - Commit format:
   - `<type>: <short description>` with optional body.
   - Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
@@ -104,7 +109,6 @@ Before submitting PRs with data processing or ML code:
 4. Are connections/resources reused or reopened each time?
 5. Could this blow past 500MB RAM?
 6. Is there visible progress for long operations?
-
 
 ---
 
@@ -193,15 +197,15 @@ def test_mlx():
 
 ### Hardened Fixture Reference
 
-| Need | Import From | Use |
-|------|-------------|-----|
-| Deterministic time | `tests.utils.time_mocking` | `freeze_time("2024-01-01")` |
-| Seeded RNG | `tests.fixtures.isolated_fixtures` | `seeded_random["numpy"]` |
-| Isolated env | `tests.fixtures.isolated_fixtures` | `isolated_env["VAR"]` |
-| Temp workspace | `tests.fixtures.isolated_fixtures` | `temp_workspace / "file"` |
-| Resource budget | `tests.utils.resource_mocking` | `ResourceBudget(max_memory_mb=500)` |
-| Async control | `tests.utils.async_determinism` | `controlled_timeout()` |
-| No network | `tests.fixtures.isolated_fixtures` | `@pytest.mark.usefixtures("no_network")` |
+| Need               | Import From                        | Use                                      |
+| ------------------ | ---------------------------------- | ---------------------------------------- |
+| Deterministic time | `tests.utils.time_mocking`         | `freeze_time("2024-01-01")`              |
+| Seeded RNG         | `tests.fixtures.isolated_fixtures` | `seeded_random["numpy"]`                 |
+| Isolated env       | `tests.fixtures.isolated_fixtures` | `isolated_env["VAR"]`                    |
+| Temp workspace     | `tests.fixtures.isolated_fixtures` | `temp_workspace / "file"`                |
+| Resource budget    | `tests.utils.resource_mocking`     | `ResourceBudget(max_memory_mb=500)`      |
+| Async control      | `tests.utils.async_determinism`    | `controlled_timeout()`                   |
+| No network         | `tests.fixtures.isolated_fixtures` | `@pytest.mark.usefixtures("no_network")` |
 
 ### Running with Quarantine
 
@@ -229,18 +233,18 @@ uv run pytest --skip-quarantined
 
 Skill definitions live in `.claude/skills/` and provide domain-specific context for code review and implementation. When working on a particular area, load the relevant skill:
 
-| Domain | Skill | Key Files |
-|--------|-------|-----------|
-| Backend/Server | backend-expert | `jarvis/socket_server.py`, `jarvis/prefetch/`, `jarvis/watcher.py` |
-| LLM/Generation | ai-llm-expert | `jarvis/reply_service.py`, `models/`, `jarvis/prompts/` |
-| Data/Search | data-expert | `jarvis/search/`, `jarvis/contacts/`, `jarvis/db/` |
-| ML/Classifiers | ml-expert | `jarvis/classifiers/`, `jarvis/features/`, `scripts/train_*` |
-| Frontend | frontend-expert | `desktop/src/**/*.svelte`, `desktop/src/**/*.ts` |
-| Tauri/Rust | tauri-expert | `desktop/src-tauri/**/*.rs` |
-| Testing | testing-expert | `tests/`, `test_*.py` |
-| Performance | performance-expert | `scripts/`, `models/`, any I/O or encoding code |
-| Security | security-expert | `jarvis/socket_server.py`, `jarvis/db/`, `api/routers/` |
-| Docs | docs-expert | `docs/`, architectural changes |
-| Refactoring | refactor-expert | Any file with functions >50 lines or files >300 lines |
+| Domain         | Skill              | Key Files                                                          |
+| -------------- | ------------------ | ------------------------------------------------------------------ |
+| Backend/Server | backend-expert     | `jarvis/socket_server.py`, `jarvis/prefetch/`, `jarvis/watcher.py` |
+| LLM/Generation | ai-llm-expert      | `jarvis/reply_service.py`, `models/`, `jarvis/prompts/`            |
+| Data/Search    | data-expert        | `jarvis/search/`, `jarvis/contacts/`, `jarvis/db/`                 |
+| ML/Classifiers | ml-expert          | `jarvis/classifiers/`, `jarvis/features/`, `scripts/train_*`       |
+| Frontend       | frontend-expert    | `desktop/src/**/*.svelte`, `desktop/src/**/*.ts`                   |
+| Tauri/Rust     | tauri-expert       | `desktop/src-tauri/**/*.rs`                                        |
+| Testing        | testing-expert     | `tests/`, `test_*.py`                                              |
+| Performance    | performance-expert | `scripts/`, `models/`, any I/O or encoding code                    |
+| Security       | security-expert    | `jarvis/socket_server.py`, `jarvis/db/`, `api/routers/`            |
+| Docs           | docs-expert        | `docs/`, architectural changes                                     |
+| Refactoring    | refactor-expert    | Any file with functions >50 lines or files >300 lines              |
 
 **Cross-cutting:** Always apply performance-expert and security-expert alongside domain skills when relevant.

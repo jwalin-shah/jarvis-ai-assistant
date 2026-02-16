@@ -72,13 +72,13 @@
     node.dataset.src = src;
     node.style.opacity = '0';
     node.style.transition = 'opacity 0.2s ease';
-    
+
     // Handle load event for fade-in
     const handleLoad = () => {
       node.style.opacity = '1';
     };
     node.addEventListener('load', handleLoad);
-    
+
     // Observe for lazy loading
     if (imageObserver) {
       imageObserver.observe(node);
@@ -209,7 +209,12 @@
                 class="attachment-thumbnail"
                 use:lazyImage={`${WS_HTTP_BASE}/attachments/thumbnail?file_path=${encodeURIComponent(attachment.file_path)}`}
                 alt={attachment.filename}
-                onerror={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }}
+                onerror={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  (e.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove(
+                    'hidden'
+                  );
+                }}
               />
               <div class="attachment hidden">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -252,20 +257,41 @@
           {#if message.is_from_me && !optimistic}
             {#if message.date_read}
               <span class="delivery-status read" title="Read">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  width="12"
+                  height="12"
+                >
                   <polyline points="2 12 7 17 12 12"></polyline>
                   <polyline points="10 12 15 17 22 8"></polyline>
                 </svg>
               </span>
             {:else if message.date_delivered}
               <span class="delivery-status delivered" title="Delivered">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  width="12"
+                  height="12"
+                >
                   <polyline points="4 12 10 18 20 6"></polyline>
                 </svg>
               </span>
             {:else}
               <span class="delivery-status sent" title="Sent">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  width="12"
+                  height="12"
+                >
                   <polyline points="4 12 10 18 20 6"></polyline>
                 </svg>
               </span>
@@ -295,7 +321,8 @@
       <div class="reactions">
         {#each groupedReactions as reaction}
           <span class="reaction" title={reaction.senders.join(', ')}>
-            {reaction.type}{#if reaction.count > 1} <span class="reaction-count">{reaction.count}</span>{/if}
+            {reaction.type}{#if reaction.count > 1}
+              <span class="reaction-count">{reaction.count}</span>{/if}
           </span>
         {/each}
       </div>
@@ -312,7 +339,8 @@
   }
 
   .message.new-message {
-    animation: fadeIn var(--duration-fast) var(--ease-out),
+    animation:
+      fadeIn var(--duration-fast) var(--ease-out),
       highlight var(--duration-slow) var(--ease-out);
   }
 

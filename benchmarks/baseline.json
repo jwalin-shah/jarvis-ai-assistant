@@ -23,7 +23,7 @@
       "test_count": 76,
       "coverage": [
         "GenerationRequest serialization",
-        "GenerationResponse serialization", 
+        "GenerationResponse serialization",
         "DetectedEvent serialization",
         "CreateEventResult serialization",
         "CalendarEvent serialization",

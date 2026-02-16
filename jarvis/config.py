@@ -60,7 +60,7 @@ def validate_path(path: str | Path, description: str = "path") -> Path:
 
 
 # Current config schema version for migration tracking
-CONFIG_VERSION = 13
+CONFIG_VERSION = 14
 
 
 class MemoryThresholds(BaseModel):
@@ -504,6 +504,18 @@ class ServerConfig(BaseModel):
     )
 
 
+class DatabaseConfig(BaseModel):
+    """Database configuration.
+
+    Attributes:
+        path: Path to the main SQLite database.
+        feedback_path: Path to the feedback database.
+    """
+
+    path: str = str(Path.home() / ".jarvis" / "jarvis.db")
+    feedback_path: str = str(Path.home() / ".jarvis" / "jarvis.db")
+
+
 class NERConfig(BaseModel):
     """NER client configuration.
 
@@ -559,6 +571,7 @@ class JarvisConfig(BaseModel):
     segmentation: SegmentationConfig = Field(default_factory=SegmentationConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
     ner: NERConfig = Field(default_factory=NERConfig)
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
 
 
 # Module-level singleton with thread safety
@@ -720,6 +733,13 @@ def _migrate_v12_to_v13(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _migrate_v13_to_v14(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate from v13 to v14: Add database section."""
+    if "database" not in data:
+        data["database"] = {}
+    return data
+
+
 # Migration registry mapping target versions to migration functions
 _MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
     2: _migrate_v1_to_v2,
@@ -732,6 +752,7 @@ _MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
     11: _migrate_v10_to_v11,
     12: _migrate_v11_to_v12,
     13: _migrate_v12_to_v13,
+    14: _migrate_v13_to_v14,
 }
 
 

@@ -27,16 +27,16 @@ Build a reliable personal knowledge graph ingestion pipeline from messy iMessage
    - `jarvis/contacts/candidate_extractor.py`
    - Supports label profiles (`high_recall`, `balanced`, `high_precision`) and natural-language labels.
 
-2. Candidate extraction/evaluation tooling:
+3. Candidate extraction/evaluation tooling:
    - `scripts/extract_candidates.py`
    - `scripts/eval_gliner_candidates.py`
    - `scripts/run_gliner_eval_compat.sh`
 
-3. Candidate goldsets and merged dataset:
+4. Candidate goldsets and merged dataset:
    - `training_data/gliner_goldset/candidate_gold_merged_r4.json` (796 rows)
    - `training_data/gliner_goldset/gliner_metrics_high_precision_merged_r4_cleaned.json`
 
-4. Stage-2 fact gate classifier (candidate keep/discard):
+5. Stage-2 fact gate classifier (candidate keep/discard):
    - Trainer: `scripts/train_fact_filter.py`
    - Dataset builder: `scripts/build_fact_filter_dataset.py`
    - Latest model: `models/fact_filter_r4_clean.pkl`
@@ -46,16 +46,16 @@ Build a reliable personal knowledge graph ingestion pipeline from messy iMessage
      - Recall: 0.781
      - F1: 0.463
 
-5. Message-level gate model (upstream keep/discard):
+6. Message-level gate model (upstream keep/discard):
    - Trainer: `scripts/train_message_gate.py`
    - Model artifact exists: `models/message_gate.pkl`
 
-6. Existing production fact pipeline (legacy):
+7. Existing production fact pipeline (legacy):
    - Extractor: `jarvis/contacts/fact_extractor.py` (regex + spaCy + optional NLI)
    - Watcher integration currently uses legacy extractor:
      - `jarvis/watcher.py` (`_extract_facts`)
 
-7. Graph rendering layer:
+8. Graph rendering layer:
    - `jarvis/graph/knowledge_graph.py` (reads `contact_facts` and builds graph output)
 
 ### Not Implemented Yet

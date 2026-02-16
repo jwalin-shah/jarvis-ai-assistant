@@ -4,20 +4,20 @@
  * Phase 4 Architecture V2: Prefers socket ping over HTTP for faster response
  */
 
-import { writable } from "svelte/store";
-import type { HealthResponse } from "../api/types";
-import { api } from "../api/client";
-import { jarvis } from "../socket";
+import { writable } from 'svelte/store';
+import type { HealthResponse } from '../api/types';
+import { api } from '../api/client';
+import { jarvis } from '../socket';
 
 // Check if running in Tauri context
-const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
 export interface HealthState {
   connected: boolean;
   loading: boolean;
   error: string | null;
   data: HealthResponse | null;
-  source: "socket" | "http" | null;
+  source: 'socket' | 'http' | null;
 }
 
 const initialState: HealthState = {
@@ -31,7 +31,7 @@ const initialState: HealthState = {
 export const healthStore = writable<HealthState>(initialState);
 
 // Cache connection state to avoid redundant updates
-let cachedConnectionState: Pick<HealthState, "connected" | "source"> | null = null;
+let cachedConnectionState: Pick<HealthState, 'connected' | 'source'> | null = null;
 
 // In-flight promise to deduplicate concurrent connection checks
 let inflightCheck: Promise<boolean> | null = null;
@@ -62,15 +62,19 @@ async function checkApiConnectionInternal(): Promise<boolean> {
       const connected = await jarvis.connect();
       if (connected) {
         await jarvis.ping();
-        const newState = { connected: true, source: "socket" as const };
+        const newState = { connected: true, source: 'socket' as const };
         // Only update if connection state actually changed
-        if (!cachedConnectionState || cachedConnectionState.connected !== newState.connected || cachedConnectionState.source !== newState.source) {
+        if (
+          !cachedConnectionState ||
+          cachedConnectionState.connected !== newState.connected ||
+          cachedConnectionState.source !== newState.source
+        ) {
           cachedConnectionState = newState;
           healthStore.update((state) => ({
             ...state,
             connected: true,
             loading: false,
-            source: "socket",
+            source: 'socket',
           }));
         } else {
           healthStore.update((state) => ({ ...state, loading: false }));
@@ -85,21 +89,25 @@ async function checkApiConnectionInternal(): Promise<boolean> {
   // Fall back to HTTP
   try {
     await api.ping();
-    const newState = { connected: true, source: "http" as const };
-    if (!cachedConnectionState || cachedConnectionState.connected !== newState.connected || cachedConnectionState.source !== newState.source) {
+    const newState = { connected: true, source: 'http' as const };
+    if (
+      !cachedConnectionState ||
+      cachedConnectionState.connected !== newState.connected ||
+      cachedConnectionState.source !== newState.source
+    ) {
       cachedConnectionState = newState;
       healthStore.update((state) => ({
         ...state,
         connected: true,
         loading: false,
-        source: "http",
+        source: 'http',
       }));
     } else {
       healthStore.update((state) => ({ ...state, loading: false }));
     }
     return true;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Connection failed";
+    const message = error instanceof Error ? error.message : 'Connection failed';
     const newState = { connected: false, source: null };
     if (!cachedConnectionState || cachedConnectionState.connected !== newState.connected) {
       cachedConnectionState = newState;
@@ -128,16 +136,16 @@ export async function fetchHealth(): Promise<void> {
     try {
       const connected = await jarvis.connect();
       if (connected) {
-        const result = await jarvis.request<any>("get_health", {});
+        const result = await jarvis.request<any>('get_health', {});
         const data: HealthResponse = {
-          status: (result.status as HealthResponse["status"]) ?? "degraded",
+          status: (result.status as HealthResponse['status']) ?? 'degraded',
           imessage_access: (result.imessage_access as boolean) ?? null,
           memory_available_gb: (result.memory_available_gb as number) ?? null,
           memory_used_gb: (result.memory_used_gb as number) ?? null,
-          memory_mode: (result.memory_mode as HealthResponse["memory_mode"]) ?? null,
+          memory_mode: (result.memory_mode as HealthResponse['memory_mode']) ?? null,
           model_loaded: (result.model_loaded as boolean) ?? null,
           permissions_ok: (result.permissions_ok as boolean) ?? null,
-          details: (result.details as HealthResponse["details"]) ?? null,
+          details: (result.details as HealthResponse['details']) ?? null,
           jarvis_rss_mb: (result.jarvis_rss_mb as number) ?? null,
           jarvis_vms_mb: (result.jarvis_vms_mb as number) ?? null,
           model: result.model ?? null,
@@ -149,12 +157,12 @@ export async function fetchHealth(): Promise<void> {
           data,
           connected: true,
           loading: false,
-          source: "socket",
+          source: 'socket',
         }));
         return;
       }
     } catch (e) {
-      console.warn("Socket fetchHealth failed:", e);
+      console.warn('Socket fetchHealth failed:', e);
       // Fall through to HTTP
     }
   }
@@ -167,10 +175,10 @@ export async function fetchHealth(): Promise<void> {
       data,
       connected: true,
       loading: false,
-      source: "http",
+      source: 'http',
     }));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to fetch health";
+    const message = error instanceof Error ? error.message : 'Failed to fetch health';
     healthStore.update((state) => ({
       ...state,
       loading: false,
