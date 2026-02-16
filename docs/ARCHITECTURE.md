@@ -12,7 +12,7 @@ This document describes the optimized architecture for JARVIS, replacing HTTP po
 
 ```bash
 # Launch includes socket server automatically
-./scripts/launch.sh
+./scripts/production/launch.sh
 ```
 
 ## Socket Server API
