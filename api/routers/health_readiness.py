@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 from typing import Any
 
 import psutil
@@ -19,6 +20,46 @@ logger = logging.getLogger(__name__)
 
 BYTES_PER_MB = 1024 * 1024
 BYTES_PER_GB = 1024**3
+
+
+def _get_memory_fast() -> tuple[float, float, float]:
+    """Get system memory using native macOS command (much faster than psutil)."""
+    try:
+        result = subprocess.run(
+            ["vm_stat"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode != 0:
+            raise RuntimeError("vm_stat failed")
+
+        lines = result.stdout.strip().split("\n")
+        stats = {}
+        for line in lines:
+            if ":" in line:
+                key, value = line.split(":", 1)
+                stats[key.strip()] = int(value.strip().rstrip("."))
+
+        page_size = 4096  # default page size on macOS
+        wired = stats.get("Pages wired:", 0) * page_size
+        active = stats.get("Pages active:", 0) * page_size
+        free = stats.get("Pages free:", 0) * page_size
+        total = wired + active + free
+
+        total_gb = total / BYTES_PER_GB
+        used_gb = (wired + active) / BYTES_PER_GB
+        available_gb = free / BYTES_PER_GB
+
+        return available_gb, used_gb, total_gb
+    except Exception as e:
+        logger.warning(f"vm_stat failed, falling back to psutil: {e}")
+        memory = psutil.virtual_memory()
+        return (
+            memory.available / BYTES_PER_GB,
+            memory.used / BYTES_PER_GB,
+            memory.total / BYTES_PER_GB,
+        )
 
 
 def _get_process_memory() -> tuple[float, float]:
@@ -116,10 +157,8 @@ async def get_health(request: Request) -> HealthResponse:
     if found:
         return cached  # type: ignore[no-any-return]
 
-    memory = psutil.virtual_memory()
-    available_gb = memory.available / BYTES_PER_GB
-    used_gb = memory.used / BYTES_PER_GB
-    total_gb = memory.total / BYTES_PER_GB
+    # Use fast native command instead of slow psutil
+    available_gb, used_gb, total_gb = _get_memory_fast()
 
     jarvis_rss_mb, jarvis_vms_mb = _get_process_memory()
     imessage_access = await run_in_threadpool(_check_imessage_access)

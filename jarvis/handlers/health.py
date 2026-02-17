@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +13,54 @@ if TYPE_CHECKING:
 _HEALTH_CACHE_TTL = 5.0
 _cached_health: dict[str, Any] | None = None
 _cache_timestamp: float = 0.0
+
+
+def _get_memory_fast() -> tuple[float, float, float]:
+    """Get system memory using native macOS command (much faster than psutil)."""
+    import logging
+
+    logger = logging.getLogger(__name__)
+    try:
+        result = subprocess.run(
+            ["vm_stat"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode != 0:
+            raise RuntimeError("vm_stat failed")
+
+        lines = result.stdout.strip().split("\n")
+        stats = {}
+        for line in lines:
+            if ":" in line:
+                key, value = line.split(":", 1)
+                stats[key.strip()] = int(value.strip().rstrip("."))
+
+        page_size = 4096
+        wired = stats.get("Pages wired:", 0) * page_size
+        active = stats.get("Pages active:", 0) * page_size
+        free = stats.get("Pages free:", 0) * page_size
+        total = wired + active + free
+
+        bytes_per_gb = 1024**3
+        total_gb = total / bytes_per_gb
+        used_gb = (wired + active) / bytes_per_gb
+        available_gb = free / bytes_per_gb
+
+        return available_gb, used_gb, total_gb
+    except Exception as e:
+        logger.warning(f"vm_stat failed: {e}")
+        # Fallback - still use psutil but log it
+        import psutil
+
+        memory = psutil.virtual_memory()
+        bytes_per_gb = 1024**3
+        return (
+            memory.available / bytes_per_gb,
+            memory.used / bytes_per_gb,
+            memory.total / bytes_per_gb,
+        )
 
 
 class HealthHandler(BaseHandler):
@@ -45,7 +94,6 @@ class HealthHandler(BaseHandler):
         if _cached_health is not None and (now - _cache_timestamp) < _HEALTH_CACHE_TTL:
             return _cached_health
 
-        import psutil
         from starlette.concurrency import run_in_threadpool
 
         from api.routers.health_readiness import (
@@ -57,12 +105,8 @@ class HealthHandler(BaseHandler):
             _get_recommended_model,
         )
 
-        bytes_per_gb = 1024**3
-
-        memory = psutil.virtual_memory()
-        available_gb = memory.available / bytes_per_gb
-        used_gb = memory.used / bytes_per_gb
-        total_gb = memory.total / bytes_per_gb
+        # Use fast native command instead of slow psutil
+        available_gb, used_gb, total_gb = _get_memory_fast()
 
         jarvis_rss_mb, jarvis_vms_mb = _get_process_memory()
         imessage_access = await run_in_threadpool(_check_imessage_access)
