@@ -226,6 +226,8 @@
     border-top: 1px solid var(--border-color);
     animation: slideUp 0.15s ease;
     overflow: hidden;
+    position: relative;
+    z-index: 10;
   }
 
   @keyframes slideUp {

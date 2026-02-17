@@ -214,7 +214,7 @@ class ModelSettings(BaseModel):
 
     model_id: str = "lfm-0.7b"  # Using 0.7B model for both extraction and generation
     auto_select: bool = True
-    max_tokens_reply: int = Field(default=25, ge=1, le=2048)  # Brief replies per research
+    max_tokens_reply: int = Field(default=150, ge=1, le=2048)  # substantive replies
     max_tokens_summary: int = Field(default=500, ge=1, le=4096)
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)  # Low temp from Liquid AI docs
     top_p: float = Field(default=0.1, ge=0.0, le=1.0)  # From Liquid AI LFM docs

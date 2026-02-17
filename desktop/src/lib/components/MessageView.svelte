@@ -876,23 +876,14 @@
       {/key}
     {/if}
 
-    {#if conversationsStore.selectedConversation}
-      {#key conversationsStore.selectedConversation.chat_id}
-        <ComposeArea
-          bind:this={composeAreaRef}
-          onSend={(text) => handleSendMessage(text)}
-          disabled={!conversationsStore.selectedConversation}
-          sending={sendingMessage}
-        />
-      {/key}
-    {:else}
+    {#key conversationsStore.selectedConversation?.chat_id || 'none'}
       <ComposeArea
         bind:this={composeAreaRef}
         onSend={(text) => handleSendMessage(text)}
         disabled={!conversationsStore.selectedConversation}
         sending={sendingMessage}
       />
-    {/if}
+    {/key}
 
     {#if conversationsStore.selectedConversation && !conversationsStore.selectedConversation.is_group}
       <ContactHoverCard
