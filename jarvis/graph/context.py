@@ -15,7 +15,12 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
+from jarvis.infrastructure.cache import TTLCache
+
 logger = logging.getLogger(__name__)
+
+# Cache graph context for 60 seconds to avoid repeated slow queries
+_context_cache = TTLCache(maxsize=128, ttl_seconds=60.0)
 
 
 def get_graph_context(contact_id: str, chat_id: str) -> str:
@@ -31,6 +36,11 @@ def get_graph_context(contact_id: str, chat_id: str) -> str:
     Returns:
         Compact context string, or empty string if unavailable.
     """
+    cache_key = f"{contact_id}:{chat_id}"
+    cached = _context_cache.get(cache_key)
+    if cached is not None:
+        return str(cached)
+
     parts: list[str] = []
 
     # Identify if this is a group chat
@@ -64,7 +74,9 @@ def get_graph_context(contact_id: str, chat_id: str) -> str:
         except Exception as e:
             logger.debug("Failed to get shared connections: %s", e)
 
-    return " ".join(parts)
+    result = " ".join(parts)
+    _context_cache.set(cache_key, result)
+    return result
 
 
 def _get_fact_summary(contact_id: str) -> str:

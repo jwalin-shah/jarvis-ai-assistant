@@ -153,6 +153,8 @@ class ConnectionPool:
         self._schema_version: str | None = None
         # Shared caches for all reader instances using this pool
         self._contacts_cache: dict[str, str] | None = None
+        self._messages_cache: LRUCache[str, list[Message]] | None = None
+        self._conversations_cache: LRUCache[str, list[Conversation]] | None = None
         self._guid_to_rowid_cache: LRUCache[str, int] = LRUCache(maxsize=10000)
 
     @sqlite_retry()
@@ -447,6 +449,8 @@ class ChatDBReader:
         self._schema_version: str | None = None
         # Cache for contact name lookups (lazy-loaded)
         self.__contacts_cache: dict[str, str] | None = None
+        # Cache for messages (lazy-loaded)
+        self.__messages_cache: LRUCache[str, list[Message]] | None = None
         # LRU cache for GUID to ROWID mappings (lazy-loaded)
         self.__guid_to_rowid_cache: LRUCache[str, int] | None = None
         # Pool reference (lazy initialized)
@@ -466,6 +470,34 @@ class ChatDBReader:
             self._get_pool()._contacts_cache = value
         else:
             self.__contacts_cache = value
+
+    @property
+    def _conversations_cache(self) -> LRUCache[str, list[Conversation]]:
+        """Get the conversations cache (shared if using pool)."""
+        if self._use_pool:
+            pool = self._get_pool()
+            if pool._conversations_cache is None:
+                with pool._cache_lock:
+                    if pool._conversations_cache is None:
+                        pool._conversations_cache = LRUCache(maxsize=100)
+            return pool._conversations_cache
+
+        return LRUCache(maxsize=100)  # non-pooled instance gets transient cache
+
+    @property
+    def _messages_cache(self) -> LRUCache[str, list[Message]]:
+        """Get the messages cache (shared if using pool)."""
+        if self._use_pool:
+            pool = self._get_pool()
+            if pool._messages_cache is None:
+                with pool._cache_lock:
+                    if pool._messages_cache is None:
+                        pool._messages_cache = LRUCache(maxsize=1000)
+            return pool._messages_cache
+
+        if self.__messages_cache is None:
+            self.__messages_cache = LRUCache(maxsize=1000)
+        return self.__messages_cache
 
     @property
     def _guid_to_rowid_cache(self) -> LRUCache[str, int]:
@@ -1061,6 +1093,12 @@ class ChatDBReader:
             List of Conversation objects, sorted by last message date (newest first)
         """
         with track_latency("conversations_fetch", limit=limit):
+            # Check cache first
+            cache_key = f"{limit}:{since}:{before}"
+            cached = self._conversations_cache.get(cache_key)
+            if cached is not None:
+                return cached
+
             with self._connection_context() as conn:
                 cursor = conn.cursor()
 
@@ -1147,6 +1185,7 @@ class ChatDBReader:
                     )
                 )
 
+            self._conversations_cache.set(cache_key, conversations)
             return conversations
 
     def get_conversation(self, chat_id: str) -> Conversation | None:
@@ -1318,6 +1357,12 @@ class ChatDBReader:
             return []
 
         with track_latency("message_load", chat_id=chat_id, limit=limit):
+            # Check cache first
+            cache_key = f"{chat_id}:{limit}:{before}:{after}"
+            cached_messages = self._messages_cache.get(cache_key)
+            if cached_messages is not None:
+                return cached_messages
+
             with self._connection_context() as conn:
                 cursor = conn.cursor()
 
@@ -1341,7 +1386,9 @@ class ChatDBReader:
             # Warm AddressBook cache before processing rows
             self._resolve_contact_name("none")
 
-            return self._rows_to_messages(rows, chat_id)
+            messages = self._rows_to_messages(rows, chat_id)
+            self._messages_cache.set(cache_key, messages)
+            return messages
 
     @sqlite_retry()
     def get_messages_batch(
