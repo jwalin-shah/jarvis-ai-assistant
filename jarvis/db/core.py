@@ -129,8 +129,10 @@ class JarvisDBBase:
             # Optimize for read-heavy workloads
             self._local.connection.execute("PRAGMA journal_mode = WAL")
             self._local.connection.execute("PRAGMA synchronous = NORMAL")
-            self._local.connection.execute("PRAGMA cache_size = -4000")  # 4MB cache
-            self._local.connection.execute("PRAGMA mmap_size = 134217728")  # 128MB memory-mapped
+            self._local.connection.execute("PRAGMA cache_size = -64000")  # 64MB cache
+            self._local.connection.execute(
+                "PRAGMA mmap_size = 536870912"
+            )  # 512MB memory-mapped for embeddings
             self._local.connection.execute("PRAGMA temp_store = MEMORY")
             # Load sqlite-vec extension for vector search
             try:
