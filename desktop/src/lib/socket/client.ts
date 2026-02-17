@@ -978,18 +978,6 @@ class JarvisSocket {
               resolveNextToken = null;
             }
           }),
-        ]);
-        if (nextToken === null) {
-          completed = true;
-          break;
-        }
-        yield nextToken;
-      }
-    } catch (error) {
-      // ... rest of error handling ...
-    }
-            }
-          }),
           // 5 second timeout to periodically check overall duration
           new Promise<never>((_, reject) => 
             setTimeout(() => reject(new Error('TOKEN_TIMEOUT')), 5000)
@@ -1002,6 +990,7 @@ class JarvisSocket {
         });
 
         if (nextToken === null) {
+          if (completed) break;
           continue; // Continue to check overall timeout
         }
 

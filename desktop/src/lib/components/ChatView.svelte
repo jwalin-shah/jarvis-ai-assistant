@@ -194,19 +194,35 @@
         class="send-btn"
         onclick={sendMessage}
         disabled={!inputText.trim() || isGenerating}
-        title="Send (Enter)"
+        title={isGenerating ? 'Sending...' : 'Send (Enter)'}
+        aria-label={isGenerating ? 'Sending message' : 'Send message'}
       >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          width="18"
-          height="18"
-        >
-          <line x1="22" y1="2" x2="11" y2="13"></line>
-          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-        </svg>
+        {#if isGenerating}
+          <svg
+            class="spinner"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            width="18"
+            height="18"
+          >
+            <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke-opacity="0.75" stroke-linecap="round"></path>
+          </svg>
+        {:else}
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            width="18"
+            height="18"
+          >
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        {/if}
       </button>
     </div>
     <span class="input-hint">Shift+Enter for new line</span>
@@ -416,6 +432,20 @@
 
   .send-btn:not(:disabled):hover {
     opacity: 0.9;
+  }
+
+  .spinner {
+    animation: spin 1s linear infinite;
+    transform-origin: center;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .input-hint {
