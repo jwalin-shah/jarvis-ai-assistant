@@ -449,7 +449,11 @@ class ChatDBWatcher:
         """
         try:
             from contracts.imessage import Message
+            from jarvis.config import get_config
             from jarvis.search.vec_search import get_vec_searcher
+
+            if not get_config().segmentation.index_segments:
+                return
 
             # Filter to messages with text
             text_messages = [m for m in messages if m.get("text")]

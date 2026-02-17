@@ -590,17 +590,29 @@
     await tick();
     if (!messagesContainer) return;
 
-    messagesContainer.scrollTo({
-      top: messagesContainer.scrollHeight,
-      behavior: instant ? 'auto' : 'smooth',
-    });
+    // Use a multi-pass approach to handle virtual scroll height shifts
+    const doScroll = () => {
+      if (!messagesContainer) return;
+      messagesContainer.scrollTo({
+        top: messagesContainer.scrollHeight,
+        behavior: instant ? 'auto' : 'smooth',
+      });
+    };
 
-    // One more frame helps after late height updates (images, font/layout, observers).
+    doScroll();
+
+    // Re-check after a frame for virtual scrolling adjustments
     requestAnimationFrame(() => {
       if (!messagesContainer) return;
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      hasNewMessagesBelow = false;
-      updateVirtualScroll();
+      doScroll();
+      
+      // Third pass for insurance on slow layout/height updates
+      setTimeout(() => {
+        if (!messagesContainer) return;
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        hasNewMessagesBelow = false;
+        updateVirtualScroll();
+      }, 100);
     });
   }
 
@@ -1002,41 +1014,6 @@
     display: flex;
     gap: var(--space-2);
     margin-left: auto;
-  }
-
-  .action-btn {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-3);
-    background: var(--surface-base);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-md);
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all var(--duration-fast) var(--ease-out);
-    font-size: var(--text-sm);
-  }
-
-  .action-btn:hover {
-    background: var(--surface-hover);
-    color: var(--text-primary);
-    border-color: var(--color-primary);
-  }
-
-  .action-btn svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .action-btn.primary {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
-    color: white;
-  }
-
-  .action-btn.primary:hover {
-    background: var(--color-primary-hover);
   }
 
   .messages {

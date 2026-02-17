@@ -235,13 +235,14 @@ main() {
     # Set up signal handlers for cleanup
     trap cleanup EXIT INT TERM
 
-    # Step 1: Clean up any existing processes on the API port
+    # Step 1: Clean up any existing processes on the API and socket ports
     log_info "Checking port $API_PORT..."
-    if ! check_port "$API_PORT"; then
-        log_warn "Port $API_PORT is in use, cleaning up..."
-        kill_port_process "$API_PORT"
-    fi
-    log_success "Port $API_PORT is available"
+    kill_port_process "$API_PORT"
+    log_success "Port $API_PORT is cleaned up"
+
+    log_info "Checking socket port $SOCKET_PORT..."
+    kill_port_process "$SOCKET_PORT"
+    log_success "Socket port $SOCKET_PORT is cleaned up"
 
     # Step 2: Activate virtual environment if it exists
     if [ -f "$PROJECT_ROOT/.venv/bin/activate" ]; then

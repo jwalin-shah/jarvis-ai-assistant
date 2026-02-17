@@ -25,7 +25,11 @@ def persist_and_index_segments(
     chat_id: str,
     contact_id: str | None,
 ) -> tuple[list[int], int]:
-    """Persist segments and index them in vec_chunks."""
+    """Persist segments and optionally index them in vec_chunks."""
+    from jarvis.config import get_config
+
+    config = get_config()
+
     db = get_db()
     searcher = get_vec_searcher()
 
@@ -36,11 +40,15 @@ def persist_and_index_segments(
                 conn.rollback()
                 return [], 0
 
-            chunk_rowids = searcher.index_segments(segments, chat_id=chat_id)
-            indexed = len(chunk_rowids)
+            indexed = 0
+            if config.segmentation.index_segments:
+                chunk_rowids = searcher.index_segments(segments, chat_id=chat_id)
+                indexed = len(chunk_rowids)
 
-            if chunk_rowids and len(chunk_rowids) == len(segment_db_ids):
-                link_vec_chunk_rowids(conn, segment_db_ids, chunk_rowids)
+                if chunk_rowids and len(chunk_rowids) == len(segment_db_ids):
+                    link_vec_chunk_rowids(conn, segment_db_ids, chunk_rowids)
+            else:
+                logger.debug("Skipping segment indexing (disabled in config)")
 
             conn.commit()
             return segment_db_ids, indexed

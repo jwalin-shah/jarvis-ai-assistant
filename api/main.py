@@ -90,19 +90,20 @@ messages, or personal information is ever sent to external servers.
 async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
     """Lifecycle event handler for the FastAPI application."""
     # Start model warmer
+    import asyncio
+
+    from jarvis.interfaces.desktop.server import JarvisSocketServer
     from jarvis.model_warmer import get_model_warmer
     from jarvis.tasks.worker import start_worker, stop_worker
-    from jarvis.interfaces.desktop.server import JarvisSocketServer
-    import asyncio
 
     # Initialize socket server (direct desktop communication)
     # We run it in the same process to share the GPU memory pool
     socket_server = JarvisSocketServer(
         enable_watcher=True,
-        preload_models=False, # API already warms models
-        enable_prefetch=True
+        preload_models=False,  # API already warms models
+        enable_prefetch=True,
     )
-    
+
     # Start socket server in background
     socket_task = asyncio.create_task(socket_server.serve_forever())
     app_instance.state.socket_server = socket_server
@@ -115,7 +116,7 @@ async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
     # Stop services
     stop_worker()
     get_model_warmer().stop()
-    
+
     # Stop socket server
     await socket_server.stop()
     socket_task.cancel()

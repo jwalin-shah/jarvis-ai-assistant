@@ -237,6 +237,8 @@ def build_simple_reply_prompt(
 
     Like texting directly - no examples, no facts, no relationship graph.
     """
+    from datetime import datetime
+
     from jarvis.prompts.constants import SIMPLE_REPLY_PROMPT
 
     # Truncate context if needed
@@ -248,9 +250,13 @@ def build_simple_reply_prompt(
     else:
         conversation = ""
 
+    now = datetime.now()
+    time_str = f"Current time: {now.strftime('%A, %I:%M %p')}.\n"
+
     # Simple prompt - just conversation + last message
     prompt = SIMPLE_REPLY_PROMPT.template.format(
         instruction=instruction,
+        current_time=time_str,
         context=conversation,
         last_message=last_message,
     )
@@ -282,50 +288,8 @@ def build_prompt_from_request(req: Any) -> str:
     if not formatted_context:
         formatted_context = req.context.message_text
 
-    similar_exchanges: list[tuple[str, str]] = []
-
-    for doc in req.retrieved_docs:
-        response_text = str(doc.metadata.get("response_text", "")).strip()
-        if doc.content.strip() and response_text:
-            similar_exchanges.append((doc.content.strip(), response_text))
-
-    for example in req.few_shot_examples:
-        input_text = str(example.get("input") or example.get("context") or "").strip()
-        output_text = str(example.get("output") or example.get("response") or "").strip()
-        pair = (input_text, output_text)
-        if input_text and output_text and pair not in similar_exchanges:
-            similar_exchanges.append(pair)
-
-    relationship_profile = req.context.metadata.get("relationship_profile")
-    if not isinstance(relationship_profile, dict):
-        relationship_profile = None
-
-    contact_context_raw = req.context.metadata.get("contact_context")
-    contact_context = (
-        contact_context_raw if isinstance(contact_context_raw, ContactProfileContext) else None
-    )
-
-    user_messages_raw = req.context.metadata.get("user_messages")
-    user_messages = (
-        [msg for msg in user_messages_raw if isinstance(msg, str)]
-        if isinstance(user_messages_raw, list)
-        else None
-    )
-
     instruction_raw = req.context.metadata.get("instruction")
     instruction = instruction_raw if isinstance(instruction_raw, str) and instruction_raw else ""
-
-    contact_name_raw = req.context.metadata.get("contact_name") or req.context.sender_id or "them"
-    contact_name = str(contact_name_raw)
-
-    contact_facts_raw = req.context.metadata.get("contact_facts")
-    contact_facts = contact_facts_raw if isinstance(contact_facts_raw, str) else ""
-
-    relationship_graph_raw = req.context.metadata.get("relationship_graph")
-    relationship_graph = relationship_graph_raw if isinstance(relationship_graph_raw, str) else ""
-
-    auto_context_raw = req.context.metadata.get("auto_context")
-    auto_context = auto_context_raw if isinstance(auto_context_raw, str) else ""
 
     # Use simple prompt - no extra context, facts, or examples
     # This is more like chatting directly with the model

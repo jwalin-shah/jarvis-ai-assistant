@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import re
-import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -65,9 +63,9 @@ def prepare_streaming_context(
             urgency: UrgencyLevel = UrgencyLevel.LOW
             requires_knowledge: bool = False
             confidence: float = 0.5
-            metadata: dict = None
+            metadata: dict[str, Any] | None = None
 
-            def __post_init__(self):
+            def __post_init__(self) -> None:
                 if self.metadata is None:
                     self.metadata = {"category_name": "statement"}
 
@@ -344,12 +342,14 @@ def generate_llm_reply(
 
         # Generate a single candidate at low temperature for stability
         import random
+
         jitter = random.uniform(-0.02, 0.02)
         model_request.temperature = max(0.01, 0.1 + jitter)
 
         # Ensure repetition penalty is set if not already
         if not model_request.repetition_penalty:
             from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY
+
             model_request.repetition_penalty = DEFAULT_REPETITION_PENALTY
 
         response = service.generator.generate(model_request)

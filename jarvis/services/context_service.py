@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from jarvis.contacts.contact_profile import MIN_MESSAGES_FOR_PROFILE, get_contact_profile
@@ -116,13 +117,45 @@ class ContextService:
 
             current_sender: str | None = None
             current_text_parts: list[str] = []
+            last_msg_time: datetime | None = None
 
-            for msg in chronological:
+            # Filter messages: Keep all within last 24 hours, or the most recent cluster
+            now = datetime.now()
+            cutoff = now - timedelta(hours=24)
+
+            # We already have chronological list. Let's find the start index.
+            start_idx = 0
+            for i, msg in enumerate(chronological):
+                if msg.date > cutoff:
+                    start_idx = i
+                    break
+                # If message is older than 24h but very close to the next one (< 1h),
+                # we might want to keep it, but user asked to skip if far apart.
+                # Simplest is to just use 24h cutoff for "recent" context.
+
+            recent_chronological = chronological[start_idx:]
+            if not recent_chronological and chronological:
+                # If nothing in last 24h, just take the last 3 messages anyway
+                recent_chronological = chronological[-3:]
+
+            for msg in recent_chronological:
                 sender = "You" if msg.is_from_me else (msg.sender_name or msg.sender or "Contact")
                 participants.add(sender)
                 text = (msg.text or "").strip()
                 if not text:
                     continue
+
+                # Add time gap marker if > 6 hours
+                if last_msg_time and (msg.date - last_msg_time).total_seconds() > 21600:
+                    if current_sender is not None:
+                        context_turns.append(f"{current_sender}: {' '.join(current_text_parts)}")
+                        current_sender = None
+                        current_text_parts = []
+
+                    gap_hours = int((msg.date - last_msg_time).total_seconds() / 3600)
+                    context_turns.append(f"({gap_hours} hours later)")
+
+                timestamp_str = msg.date.strftime("%H:%M")
 
                 if sender == current_sender:
                     current_text_parts.append(text)
@@ -130,7 +163,9 @@ class ContextService:
                     if current_sender is not None:
                         context_turns.append(f"{current_sender}: {' '.join(current_text_parts)}")
                     current_sender = sender
-                    current_text_parts = [text]
+                    current_text_parts = [f"[{timestamp_str}] {text}"]
+
+                last_msg_time = msg.date
 
             if current_sender is not None:
                 context_turns.append(f"{current_sender}: {' '.join(current_text_parts)}")
