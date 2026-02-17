@@ -320,7 +320,8 @@ export async function getConversations(
 export async function getMessages(
   chatId: string,
   limit = 100,
-  before?: Date
+  before?: Date,
+  loadFullContext = true
 ): Promise<Message[]> {
   if (!chatDb) {
     throw new Error("Database not initialized");
@@ -356,27 +357,34 @@ export async function getMessages(
       .filter((g): g is string => isNonEmptyString(g) && !guidToRowidCache.has(g));
     const uncachedGuids = [...new Set(replyGuids)];
 
-    // Run all 3 batch queries in parallel
-    const [attachmentRows, reactionRows, guidRows] = await Promise.all([
-      // Batch attachments
-      messageIds.length > 0
-        ? chatDb.select<(AttachmentRow & { message_id: number })[]>(
-            `SELECT
-              message_attachment_join.message_id,
-              attachment.ROWID as attachment_id,
-              attachment.filename,
-              attachment.mime_type,
-              attachment.total_bytes as file_size,
-              attachment.transfer_name
-            FROM message_attachment_join
-            JOIN attachment ON message_attachment_join.attachment_id = attachment.ROWID
-            WHERE message_attachment_join.message_id IN (${messageIds.map(() => "?").join(",")})`,
-            messageIds
-          )
-        : Promise.resolve([]),
-      // Batch reactions (no self-join: associated_message_guid IS the target GUID)
-      validGuids.length > 0
-        ? chatDb.select<(ReactionRow & { message_guid: string })[]>(
+    // Skip batch attachment/reaction queries for load-more (lazy load)
+    // Only fetch full context for recent messages
+    const attachmentRows: (AttachmentRow & { message_id: number })[] = [];
+    const reactionRows: (ReactionRow & { message_guid: string })[] = [];
+    const guidRows: { guid: string; id: number }[] = [];
+
+    if (loadFullContext) {
+      // Run all 3 batch queries in parallel
+      const results = await Promise.all([
+        // Batch attachments
+        messageIds.length > 0
+          ? chatDb.select<(AttachmentRow & { message_id: number })[]>(
+              `SELECT
+                message_attachment_join.message_id,
+                attachment.ROWID as attachment_id,
+                attachment.filename,
+                attachment.mime_type,
+                attachment.total_bytes as file_size,
+                attachment.transfer_name
+              FROM message_attachment_join
+              JOIN attachment ON message_attachment_join.attachment_id = attachment.ROWID
+              WHERE message_attachment_join.message_id IN (${messageIds.map(() => "?").join(",")})`,
+              messageIds
+            )
+          : Promise.resolve([]),
+        // Batch reactions (no self-join: associated_message_guid IS the target GUID)
+        validGuids.length > 0
+          ? chatDb.select<(ReactionRow & { message_guid: string })[]>(
             `SELECT
               reaction.associated_message_guid as message_guid,
               reaction.ROWID as id,
@@ -391,15 +399,25 @@ export async function getMessages(
             validGuids
           )
         : Promise.resolve([]),
+      ]);
+      if (results[0]) attachmentRows.push(...results[0]);
+      if (results[1]) reactionRows.push(...results[1]);
       // Batch reply GUID→ROWID
-      uncachedGuids.length > 0
-        ? chatDb.select<{ guid: string; id: number }[]>(
-            `SELECT guid, ROWID as id FROM message
-            WHERE guid IN (${uncachedGuids.map(() => "?").join(",")})`,
-            uncachedGuids
-          )
-        : Promise.resolve([]),
-    ]);
+      if (uncachedGuids.length > 0) {
+        guidRows.push(...await chatDb.select<{ guid: string; id: number }[]>(
+          `SELECT guid, ROWID as id FROM message
+          WHERE guid IN (${uncachedGuids.map(() => "?").join(",")})`,
+          uncachedGuids
+        ));
+      }
+    } else if (uncachedGuids.length > 0) {
+      // Still need reply GUIDs even without full context
+      guidRows.push(...await chatDb.select<{ guid: string; id: number }[]>(
+        `SELECT guid, ROWID as id FROM message
+        WHERE guid IN (${uncachedGuids.map(() => "?").join(",")})`,
+        uncachedGuids
+      ));
+    }
 
     // Build attachments map
     const attachmentsByMessageId = new Map<number, Attachment[]>();

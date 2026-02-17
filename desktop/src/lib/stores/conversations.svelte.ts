@@ -523,7 +523,8 @@ export async function loadMoreMessages(): Promise<boolean> {
   try {
     let olderMessages: Message[];
     if (isDirectAccessAvailable()) {
-      olderMessages = await getMessagesDirect(selectedChatId, PAGE_SIZE, new Date(beforeDate));
+      // Skip full context (attachments/reactions) for load-more - lazy load instead
+      olderMessages = await getMessagesDirect(selectedChatId, PAGE_SIZE, new Date(beforeDate), false);
     } else {
       olderMessages = await api.getMessages(selectedChatId, PAGE_SIZE, beforeDate);
     }
