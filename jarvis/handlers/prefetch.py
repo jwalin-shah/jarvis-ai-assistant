@@ -41,6 +41,7 @@ class PrefetchHandler(BaseHandler):
     @rpc_handler("Failed to record focus")
     async def _prefetch_focus(self, chat_id: str) -> dict[str, bool]:
         """Record UI focus event for prefetching."""
+        self.server.set_focused_chat(chat_id)
         manager = self.server.get_prefetch_manager()
         if manager is None:
             return {"success": False}

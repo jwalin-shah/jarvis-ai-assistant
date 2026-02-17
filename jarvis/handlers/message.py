@@ -147,6 +147,11 @@ class MessageHandler(BaseHandler):
         skip_cache: bool = False,
     ) -> dict[str, Any]:
         """Generate draft replies."""
+        # Skip stale generation if user switched to a different chat
+        if self.server.is_generation_stale(chat_id):
+            logger.debug(f"Skipping stale generation for {chat_id}")
+            return {"suggestions": [], "stale": True, "reason": "user_switched_chats"}
+
         prefetch_manager = self.server.get_prefetch_manager()
         if not skip_cache and _writer is None and prefetch_manager:
             cached_draft = prefetch_manager.get_draft(chat_id)
@@ -230,6 +235,11 @@ class MessageHandler(BaseHandler):
         context_used: dict[str, Any],
     ) -> dict[str, Any]:
         """Stream draft tokens."""
+        # Check staleness before and during streaming
+        if self.server.is_generation_stale(chat_id):
+            logger.debug(f"Skipping stale streaming generation for {chat_id}")
+            return {"suggestions": [], "stale": True}
+
         reply_service = self.server.get_reply_service()
 
         prefetch_manager = self.server.get_prefetch_manager()
@@ -251,9 +261,16 @@ class MessageHandler(BaseHandler):
             confidence = float(metadata.get("confidence_score", 0.6))
             response_tokens: list[str] = []
             accumulated = ""
+            token_count = 0
 
             try:
                 async for token_data in reply_service.generator.generate_stream(request):
+                    # Check staleness periodically to stop early if user switched chats
+                    token_count += 1
+                    if token_count % 10 == 0 and self.server.is_generation_stale(chat_id):
+                        logger.debug(f"Stopping stale streaming for {chat_id}")
+                        break
+
                     token_text = token_data["token"]
                     token_index = token_data["token_index"]
                     is_final = token_data["is_final"]

@@ -117,6 +117,8 @@ class JarvisSocketServer:
         self._imessage_access_cache: bool | None = None
         self._imessage_access_cache_time: float = 0.0
         self._rate_limiter = RateLimiter(max_requests=100, window_seconds=1.0)
+        self._focused_chat_id: str | None = None
+        self._current_generation_request_id: int = 0
 
         self._register_methods()
 
@@ -152,6 +154,21 @@ class JarvisSocketServer:
 
     async def _batch(self, requests: list[dict[str, Any]]) -> dict[str, Any]:
         return await self._batch_handler._batch(requests)
+
+    def set_focused_chat(self, chat_id: str | None) -> None:
+        """Track the currently focused chat for generation prioritization."""
+        self._focused_chat_id = chat_id
+
+    def start_generation(self, chat_id: str) -> bool:
+        """Start generation for a chat. Returns False if stale (user switched chats)."""
+        if self._focused_chat_id != chat_id:
+            return False
+        self._current_generation_request_id += 1
+        return True
+
+    def is_generation_stale(self, chat_id: str) -> bool:
+        """Check if generation request is stale (user switched to different chat)."""
+        return self._focused_chat_id is not None and self._focused_chat_id != chat_id
 
     async def _send_stream_token(
         self,
