@@ -393,24 +393,13 @@ class ChatDBWatcher:
 
             # Extract facts from new messages via background task queue
             if new_messages:
+                # Background fact extraction disabled per user request to reduce latency/timeouts.
+                # These operations should happen offline or in a non-blocking way.
+                logger.debug("Skipping background fact extraction enqueue for new messages")
+                """
                 from jarvis.tasks.models import TaskType
-                from jarvis.tasks.queue import get_task_queue
-
-                queue = get_task_queue()
-                # Group by chat_id and adapt extraction window to burst size.
-                chat_message_counts: dict[str, int] = {}
-                for msg in new_messages:
-                    chat_id = msg["chat_id"]
-                    chat_message_counts[chat_id] = chat_message_counts.get(chat_id, 0) + 1
-
-                for chat_id, message_count in chat_message_counts.items():
-                    queue.enqueue(
-                        TaskType.FACT_EXTRACTION,
-                        {
-                            "chat_id": chat_id,
-                            "limit": self._get_fact_extraction_limit(message_count),
-                        },
-                    )
+                ...
+                """
 
             # Track per-chat message counts for incremental re-segmentation
             chats_to_resegment: list[str] = []

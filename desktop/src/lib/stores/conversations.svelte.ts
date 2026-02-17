@@ -300,6 +300,70 @@ export function reconcileMessages(chatId: string, newMessages: Message[]) {
   }
 }
 
+/** Efficiently synchronize messages for the current chat using incremental ROWID fetching. */
+export async function syncMessages(chatId: string, force = false): Promise<Message[]> {
+  if (conversationsStore._messagePolling) return [];
+  conversationsStore._messagePolling = true;
+
+  try {
+    if (isDirectAccessAvailable()) {
+      const currentGlobalRowid = await getLastMessageRowid();
+      const timeSinceLastSync = Date.now() - conversationsStore.lastSyncTimestamp;
+
+      // Skip if nothing changed globally AND we synchronized recently
+      if (
+        !force &&
+        currentGlobalRowid > 0 &&
+        currentGlobalRowid === conversationsStore.lastKnownGlobalRowid &&
+        timeSinceLastSync < conversationsStore.SYNC_DEBOUNCE_MS
+      ) {
+        return [];
+      }
+
+      // Incremental fetch: only get messages newer than last known ROWID
+      const newEntries = await getNewMessagesSince(conversationsStore.lastKnownGlobalRowid);
+      conversationsStore.lastKnownGlobalRowid = currentGlobalRowid;
+
+      // Filter to messages for the current chat
+      const relevantEntries = newEntries.filter(e => e.chatId === chatId);
+      if (relevantEntries.length === 0) {
+        conversationsStore.lastSyncTimestamp = Date.now();
+        return [];
+      }
+
+      // Batch fetch all new messages in a single query (avoids N+1)
+      const existingIds = new Set(conversationsStore.messages.map(m => m.id));
+      const idsToFetch = relevantEntries
+        .map(e => e.messageId)
+        .filter(id => !existingIds.has(id));
+      
+      if (idsToFetch.length === 0) {
+        conversationsStore.lastSyncTimestamp = Date.now();
+        return [];
+      }
+
+      const fetchedMessages = await getMessagesBatchDirect(chatId, idsToFetch);
+      
+      // Guard: chat might have changed during async fetch
+      if (conversationsStore.selectedChatId !== chatId) return [];
+
+      reconcileMessages(chatId, fetchedMessages);
+      conversationsStore.lastSyncTimestamp = Date.now();
+      return fetchedMessages;
+    }
+
+    // Fallback: full re-fetch for non-direct access
+    const freshMessages = await fetchMessages(chatId);
+    if (conversationsStore.selectedChatId !== chatId) return [];
+
+    reconcileMessages(chatId, freshMessages);
+    conversationsStore.lastSyncTimestamp = Date.now();
+    return freshMessages;
+  } finally {
+    conversationsStore._messagePolling = false;
+  }
+}
+
 export function clearPrefetchedDraft() {
   conversationsStore.prefetchedDraft = null;
 }
@@ -376,63 +440,7 @@ export async function fetchMessages(chatId: string): Promise<Message[]> {
 export async function pollMessages(force = false): Promise<Message[]> {
   if (!conversationsStore.selectedChatId) return [];
   if (!force && !conversationsStore.isWindowFocused) return [];
-  if (conversationsStore._messagePolling) return []; // Prevent concurrent polls
-
-  conversationsStore._messagePolling = true;
-  const now = Date.now();
-  const timeSinceLastSync = now - conversationsStore.lastSyncTimestamp;
-
-  try {
-    const chatId = conversationsStore.selectedChatId;
-
-    if (isDirectAccessAvailable()) {
-      const currentGlobalRowid = await getLastMessageRowid();
-      // Skip if nothing changed globally AND we synchronized recently
-      if (
-        !force &&
-        currentGlobalRowid > 0 &&
-        currentGlobalRowid === conversationsStore.lastKnownGlobalRowid &&
-        timeSinceLastSync < conversationsStore.SYNC_DEBOUNCE_MS
-      ) {
-        return [];
-      }
-
-      // Incremental fetch: only get messages newer than last known ROWID
-      const newEntries = await getNewMessagesSince(conversationsStore.lastKnownGlobalRowid);
-      conversationsStore.lastKnownGlobalRowid = currentGlobalRowid;
-
-      // Filter to messages for the current chat
-      const relevantEntries = newEntries.filter(e => e.chatId === chatId);
-      if (relevantEntries.length === 0) return [];
-
-      // Batch fetch all new messages in a single query (avoids N+1)
-      const existingIds = new Set(conversationsStore.messages.map(m => m.id));
-      const idsToFetch = relevantEntries
-        .map(e => e.messageId)
-        .filter(id => !existingIds.has(id));
-      if (idsToFetch.length === 0) return [];
-
-      const fetchedMessages = await getMessagesBatchDirect(chatId, idsToFetch);
-      
-      if (conversationsStore.selectedChatId !== chatId) return [];
-
-      reconcileMessages(chatId, fetchedMessages);
-      conversationsStore.lastSyncTimestamp = now;
-      return fetchedMessages;
-    }
-
-    // Fallback: full re-fetch for non-direct access
-    const freshMessages = await fetchMessages(chatId);
-    if (conversationsStore.selectedChatId !== chatId) return [];
-
-    reconcileMessages(chatId, freshMessages);
-    conversationsStore.lastSyncTimestamp = now;
-    return freshMessages;
-  } catch (e) {
-    return [];
-  } finally {
-    conversationsStore._messagePolling = false;
-  }
+  return syncMessages(conversationsStore.selectedChatId, force);
 }
 
 // Track pending prefetch to avoid race conditions (FE-04)
@@ -476,10 +484,12 @@ export async function selectConversation(chatId: string) {
     conversationsStore.hasMore = cached.pagination.hasMore;
     conversationsStore.loadingMore = false;
     conversationsStore.loadingMessages = false;
-    conversationsStore.prefetchedDraft = null;
+    
+    // Clear draft only if it was for a different chat (already handled by pendingPrefetchChatId logic)
+    // conversationsStore.prefetchedDraft = null; 
 
-    // Start polling immediately - don't block on prefetch
-    startMessagePolling();
+    // Start polling immediately with a force sync to catch any messages since last cache update
+    syncMessages(chatId, true).then(() => startMessagePolling());
     return;
   }
 

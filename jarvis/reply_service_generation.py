@@ -108,6 +108,7 @@ def prepare_streaming_context(
     metadata = {
         "confidence": confidence,
         "confidence_score": base_confidence,
+        "final_prompt": model_request.prompt,
     }
     return model_request, metadata
 
@@ -162,30 +163,9 @@ def build_generation_request(
     is_bot = service.context_service.is_bot_chat(chat_id, cname)
 
     if chat_id and not is_bot:
-        logger.debug("[build] Fetching context for %s...", chat_id[:12])
-        t_ctx_start = time.perf_counter()
-
-        from concurrent.futures import ThreadPoolExecutor
-
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            # Launch both fetches in parallel
-            f_facts = executor.submit(service._fetch_contact_facts, context, chat_id)
-            f_graph = executor.submit(service._fetch_graph_context, context, chat_id)
-
-            # Wait for both to complete (with safety timeout)
-            try:
-                f_facts.result(timeout=2.0)
-            except Exception as e:
-                logger.warning("[build] Parallel facts fetch failed: %s", e)
-
-            try:
-                f_graph.result(timeout=2.0)
-            except Exception as e:
-                logger.warning("[build] Parallel graph fetch failed: %s", e)
-
-        logger.debug(
-            "[build] Context fetching took %.1fms", (time.perf_counter() - t_ctx_start) * 1000
-        )
+        # Background fact extraction disabled per user request to reduce latency/timeouts.
+        # These operations should happen offline or in a non-blocking way.
+        logger.debug("[build] Skipping blocking context fetch for %s", chat_id[:12])
     elif is_bot:
         logger.debug("[build] Skipping person-specific context for bot/service chat")
 
@@ -416,6 +396,7 @@ def generate_llm_reply(
                 "type": "generated",
                 "reason": "generated",
                 "confidence_label": confidence_label,
+                "final_prompt": model_request.prompt,
             },
         )
     except Exception as e:

@@ -287,7 +287,10 @@
       const totalWithOptimistic = conversationsStore.messages.length + conversationsStore.optimisticMessages.length;
       visibleEndIndex = totalWithOptimistic;
       visibleStartIndex = Math.max(0, totalWithOptimistic - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
-      virtualTopPadding = Math.max(0, (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT);
+      virtualTopPadding = visibleStartIndex <= conversationsStore.messages.length
+        ? (cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
+        : (cumulativeHeights[conversationsStore.messages.length] ?? conversationsStore.messages.length * ESTIMATED_MESSAGE_HEIGHT) + 
+          (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT;
       virtualBottomPadding = 0;
       scrollToBottom();
     }
@@ -399,10 +402,13 @@
     // Check if at bottom
     const { scrollTop, scrollHeight, clientHeight } = container;
     const threshold = 150;
-    isAtBottom = scrollHeight - scrollTop - clientHeight < threshold;
+    const currentlyAtBottom = scrollHeight - scrollTop - clientHeight < threshold;
 
-    if (isAtBottom) {
-      hasNewMessagesBelow = false;
+    if (!suppressScrollRecalc) {
+      isAtBottom = currentlyAtBottom;
+      if (isAtBottom) {
+        hasNewMessagesBelow = false;
+      }
     }
   }
 
@@ -475,7 +481,8 @@
           // Calculate top padding based on real messages only (optimistic don't have heights yet)
           virtualTopPadding = visibleStartIndex <= conversationsStore.messages.length
             ? (cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
-            : conversationsStore.messages.length * ESTIMATED_MESSAGE_HEIGHT + (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT;
+            : (cumulativeHeights[conversationsStore.messages.length] ?? conversationsStore.messages.length * ESTIMATED_MESSAGE_HEIGHT) + 
+              (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT;
           virtualBottomPadding = 0;
 
           suppressScrollRecalc = true;
@@ -515,9 +522,13 @@
 
     if (messagesContainer && msgCount > 0 && !isLoading) {
       if (needsScrollToBottom) {
-        visibleEndIndex = msgCount;
-        visibleStartIndex = Math.max(0, msgCount - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
-        virtualTopPadding = cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT;
+        const optimisticCount = conversationsStore.optimisticMessages.length;
+        const msgLen = msgCount + optimisticCount;
+        visibleEndIndex = msgLen;
+        visibleStartIndex = Math.max(0, msgLen - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
+        virtualTopPadding = visibleStartIndex <= msgCount
+          ? (cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
+          : (cumulativeHeights[msgCount] ?? msgCount * ESTIMATED_MESSAGE_HEIGHT) + (visibleStartIndex - msgCount) * ESTIMATED_MESSAGE_HEIGHT;
         virtualBottomPadding = 0;
 
         needsScrollToBottom = false;
@@ -594,12 +605,15 @@
   }
 
   function handleNewMessagesClick() {
+    const optimisticCount = conversationsStore.optimisticMessages.length;
+    const msgLen = conversationsStore.messages.length + optimisticCount;
+    visibleEndIndex = msgLen;
+    visibleStartIndex = Math.max(0, msgLen - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
 
-    const messages = conversationsStore.messages;
-    visibleEndIndex = messages.length;
-    visibleStartIndex = Math.max(0, messages.length - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
-
-    virtualTopPadding = cumulativeHeights[visibleStartIndex]!;
+    virtualTopPadding = visibleStartIndex <= conversationsStore.messages.length
+      ? (cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
+      : (cumulativeHeights[conversationsStore.messages.length] ?? conversationsStore.messages.length * ESTIMATED_MESSAGE_HEIGHT) + 
+        (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT;
     virtualBottomPadding = 0;
 
     scrollToBottom();

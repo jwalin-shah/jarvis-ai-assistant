@@ -231,6 +231,7 @@ def build_simple_reply_prompt(
     context: str,
     last_message: str,
     last_is_from_me: bool = False,
+    instruction: str = "",
 ) -> str:
     """Build a simple reply prompt - just conversation, no extra stuff.
 
@@ -249,6 +250,7 @@ def build_simple_reply_prompt(
 
     # Simple prompt - just conversation + last message
     prompt = SIMPLE_REPLY_PROMPT.template.format(
+        instruction=instruction,
         context=conversation,
         last_message=last_message,
     )
@@ -257,7 +259,7 @@ def build_simple_reply_prompt(
 
 
 def build_prompt_from_request(req: Any) -> str:
-    """Build a reply prompt from a typed pipeline generation request."""
+    """Build a reply prompt from a typed pipeline pipeline request."""
     context_messages = req.context.metadata.get("context_messages")
     last_is_from_me = req.context.is_from_me  # Default to true source
 
@@ -311,7 +313,7 @@ def build_prompt_from_request(req: Any) -> str:
     )
 
     instruction_raw = req.context.metadata.get("instruction")
-    instruction = instruction_raw if isinstance(instruction_raw, str) and instruction_raw else None
+    instruction = instruction_raw if isinstance(instruction_raw, str) and instruction_raw else ""
 
     contact_name_raw = req.context.metadata.get("contact_name") or req.context.sender_id or "them"
     contact_name = str(contact_name_raw)
@@ -331,6 +333,7 @@ def build_prompt_from_request(req: Any) -> str:
         context=formatted_context,
         last_message=req.context.message_text,
         last_is_from_me=last_is_from_me,
+        instruction=instruction,
     )
 
 

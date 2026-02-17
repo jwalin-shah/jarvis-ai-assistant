@@ -328,7 +328,7 @@ SIMPLE_REPLY_PROMPT = PromptTemplate(
     name="simple_reply_generation",
     system_message="",
     template=(
-        "<|im_start|>system\n" + SYSTEM_PREFIX + "<|im_end|>\n"
+        "<|im_start|>system\n" + SYSTEM_PREFIX + "{instruction}<|im_end|>\n"
         "<|im_start|>user\n"
         "{context}"
         "{last_message}<|im_end|>\n"

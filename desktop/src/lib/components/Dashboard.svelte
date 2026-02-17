@@ -61,10 +61,17 @@
     total: "#ff9500",
     route: "#ff3b30",
     classify: "#af52de",
+    overhead: "#8e8e93",
   };
 
   function getPhaseColor(phase: string): string {
-    return phaseColors[phase] || "#8e8e93";
+    // Map backend keys to color keys
+    const map: Record<string, string> = {
+      context_search: "search",
+      generation: "generate",
+    };
+    const key = map[phase] || phase;
+    return phaseColors[key] || phaseColors.overhead;
   }
 </script>
 

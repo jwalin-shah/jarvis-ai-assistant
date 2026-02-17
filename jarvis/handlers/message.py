@@ -342,6 +342,22 @@ class MessageHandler(BaseHandler):
             "streamed": True,
             "tokens_generated": len(response_tokens),
         }
+
+        # Log the generation for traceability
+        try:
+            final_prompt = metadata.get("final_prompt", "")
+            reply_service.log_custom_generation(
+                chat_id=chat_id,
+                incoming_text=last_incoming,
+                final_prompt=final_prompt,
+                response_text=full_response.strip(),
+                confidence=confidence,
+                category="streaming_draft",
+                metadata={"tokens_generated": len(response_tokens)},
+            )
+        except Exception as e:
+            logger.debug(f"Failed to log streaming generation: {e}")
+
         await self.send_stream_response(writer, request_id, result)
         return result
 
