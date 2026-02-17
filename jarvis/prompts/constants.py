@@ -312,14 +312,28 @@ TEXT_ABBREVIATIONS: set[str] = {
 
 # Static system prefix for KV cache reuse.
 SYSTEM_PREFIX = (
-    "You are texting from your phone. Reply naturally, matching their style. "
-    "Be brief (1-2 sentences), casual, and sound like a real person.\n"
+    "You are texting from your phone. Reply naturally. "
+    "Be brief (1-2 sentences), casual, like a real person.\n"
 )
 
 REPLY_PROMPT = PromptTemplate(
     name="reply_generation",
     system_message="",
     template="{context}\nMe: ",
+    max_output_tokens=25,
+)
+
+# Simple prompt - just conversation context, no extra stuff
+SIMPLE_REPLY_PROMPT = PromptTemplate(
+    name="simple_reply_generation",
+    system_message="",
+    template=(
+        "<|im_start|>system\n" + SYSTEM_PREFIX + "<|im_end|>\n"
+        "<|im_start|>user\n"
+        "{context}"
+        "{last_message}<|im_end|>\n"
+        "<|im_start|>assistant\n"
+    ),
     max_output_tokens=25,
 )
 
@@ -476,26 +490,26 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
     "question": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=15,
+        context_depth=7,  # Reduced from 15 per research (5-7 optimal)
         system_prompt=None,  # Uses universal SYSTEM_PREFIX (was: "They asked a question...")
     ),
     "request": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=15,
+        context_depth=7,  # Reduced from 15 per research (5-7 optimal)
         system_prompt=None,  # Uses universal SYSTEM_PREFIX (was: "They're asking you...")
     ),
     "emotion": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=15,
+        context_depth=7,  # Reduced from 15 per research (5-7 optimal)
         # Uses universal SYSTEM_PREFIX (was: "They're sharing something emotional...")
         system_prompt=None,
     ),
     "statement": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=15,
+        context_depth=7,  # Reduced from 15 per research (5-7 optimal)
         system_prompt=None,  # Uses universal SYSTEM_PREFIX (was: "They're sharing or chatting...")
     ),
 }

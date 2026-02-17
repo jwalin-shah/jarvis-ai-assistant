@@ -1,7 +1,7 @@
 # Reply Pipeline Architecture Guide
 
-> **Last Updated:** 2026-02-16  
-> **Status:** Production - Universal Prompt System
+> **Last Updated:** 2026-02-17  
+> **Status:** Production - Direct-to-LLM
 
 ---
 
@@ -9,41 +9,45 @@
 
 This guide covers the complete architecture for generating text message replies that match your personal style.
 
-**Key Design Decision:** We use a **universal prompt** for all generation, not category-specific prompts. See [Categorization Ablation Findings](./research/CATEGORIZATION_ABLATION_FINDINGS.md) for why categories hurt quality.
+**Key Design Decision:** We use a **direct-to-LLM** path - no classification at request time. The LLM decides IF and HOW to reply. Classification runs in **background (prefetch)** for analytics only.
+
+See [Categorization Ablation Findings](./research/CATEGORIZATION_ABLATION_FINDINGS.md) for why category-specific prompts hurt quality.
 
 ---
 
 ## Architecture Components
 
-### 1. Classification Layer (Decision Only)
+### 1. Direct-to-LLM (Request Time)
 
-**Purpose:** Decide IF to reply, not HOW to reply
+**Purpose:** LLM decides IF and HOW to reply - no classification or RAG at request time
 
 ```python
-from jarvis.classifiers.cascade import classify_with_cascade
-from jarvis.classifiers.response_mobilization import classify_mobilization
+# Fast path: skip obvious non-responses (reactions, acknowledgments)
+if is_reaction(incoming) or is_acknowledgment_only(incoming):
+    return ""  # Don't respond
 
-# Classify incoming message
-mobilization = classify_with_cascade(incoming_text)
+# Build prompt: universal system prompt + conversation context + category examples
+# NO RAG - research showed it causes hallucinations
+prompt = build_prompt(conversation)
 
-# Decision tree
-if mobilization.pressure == "none":
-    # No reply needed
-    return None
-elif mobilization.pressure == "low" and category == "acknowledge":
-    # Use template (fast)
-    return random.choice(ACKNOWLEDGE_TEMPLATES)
-else:
-    # Generate full reply
-    return generate_reply()
+# LLM generates reply
+reply = llm.generate(prompt)
 ```
 
-**Important:** Categories are used for:
-- Analytics and logging
-- Deciding whether to use templates (acknowledge/closing)
-- NOT for selecting prompts (proven to hurt quality)
+**Benefits:**
+- Faster (no ML classification, no RAG search at request time)
+- Simpler (LLM handles all routing logic)
+- Better quality (no RAG hallucinations, same as chatting directly with Ollama)
 
-**Categories** (6 - for analytics only):
+### 2. Classification (Background - Prefetch)
+
+**Purpose:** Run classification in background for analytics, NOT at request time
+
+Classification runs via the prefetch system and stores results in:
+- `message_update.last_category` - category per message
+- Analytics tables for dashboard/metrics
+
+Categories (6 - for analytics only):
 
 - `acknowledge` - "ok", "sure", "thanks" → uses template
 - `closing` - "bye", "talk later" → uses template
@@ -134,9 +138,9 @@ Reply to: {last_message}<|im_end|>
 {
     "name": "lfm-1.2b-ft",
     "max_tokens": 25,      # Keep replies brief (1-2 sentences)
-    "temperature": 0.15,   # Slight variety for naturalness
+    "temperature": 0.1,     # Deterministic but natural
     "top_p": 0.9,
-    "repetition_penalty": 1.15,  # Prevents echoing input
+    "repetition_penalty": 1.05,  # Prevents echoing input
 }
 ```
 

@@ -17,17 +17,10 @@ from jarvis.contracts.pipeline import (
     GenerationRequest,
     GenerationResponse,
     MessageContext,
-    RAGDocument,
-)
-from jarvis.core.generation.confidence import (
-    UNCERTAIN_SIGNALS,
-    compute_confidence,
-    compute_example_diversity,
 )
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
 from jarvis.prompts import build_prompt_from_request, get_category_config
 from jarvis.reply_service_utils import safe_float
-from jarvis.search.hybrid_search import get_hybrid_searcher
 
 logger = logging.getLogger(__name__)
 
@@ -76,15 +69,9 @@ def prepare_streaming_context(
 
         classification_result = DefaultClassification()
 
-    if search_results is None:
-        hybrid_searcher = get_hybrid_searcher()
-        search_results = hybrid_searcher.search(query=normalized_incoming, limit=5, rerank=True)
-
-    logger.info(
-        "[stream] RAG search: %d results, top_similarity=%.3f",
-        len(search_results),
-        search_results[0].get("similarity", 0.0) if search_results else 0.0,
-    )
+    # Direct-to-LLM: no RAG search (causes hallucinations per research)
+    # Just conversation context - same as chatting directly with Ollama
+    search_results = []
 
     message_context = MessageContext(
         chat_id=chat_id or "",
@@ -97,25 +84,17 @@ def prepare_streaming_context(
     pipeline_request = service.build_generation_request(
         context=message_context,
         classification=classification_result,
-        search_results=search_results,
+        search_results=[],
         contact=contact,
         thread=thread_messages,
         instruction=instruction,
     )
     model_request = service._to_model_generation_request(pipeline_request)
 
-    similarity = search_results[0].get("similarity", 0.0) if search_results else 0.0
-    example_diversity = service._compute_example_diversity(search_results)
-
-    # Direct-to-LLM: use medium confidence as default (LLM decides response)
+    # Direct-to-LLM: simple confidence (LLM handles routing)
     base_confidence = 0.65
 
     config = get_config()
-    if similarity < config.similarity_thresholds.rag_min_similarity:
-        base_confidence *= config.similarity_thresholds.low_similarity_penalty
-    if example_diversity < 0.3:
-        base_confidence *= config.similarity_thresholds.medium_similarity_factor
-
     if base_confidence >= config.similarity_thresholds.high_confidence:
         confidence = "high"
     elif base_confidence >= config.similarity_thresholds.medium_confidence:
@@ -126,8 +105,6 @@ def prepare_streaming_context(
     metadata = {
         "confidence": confidence,
         "confidence_score": base_confidence,
-        "similarity_score": similarity,
-        "example_diversity": example_diversity,
     }
     return model_request, metadata
 
@@ -229,82 +206,33 @@ def build_generation_request(
     context.metadata["instruction"] = instruction or ""
     context.metadata.setdefault("contact_name", cname)
 
+    # Direct-to-LLM: just use category examples, no RAG (causes hallucinations)
     optimized_examples = get_optimized_examples(category_name)
-    category_exchanges = [(ex.context, ex.output) for ex in optimized_examples]
-
-    config = get_config()
-    top_results = search_results[: config.retrieval.top_k_rag]
-    similar_exchanges = [
-        (str(r.get("context_text", "")), str(r.get("reply_text", ""))) for r in top_results
-    ]
-    rag_rerank_scores = [
-        service._safe_float(r.get("rerank_score"), default=0.0) for r in top_results
-    ]
-
-    all_exchanges = similar_exchanges + [
-        ex for ex in category_exchanges if ex not in similar_exchanges
-    ]
-    all_rerank_scores = rag_rerank_scores + [0.0] * (len(all_exchanges) - len(similar_exchanges))
-
-    if cached_embedder is None:
-        cached_embedder = get_embedder()
-
-    logger.debug("[build] Deduplicating %d examples...", len(all_exchanges))
-    t_dedupe_start = time.perf_counter()
-    all_exchanges = dedupe_examples(
-        service,
-        examples=all_exchanges,
-        embedder=cached_embedder,
-        rerank_scores=all_rerank_scores,
-    )
-    all_exchanges = all_exchanges[: config.retrieval.top_k_examples]
-    logger.debug("[build] Dedupe took %.1fms", (time.perf_counter() - t_dedupe_start) * 1000)
+    all_exchanges = [(ex.context, ex.output) for ex in optimized_examples]
 
     logger.info(
-        "[build] Context: %d messages, %d RAG docs, %d examples, contact=%s",
+        "[build] Context: %d messages, %d examples, contact=%s",
         len(context_messages),
-        len(top_results),
         len(all_exchanges),
         context.metadata.get("contact_name", "unknown"),
     )
-
-    rag_documents: list[RAGDocument] = []
-    for result in top_results:
-        context_text = str(result.get("context_text", "")).strip()
-        if not context_text:
-            continue
-        rag_documents.append(
-            RAGDocument(
-                content=context_text,
-                source=str(result.get("topic") or chat_id or "rag"),
-                score=service._safe_float(result.get("similarity"), default=0.0),
-                metadata={
-                    "response_text": str(result.get("response_text", "")),
-                    "rerank_score": service._safe_float(result.get("rerank_score"), default=0.0),
-                },
-            )
-        )
 
     return GenerationRequest(
         context=context,
         classification=classification,
         extraction=None,
-        retrieved_docs=rag_documents,
-        few_shot_examples=[
-            {"input": ctx, "output": response}
-            for ctx, response in all_exchanges
-            if ctx and response
-        ],
+        retrieved_docs=[],
+        few_shot_examples=[],  # No examples - causes hallucinations per research
     )
 
 
 def to_model_generation_request(service: Any, request: GenerationRequest) -> ModelGenerationRequest:
     """Convert pipeline request into model-native request."""
-    pressure = service._pressure_from_classification(request.classification)
     prompt = build_prompt_from_request(request)
+    config = get_config()
     return ModelGenerationRequest(
         prompt=prompt,
-        max_tokens=service._max_tokens_for_pressure(pressure),
+        max_tokens=config.model.max_tokens_reply,
         stop_sequences=["</reply>", "<system>", "<conversation>", "<examples>"],
     )
 
@@ -396,36 +324,32 @@ def generate_llm_reply(
 ) -> GenerationResponse:
     """Generate response from model and compute confidence metadata."""
     incoming = request.context.message_text.strip()
-    pressure = service._pressure_from_classification(request.classification)
-    logger.info("[reply] Incoming: %r | pressure=%s", incoming[:80], pressure.value)
+    # Direct-to-LLM: always let LLM decide whether to respond
+    logger.info("[reply] Incoming: %r | direct-to-llm", incoming[:80])
 
-    if pressure == ResponsePressure.NONE and not search_results:
+    # Simple fast-path: skip obvious non-responses (reactions, acknowledgments)
+    from jarvis.text_normalizer import is_reaction, is_acknowledgment_only
+
+    if is_reaction(incoming) or is_acknowledgment_only(incoming):
         return GenerationResponse(
             response="",
-            confidence=0.2,
+            confidence=0.1,
             metadata={
                 "type": "skip",
-                "reason": "no_response_needed",
-                "similarity_score": 0.0,
-                "vec_candidates": 0,
+                "reason": "reaction_or_ack",
             },
         )
 
-    cat_conf = safe_float(
-        request.classification.metadata.get("category_confidence"),
-        default=request.classification.confidence,
-    )
     has_thin_context = not thread or len(thread) < 2
     is_short_msg = len(incoming.split()) <= 3
-    if cat_conf < 0.4 and pressure == ResponsePressure.NONE and is_short_msg and has_thin_context:
+    if is_short_msg and has_thin_context:
+        # Direct-to-LLM: let model decide on short messages with thin context
         return GenerationResponse(
             response="",
-            confidence=max(0.1, cat_conf),
+            confidence=0.3,
             metadata={
                 "type": "clarify",
                 "reason": "ambiguous_message",
-                "similarity_score": 0.0,
-                "vec_candidates": len(search_results),
             },
         )
 
@@ -529,78 +453,30 @@ def generate_llm_reply(
         text = best_candidate
         logger.info("[reply] Selected candidate: %r (score=%.1f)", text, best_score)
 
-        if text.lower() in UNCERTAIN_SIGNALS:
-            return GenerationResponse(
-                response=text,
-                confidence=0.25,
-                metadata={
-                    "type": "uncertain",
-                    "reason": "model_uncertain",
-                    "similarity_score": 0.0,
-                    "vec_candidates": len(search_results),
-                    "final_prompt": final_prompt,
-                },
-            )
+        # Direct-to-LLM: simple confidence
+        # Coherence check only
+        base_conf = 0.65
+        if text.lower().strip() == incoming.lower().strip():
+            base_conf *= 0.5
 
-        similarity = (
-            safe_float(search_results[0].get("similarity"), default=0.0) if search_results else 0.0
-        )
-        example_diversity = compute_example_diversity(search_results)
-        reply_length = len(text.split())
-        rerank_score = (
-            safe_float(search_results[0].get("rerank_score"), default=0.0)
-            if search_results
-            else None
+        confidence_score = max(0.0, min(base_conf, 1.0))
+        confidence_label = (
+            "high" if confidence_score >= 0.7 else "medium" if confidence_score >= 0.45 else "low"
         )
 
-        confidence_score, confidence_label = compute_confidence(
-            pressure,
-            similarity,
-            example_diversity,
-            reply_length,
-            text,
-            incoming_text=incoming,
-            rerank_score=rerank_score,
-        )
         logger.info(
-            "[reply] Confidence: %.2f (%s) | similarity=%.3f | diversity=%.3f",
+            "[reply] Confidence: %.2f (%s) | direct-to-llm",
             confidence_score,
             confidence_label,
-            similarity,
-            example_diversity,
         )
-
-        config = get_config()
-        similar_triggers = [
-            str(row.get("context_text", ""))
-            for row in search_results[: config.retrieval.top_k_rag]
-            if row.get("context_text")
-        ]
-        used_docs = [
-            doc.content
-            for doc in request.retrieved_docs[: config.retrieval.top_k_rag]
-            if doc.content
-        ]
 
         return GenerationResponse(
             response=text,
             confidence=confidence_score,
-            used_kg_facts=used_docs,
             metadata={
                 "type": "generated",
                 "reason": "generated",
-                "category": str(
-                    request.classification.metadata.get(
-                        "category_name",
-                        request.classification.category.value,
-                    )
-                ),
-                "similarity_score": similarity,
-                "example_diversity": example_diversity,
                 "confidence_label": confidence_label,
-                "vec_candidates": len(search_results),
-                "similar_triggers": similar_triggers,
-                "final_prompt": final_prompt,
             },
         )
     except Exception as e:
@@ -611,7 +487,5 @@ def generate_llm_reply(
             metadata={
                 "type": "clarify",
                 "reason": "generation_error",
-                "similarity_score": 0.0,
-                "vec_candidates": len(search_results),
             },
         )

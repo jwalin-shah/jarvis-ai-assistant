@@ -518,7 +518,8 @@ class TestBuildPromptFromRequest:
         assert "Hey, what are we doing tonight?" in result
         assert "I was thinking dinner" in result
 
-    def test_retrieved_docs_become_similar_exchanges(self):
+    def test_retrieved_docs_not_in_simple_prompt(self):
+        """Simple prompt doesn't include RAG docs - causes hallucinations per research."""
         docs = [
             RAGDocument(
                 content="What's for lunch?",
@@ -529,39 +530,42 @@ class TestBuildPromptFromRequest:
         ]
         req = self._make_pipeline_request(retrieved_docs=docs)
         result = build_prompt_from_request(req)
-        assert "What's for lunch?" in result
-        assert "Let's get tacos" in result
+        # Simple prompt: just conversation + last message
+        assert "<|im_start|>system" in result
+        assert "Reply naturally" in result
 
-    def test_few_shot_examples_become_exchanges(self):
+    def test_few_shot_examples_not_in_simple_prompt(self):
+        """Simple prompt doesn't include examples - causes hallucinations per research."""
         examples = [
             {"input": "How's it going?", "output": "Pretty good, you?"},
         ]
         req = self._make_pipeline_request(few_shot_examples=examples)
         result = build_prompt_from_request(req)
-        assert "How's it going?" in result
-        assert "Pretty good, you?" in result
+        # Simple prompt: no examples passed
+        assert "How's it going?" not in result
+        assert "Pretty good, you?" not in result
 
-    def test_instruction_passed_through(self):
-        req = self._make_pipeline_request(instruction="Be very concise")
+    def test_simple_prompt_uses_system_prefix(self):
+        """Simple prompt uses the simplified system prefix."""
+        req = self._make_pipeline_request()
         result = build_prompt_from_request(req)
-        assert "Be very concise" in result
+        assert "Reply naturally" in result
+        assert "casual" in result
 
-    def test_contact_name_passed_through(self):
-        req = self._make_pipeline_request(contact_name="Sarah")
+    def test_simple_prompt_no_contact_info(self):
+        """Simple prompt doesn't include contact facts - keeps it natural."""
+        req = self._make_pipeline_request(contact_name="Sarah", contact_facts="NYC lives in NYC")
         result = build_prompt_from_request(req)
-        # Contact name is no longer shown as attribute in style tag
-        assert "<style>" in result
-        assert "Tone:" in result
+        # Simple prompt: no contact info
+        assert "<style>" not in result
+        assert "NYC" not in result
 
-    def test_contact_facts_passed_through(self):
-        req = self._make_pipeline_request(contact_facts="NYC lives in NYC")
-        result = build_prompt_from_request(req)
-        assert "NYC lives in" in result
-
-    def test_relationship_graph_passed_through(self):
+    def test_simple_prompt_no_relationship_graph(self):
+        """Simple prompt doesn't include relationship graph."""
         req = self._make_pipeline_request(relationship_graph="Sarah -- roommate --> Alex")
         result = build_prompt_from_request(req)
-        assert "Sarah -- roommate --> Alex" in result
+        # Simple prompt: no relationship graph
+        assert "Sarah -- roommate" not in result
 
     def test_fallback_to_message_text_when_no_context(self):
         req = self._make_pipeline_request(
@@ -572,12 +576,13 @@ class TestBuildPromptFromRequest:
         result = build_prompt_from_request(req)
         assert "Hey what's up?" in result
 
-    def test_default_contact_name_is_them(self):
-        req = self._make_pipeline_request(contact_name=None)
+    def test_simple_prompt_uses_chatml_format(self):
+        """Simple prompt uses ChatML format."""
+        req = self._make_pipeline_request()
         result = build_prompt_from_request(req)
-        # Style section is present with default tone
-        assert "<style>" in result
-        assert "Tone:" in result
+        assert "<|im_start|>system" in result
+        assert "<|im_start|>user" in result
+        assert "<|im_start|>assistant" in result
 
 
 # =============================================================================
@@ -856,9 +861,10 @@ class TestTemplateVariables:
 
 
 class TestContextDocumentFormatting:
-    """Test that RAG documents are properly formatted in prompts."""
+    """Test that simple prompts don't include RAG docs (causes hallucinations)."""
 
-    def test_single_rag_document(self):
+    def test_simple_prompt_ignores_rag_docs(self):
+        """Simple prompt format - RAG docs not included."""
         docs = [
             RAGDocument(
                 content="Want to grab dinner?",
@@ -889,10 +895,12 @@ class TestContextDocumentFormatting:
             few_shot_examples=[],
         )
         result = build_prompt_from_request(req)
-        assert "Want to grab dinner?" in result
-        assert "Sure, 7pm?" in result
+        # Simple prompt: no RAG docs in output
+        assert "Want to grab dinner?" not in result
+        assert "Sure, 7pm?" not in result
 
-    def test_multiple_rag_documents_ordered(self):
+    def test_simple_prompt_format(self):
+        """Simple prompt uses ChatML format."""
         docs = [
             RAGDocument(
                 content=f"Trigger {i}",
@@ -1200,7 +1208,8 @@ class TestSystemPrefix:
         assert "Reply naturally" in SYSTEM_PREFIX
 
     def test_system_prefix_contains_style_guidance(self):
-        assert "matching their style" in SYSTEM_PREFIX
+        # Simplified system prefix - no longer mentions "matching their style"
+        assert "Reply naturally" in SYSTEM_PREFIX
         assert "Be brief" in SYSTEM_PREFIX
 
     def test_rag_prompt_template_starts_with_system_role(self):

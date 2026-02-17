@@ -227,6 +227,35 @@ def build_rag_reply_prompt(
     return prompt
 
 
+def build_simple_reply_prompt(
+    context: str,
+    last_message: str,
+    last_is_from_me: bool = False,
+) -> str:
+    """Build a simple reply prompt - just conversation, no extra stuff.
+
+    Like texting directly - no examples, no facts, no relationship graph.
+    """
+    from jarvis.prompts.constants import SIMPLE_REPLY_PROMPT, SYSTEM_PREFIX
+
+    # Truncate context if needed
+    truncated_context = truncate_context(context)
+
+    # Format conversation naturally
+    if truncated_context:
+        conversation = truncated_context.strip() + "\n"
+    else:
+        conversation = ""
+
+    # Simple prompt - just conversation + last message
+    prompt = SIMPLE_REPLY_PROMPT.template.format(
+        context=conversation,
+        last_message=last_message,
+    )
+
+    return prompt
+
+
 def build_prompt_from_request(req: Any) -> str:
     """Build a reply prompt from a typed pipeline generation request."""
     context_messages = req.context.metadata.get("context_messages")
@@ -296,19 +325,12 @@ def build_prompt_from_request(req: Any) -> str:
     auto_context_raw = req.context.metadata.get("auto_context")
     auto_context = auto_context_raw if isinstance(auto_context_raw, str) else ""
 
-    return build_rag_reply_prompt(
+    # Use simple prompt - no extra context, facts, or examples
+    # This is more like chatting directly with the model
+    return build_simple_reply_prompt(
         context=formatted_context,
         last_message=req.context.message_text,
-        contact_name=contact_name,
-        similar_exchanges=similar_exchanges[:5],
-        relationship_profile=relationship_profile,
-        contact_context=contact_context,
-        instruction=instruction,
-        user_messages=user_messages,
-        contact_facts=contact_facts,
-        relationship_graph=relationship_graph,
         last_is_from_me=last_is_from_me,
-        auto_context=auto_context,
     )
 
 

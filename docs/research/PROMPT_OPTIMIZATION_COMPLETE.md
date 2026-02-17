@@ -60,7 +60,7 @@ Be brief (1-2 sentences), casual, and sound like a real person.
 
 ### Model Settings
 - **Temperature:** 0.1 (deterministic but natural)
-- **Max tokens:** 50 (forces brevity)
+- **Max tokens:** 25 (brief replies, 1-2 sentences)
 - **Top-p:** 0.9
 - **Repetition penalty:** 1.05
 

@@ -214,23 +214,24 @@ class ModelSettings(BaseModel):
 
     model_id: str = "lfm-0.7b"  # Using 0.7B model for both extraction and generation
     auto_select: bool = True
-    max_tokens_reply: int = Field(default=150, ge=1, le=2048)
+    max_tokens_reply: int = Field(default=25, ge=1, le=2048)  # Brief replies per research
     max_tokens_summary: int = Field(default=500, ge=1, le=4096)
-    temperature: float = Field(default=0.15, ge=0.0, le=2.0)
-    top_p: float = Field(default=0.9, ge=0.0, le=1.0)
-    repetition_penalty: float = Field(default=1.15, ge=1.0, le=2.0)
-    context_depth: int = Field(default=15, ge=0, le=50)
+    temperature: float = Field(default=0.1, ge=0.0, le=2.0)  # Low temp from Liquid AI docs
+    top_p: float = Field(default=0.1, ge=0.0, le=1.0)  # From Liquid AI LFM docs
+    top_k: int = Field(default=50, ge=0, le=200)  # From Liquid AI LFM docs
+    repetition_penalty: float = Field(default=1.05, ge=1.0, le=2.0)
+    context_depth: int = Field(default=7, ge=0, le=50)  # 5-7 per research
     generation_timeout_seconds: float = Field(default=60.0, ge=1.0, le=600.0)
     idle_timeout_seconds: float = Field(default=300.0, ge=0.0, le=3600.0)
     warm_on_startup: bool = False
-    # Turbo Mode: Speculative decoding + KV cache optimization
-    speculative_enabled: bool = True
+    # Speculative decoding disabled - minimal speedup, adds complexity
+    speculative_enabled: bool = False
     speculative_draft_model_id: str = "lfm-350m"
     speculative_num_draft_tokens: int = Field(default=4, ge=1, le=10)
 
     kv_cache_bits: int = Field(default=8, ge=2, le=16)
-    llm_memory_limit_mb: int = Field(default=1024, ge=256, le=16384)
-    llm_cache_limit_mb: int = Field(default=512, ge=128, le=8192)
+    llm_memory_limit_mb: int = Field(default=768, ge=256, le=16384)
+    llm_cache_limit_mb: int = Field(default=64, ge=16, le=8192)
     embedder_memory_limit_mb: int = Field(default=256, ge=64, le=4096)
     embedder_cache_limit_mb: int = Field(default=128, ge=32, le=2048)
 
