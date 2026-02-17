@@ -460,7 +460,7 @@ export async function getMessages(
     const elapsed = performance.now() - startTime;
     logger.debug(`getMessages loaded ${messages.length} messages in ${elapsed.toFixed(1)}ms`);
     if (elapsed > 100) {
-      logger.warn(`[LATENCY WARNING] getMessages took ${elapsed.toFixed(1)}ms (threshold: 100ms) - possible N+1 pattern`);
+      logger.warn(`[LATENCY WARNING] getMessages took ${elapsed.toFixed(1)}ms (threshold: 100ms)`);
     }
 
     return messages;

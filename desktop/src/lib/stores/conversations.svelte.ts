@@ -32,7 +32,7 @@ import type { NewMessageEvent } from "../socket/client";
 const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
 
 /** Number of messages to fetch per page */
-const PAGE_SIZE = 40;
+const PAGE_SIZE = 60;
 
 /** Number of conversations to fetch for the list */
 const CONVERSATIONS_PAGE_SIZE = 50;
