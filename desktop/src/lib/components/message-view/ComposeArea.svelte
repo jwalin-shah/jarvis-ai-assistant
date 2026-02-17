@@ -9,6 +9,7 @@
     sending?: boolean;
     placeholder?: string;
     onSend?: (text: string) => void;
+    onAIDraft?: () => void;
     onFocus?: () => void;
   }
 
@@ -18,6 +19,7 @@
     sending = false,
     placeholder = 'iMessage',
     onSend,
+    onAIDraft,
     onFocus,
   }: Props = $props();
 
@@ -85,16 +87,33 @@
       onfocus={onFocus}
       disabled={disabled || sending}
     ></textarea>
-    <Button
-      variant="primary"
-      size="sm"
-      onclick={handleSend}
-      disabled={!value.trim() || disabled}
-      loading={sending}
-      title="Send message (Enter)"
-    >
-      <SendIcon size={18} />
-    </Button>
+    <div class="compose-actions">
+      {#if onAIDraft}
+        <button
+          type="button"
+          class="action-btn ai-draft-btn"
+          onclick={onAIDraft}
+          disabled={disabled}
+          title="Generate AI Draft"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+            <path d="M12 3l1.912 5.886L20 10.8l-5.886 1.912L12 18.6l-1.912-5.886L4.2 10.8l5.886-1.912L12 3z" fill="currentColor" opacity="0.2" />
+            <path d="M5 3L6 5L9 6L6 7L5 9L4 7L1 6L4 5L5 3z" fill="currentColor" />
+            <path d="M19 15L20 17L23 18L20 19L19 21L18 19L15 18L18 17L19 15z" fill="currentColor" />
+          </svg>
+        </button>
+      {/if}
+      <Button
+        variant="primary"
+        size="sm"
+        onclick={handleSend}
+        disabled={!value.trim() || disabled}
+        loading={sending}
+        title="Send message (Enter)"
+      >
+        <SendIcon size={18} />
+      </Button>
+    </div>
   </div>
 </div>
 
@@ -118,6 +137,41 @@
 
   .compose-input-wrapper:focus-within {
     border-color: var(--color-primary);
+  }
+
+  .compose-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding-bottom: var(--space-1);
+  }
+
+  .action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: var(--space-1);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+
+  .action-btn:hover:not(:disabled) {
+    background: var(--surface-base-hover);
+    color: var(--color-primary);
+  }
+
+  .ai-draft-btn {
+    color: var(--color-primary);
+    opacity: 0.8;
+  }
+
+  .ai-draft-btn:hover {
+    opacity: 1;
+    transform: scale(1.05);
   }
 
   .compose-input {

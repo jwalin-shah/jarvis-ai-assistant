@@ -365,13 +365,20 @@ def generate_llm_reply(
         # --- Best of N Generation ---
         # Generate 2 candidates with different temperatures to explore style options
         # LFM models often prefer lower temperatures (0.1-0.3) for stability.
+        import copy
+        import random
+
         candidates = []
         temperatures = [0.1, 0.3]
 
         for temp in temperatures:
+            # Add small random jitter to ensure variance on regeneration
+            jitter = random.uniform(-0.05, 0.05)
+            actual_temp = max(0.01, temp + jitter)
+
             # Clone request with specific temp
-            variant_req = model_request
-            variant_req.temperature = temp
+            variant_req = copy.deepcopy(model_request)
+            variant_req.temperature = actual_temp
             # Ensure repetition penalty is set if not already
             # Use centralized default if not set
             if not variant_req.repetition_penalty:

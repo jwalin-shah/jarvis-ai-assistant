@@ -206,14 +206,27 @@
     </div>
   {/if}
 
-  <button
-    class="bar-btn close"
-    onclick={handleClose}
-    title="Close (Esc)"
-    aria-label="Close suggestion bar"
-  >
-    <Icon name="x-circle" size={14} />
-  </button>
+  <div class="bar-actions">
+    {#if barState === "results" || barState === "error"}
+      <button
+        class="bar-btn"
+        onclick={generateReplies}
+        title="Regenerate suggestions"
+        aria-label="Regenerate suggestions"
+      >
+        <Icon name="refresh-cw" size={14} />
+      </button>
+    {/if}
+
+    <button
+      class="bar-btn close"
+      onclick={handleClose}
+      title="Close (Esc)"
+      aria-label="Close suggestion bar"
+    >
+      <Icon name="x-circle" size={14} />
+    </button>
+  </div>
 </div>
 
 <style>
@@ -224,10 +237,12 @@
     padding: 8px 12px;
     background: var(--bg-secondary);
     border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
     animation: slideUp 0.15s ease;
     overflow: hidden;
     position: relative;
-    z-index: 10;
+    z-index: 50;
+    pointer-events: auto;
   }
 
   @keyframes slideUp {
@@ -345,6 +360,13 @@
   .bar-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
+  }
+
+  .bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
   }
 
   /* Hide scrollbar on the chips container */

@@ -259,8 +259,8 @@ export async function getConversations(
     const rows = await chatDb.select<ConversationRow[]>(query, params);
     const elapsed = performance.now() - startTime;
     logger.debug(`[LATENCY] getConversations fetched ${rows.length} conversations in ${elapsed.toFixed(1)}ms`);
-    if (elapsed > 100) {
-      logger.warn(`[LATENCY WARNING] getConversations took ${elapsed.toFixed(1)}ms (threshold: 100ms)`);
+    if (elapsed > 250) {
+      logger.warn(`[LATENCY WARNING] getConversations took ${elapsed.toFixed(1)}ms (threshold: 250ms)`);
     }
 
     // Populate chat GUID -> ROWID cache to skip JOIN chat in message queries
@@ -484,8 +484,8 @@ export async function getMessages(
 
     const elapsed = performance.now() - startTime;
     logger.debug(`getMessages loaded ${messages.length} messages in ${elapsed.toFixed(1)}ms`);
-    if (elapsed > 100) {
-      logger.warn(`[LATENCY WARNING] getMessages took ${elapsed.toFixed(1)}ms (threshold: 100ms)`);
+    if (elapsed > 250) {
+      logger.warn(`[LATENCY WARNING] getMessages took ${elapsed.toFixed(1)}ms (threshold: 250ms)`);
     }
 
     return messages;

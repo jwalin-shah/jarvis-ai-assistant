@@ -761,22 +761,6 @@
         </h2>
       </div>
       <div class="header-actions">
-
-        <button
-          class="action-btn primary"
-          onclick={() => {
-            prefetchedSuggestions = undefined;
-            showDraftPanel = true;
-          }}
-          title="Generate AI reply (Cmd+D)"
-          aria-label="Generate AI reply"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 20h9"></path>
-            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-          </svg>
-          <span>AI Draft</span>
-        </button>
       </div>
     </div>
 
@@ -880,6 +864,10 @@
       <ComposeArea
         bind:this={composeAreaRef}
         onSend={(text) => handleSendMessage(text)}
+        onAIDraft={() => {
+          prefetchedSuggestions = undefined;
+          showDraftPanel = true;
+        }}
         disabled={!conversationsStore.selectedConversation}
         sending={sendingMessage}
       />
