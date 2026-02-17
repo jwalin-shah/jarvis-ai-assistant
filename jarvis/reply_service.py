@@ -392,12 +392,13 @@ class ReplyService:
             "reply.generate.start",
             level=logging.DEBUG,
             chat_id=context.chat_id or "",
-            category=str(classification.category.value),
+            category=str(getattr(classification.category, "value", classification.category)),
         )
 
-        category_name = str(
-            classification.metadata.get("category_name", classification.category.value)
-        )
+        category_name = classification.metadata.get("category_name")
+        if category_name is None:
+            category_name = getattr(classification.category, "value", classification.category)
+        category_name = str(category_name)
         category_config = get_category_config(category_name)
 
         # Try semantic template matching first (context-aware, 74 templates)

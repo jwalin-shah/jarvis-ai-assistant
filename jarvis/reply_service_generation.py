@@ -20,7 +20,6 @@ from jarvis.contracts.pipeline import (
 )
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
 from jarvis.prompts import build_prompt_from_request, get_category_config
-from jarvis.reply_service_utils import safe_float
 
 logger = logging.getLogger(__name__)
 
@@ -57,9 +56,14 @@ def prepare_streaming_context(
     if classification_result is None:
         from dataclasses import dataclass
 
+        from jarvis.contracts.pipeline import CategoryType, IntentType, UrgencyLevel
+
         @dataclass
         class DefaultClassification:
-            category: str = "statement"
+            category: CategoryType = CategoryType.FULL_RESPONSE
+            intent: IntentType = IntentType.STATEMENT
+            urgency: UrgencyLevel = UrgencyLevel.LOW
+            requires_knowledge: bool = False
             confidence: float = 0.5
             metadata: dict = None
 
@@ -71,7 +75,6 @@ def prepare_streaming_context(
 
     # Direct-to-LLM: no RAG search (causes hallucinations per research)
     # Just conversation context - same as chatting directly with Ollama
-    search_results = []
 
     message_context = MessageContext(
         chat_id=chat_id or "",
@@ -124,7 +127,10 @@ def build_generation_request(
     from jarvis.prompts import get_optimized_examples
 
     chat_id = context.chat_id or None
-    category_name = str(classification.metadata.get("category_name", classification.category.value))
+    category_name = classification.metadata.get("category_name")
+    if category_name is None:
+        category_name = getattr(classification.category, "value", classification.category)
+    category_name = str(category_name)
     category_config = get_category_config(category_name)
     context_depth = category_config.context_depth
 
@@ -328,7 +334,7 @@ def generate_llm_reply(
     logger.info("[reply] Incoming: %r | direct-to-llm", incoming[:80])
 
     # Simple fast-path: skip obvious non-responses (reactions, acknowledgments)
-    from jarvis.text_normalizer import is_reaction, is_acknowledgment_only
+    from jarvis.text_normalizer import is_acknowledgment_only, is_reaction
 
     if is_reaction(incoming) or is_acknowledgment_only(incoming):
         return GenerationResponse(
@@ -355,7 +361,6 @@ def generate_llm_reply(
 
     try:
         model_request = to_model_generation_request(service, request)
-        final_prompt = model_request.prompt
 
         # --- Best of N Generation ---
         # Generate 2 candidates with different temperatures to explore style options

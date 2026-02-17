@@ -236,7 +236,7 @@ def build_simple_reply_prompt(
 
     Like texting directly - no examples, no facts, no relationship graph.
     """
-    from jarvis.prompts.constants import SIMPLE_REPLY_PROMPT, SYSTEM_PREFIX
+    from jarvis.prompts.constants import SIMPLE_REPLY_PROMPT
 
     # Truncate context if needed
     truncated_context = truncate_context(context)

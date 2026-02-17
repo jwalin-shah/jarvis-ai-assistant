@@ -26,8 +26,8 @@ def persist_reply_log(
         incoming_text = context.message_text
 
         classification_dict = {
-            "category": classification.category.value,
-            "urgency": classification.urgency.value,
+            "category": getattr(classification.category, "value", classification.category),
+            "urgency": getattr(classification.urgency, "value", classification.urgency),
             "confidence": classification.confidence,
             "metadata": classification.metadata,
         }

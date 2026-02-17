@@ -39,7 +39,10 @@ def _get_memory_fast() -> tuple[float, float, float]:
         for line in lines:
             if ":" in line:
                 key, value = line.split(":", 1)
-                stats[key.strip()] = int(value.strip().rstrip("."))
+                try:
+                    stats[key.strip()] = int(value.strip().rstrip("."))
+                except ValueError:
+                    continue
 
         page_size = 4096  # default page size on macOS
         wired = stats.get("Pages wired:", 0) * page_size
