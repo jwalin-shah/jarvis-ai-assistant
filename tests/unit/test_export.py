@@ -273,6 +273,56 @@ class TestExportMessagesCsv:
 
         assert len(rows) == 0
 
+    def test_csv_injection_sanitization(self):
+        """CSV export sanitizes formula injection characters."""
+        messages = [
+            Message(
+                id=1,
+                chat_id="test",
+                sender="test",
+                sender_name=None,
+                text="=cmd|' /C calc'!A0",
+                date=datetime.now(),
+                is_from_me=False,
+            ),
+            Message(
+                id=2,
+                chat_id="test",
+                sender="test",
+                sender_name=None,
+                text="+123",
+                date=datetime.now(),
+                is_from_me=False,
+            ),
+            Message(
+                id=3,
+                chat_id="test",
+                sender="test",
+                sender_name=None,
+                text="-123",
+                date=datetime.now(),
+                is_from_me=False,
+            ),
+            Message(
+                id=4,
+                chat_id="test",
+                sender="test",
+                sender_name=None,
+                text="@sum(1+1)",
+                date=datetime.now(),
+                is_from_me=False,
+            ),
+        ]
+        result = export_messages_csv(messages)
+
+        reader = csv.DictReader(io.StringIO(result))
+        rows = list(reader)
+
+        assert rows[0]["text"].startswith("'=")
+        assert rows[1]["text"].startswith("'+")
+        assert rows[2]["text"].startswith("'-")
+        assert rows[3]["text"].startswith("'@")
+
 
 class TestExportMessagesTxt:
     """Tests for TXT export functionality."""

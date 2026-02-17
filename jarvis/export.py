@@ -93,6 +93,28 @@ def _conversation_to_dict(conversation: Conversation) -> dict[str, Any]:
     }
 
 
+def sanitize_for_csv(text: str | None) -> str:
+    """Sanitize text to prevent CSV injection.
+
+    Prepends a single quote if the text starts with specific characters
+    that could be interpreted as formulas in spreadsheet software.
+
+    Args:
+        text: Input text to sanitize.
+
+    Returns:
+        Sanitized text safe for CSV export.
+    """
+    if not text:
+        return ""
+
+    # Check for formula injection triggers
+    if text.startswith(("=", "+", "-", "@")):
+        return f"'{text}"
+
+    return text
+
+
 def export_messages_json(
     messages: list[Message],
     conversation: Conversation | None = None,
@@ -165,22 +187,31 @@ def export_messages_csv(
     writer.writeheader()
 
     for message in messages:
+        # Sanitize reply_to_id if present
+        reply_to_id = ""
+        if message.reply_to_id is not None:
+            # reply_to_id is an integer (ROWID) in the Message model, so it's safe from injection
+            # But converting to string just in case type changes later or for consistency
+            reply_to_id = str(message.reply_to_id)
+
         row = {
             "id": message.id,
-            "chat_id": message.chat_id,
-            "sender": message.sender,
-            "sender_name": message.sender_name or "",
-            "text": message.text.replace("\n", "\\n"),  # Escape newlines
+            "chat_id": sanitize_for_csv(message.chat_id),
+            "sender": sanitize_for_csv(message.sender),
+            "sender_name": sanitize_for_csv(message.sender_name),
+            "text": sanitize_for_csv(message.text).replace("\n", "\\n"),  # Escape newlines
             "date": _serialize_datetime(message.date) or "",
             "is_from_me": message.is_from_me,
-            "reply_to_id": message.reply_to_id or "",
+            "reply_to_id": reply_to_id,
             "is_system_message": message.is_system_message,
             "reaction_count": len(message.reactions),
         }
 
         if include_attachments:
             row["attachment_count"] = len(message.attachments)
-            row["attachment_filenames"] = "; ".join(a.filename for a in message.attachments)
+            # Join filenames and then sanitize the whole string
+            filenames = "; ".join(a.filename for a in message.attachments)
+            row["attachment_filenames"] = sanitize_for_csv(filenames)
 
         writer.writerow(row)
 
