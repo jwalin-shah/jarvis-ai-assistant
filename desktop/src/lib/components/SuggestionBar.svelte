@@ -21,8 +21,9 @@
   let abortController: AbortController | null = null;
   let runId = 0;
 
-  const STREAM_TIMEOUT_MS = 15000;
-  const FALLBACK_TIMEOUT_MS = 12000;
+  // Allow more time for model loading + generation on Apple Silicon
+  const STREAM_TIMEOUT_MS = 45000;
+  const FALLBACK_TIMEOUT_MS = 30000;
 
   function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
     return new Promise<T>((resolve, reject) => {

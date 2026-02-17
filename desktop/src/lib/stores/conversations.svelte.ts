@@ -35,7 +35,7 @@ const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
 const PAGE_SIZE = 40;
 
 /** Number of conversations to fetch for the list */
-const CONVERSATIONS_PAGE_SIZE = 150;
+const CONVERSATIONS_PAGE_SIZE = 50;
 
 /** Max conversations to keep in message cache (LRU eviction) */
 const MAX_CACHE_SIZE = 50;

@@ -8,6 +8,11 @@ from jarvis.handlers.base import BaseHandler, rpc_handler
 if TYPE_CHECKING:
     pass
 
+# Cache health status for 5 seconds to avoid expensive lookups
+_HEALTH_CACHE_TTL = 5.0
+_cached_health: dict[str, Any] | None = None
+_cache_timestamp: float = 0.0
+
 
 class HealthHandler(BaseHandler):
     """Handler for health-related RPC methods."""
@@ -28,11 +33,18 @@ class HealthHandler(BaseHandler):
 
     @rpc_handler("Failed to fetch full health status")
     async def _get_health(self) -> dict[str, Any]:
-        """Comprehensive health check endpoint.
+        """Comprehensive health check endpoint with caching.
 
         Returns:
             Dict with system status, memory, permissions, and model info.
         """
+        global _cached_health, _cache_timestamp
+
+        # Return cached result if still valid
+        now = time.time()
+        if _cached_health is not None and (now - _cache_timestamp) < _HEALTH_CACHE_TTL:
+            return _cached_health
+
         import psutil
         from starlette.concurrency import run_in_threadpool
 
@@ -96,5 +108,9 @@ class HealthHandler(BaseHandler):
                 "memory_usage_mb": model_info.memory_usage_mb,
                 "quality_tier": model_info.quality_tier,
             }
+
+        # Cache the result
+        _cached_health = result
+        _cache_timestamp = now
 
         return result
