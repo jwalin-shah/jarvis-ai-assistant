@@ -37,8 +37,8 @@ const PAGE_SIZE = 60;
 /** Number of conversations to fetch for the list */
 const CONVERSATIONS_PAGE_SIZE = 50;
 
-/** Max conversations to keep in message cache (LRU eviction) */
-const MAX_CACHE_SIZE = 50;
+/** Max conversations to keep in message cache (LRU eviction) ~500 chats = 30k messages */
+const MAX_CACHE_SIZE = 500;
 
 /** Cache entry for a conversation's messages */
 interface MessageCacheEntry {
