@@ -225,6 +225,18 @@ class JarvisSocketServer:
         if manager is not None:
             manager.resume()
 
+    def pause_task_worker(self) -> None:
+        """Pause the background task worker."""
+        from jarvis.tasks.worker import pause_worker
+
+        pause_worker()
+
+    def resume_task_worker(self) -> None:
+        """Resume the background task worker."""
+        from jarvis.tasks.worker import resume_worker
+
+        resume_worker()
+
     def get_rpc_handler(
         self,
         name: str,

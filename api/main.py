@@ -91,12 +91,15 @@ async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
     """Lifecycle event handler for the FastAPI application."""
     # Start model warmer
     from jarvis.model_warmer import get_model_warmer
+    from jarvis.tasks.worker import start_worker, stop_worker
 
     get_model_warmer().start()
+    start_worker()
 
     yield
 
-    # Stop model warmer
+    # Stop services
+    stop_worker()
     get_model_warmer().stop()
 
 

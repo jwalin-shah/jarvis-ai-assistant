@@ -245,6 +245,7 @@ class MessageHandler(BaseHandler):
         prefetch_manager = self.server.get_prefetch_manager()
         if prefetch_manager:
             self.server.pause_prefetch()
+        self.server.pause_task_worker()
         try:
             try:
                 request, metadata = await asyncio.to_thread(
@@ -303,6 +304,7 @@ class MessageHandler(BaseHandler):
         finally:
             if prefetch_manager:
                 self.server.resume_prefetch()
+            self.server.resume_task_worker()
 
         full_response = "".join(response_tokens)
         result = {

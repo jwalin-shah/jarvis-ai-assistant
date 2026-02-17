@@ -55,8 +55,10 @@ class TaskWorker:
         self._queue = queue or get_task_queue()
         self._poll_interval = poll_interval
         self._running = False
+        self._paused = False
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        self._pause_event = threading.Event()
         self._handlers: dict[TaskType, TaskHandler] = {}
 
         # Register default handlers
@@ -88,7 +90,9 @@ class TaskWorker:
             return
 
         self._running = True
+        self._paused = False
         self._stop_event.clear()
+        self._pause_event.clear()
         self._thread = threading.Thread(target=self._run, daemon=True, name="TaskWorker")
         self._thread.start()
         logger.info("Task worker started")
@@ -104,6 +108,7 @@ class TaskWorker:
 
         self._running = False
         self._stop_event.set()
+        self._pause_event.set()  # Unblock if paused
 
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=timeout)
@@ -113,10 +118,29 @@ class TaskWorker:
         self._thread = None
         logger.info("Task worker stopped")
 
+    def pause(self) -> None:
+        """Pause the worker (stops processing new tasks)."""
+        if not self._paused:
+            logger.info("Pausing task worker")
+            self._paused = True
+            self._pause_event.clear()
+
+    def resume(self) -> None:
+        """Resume the worker."""
+        if self._paused:
+            logger.info("Resuming task worker")
+            self._paused = False
+            self._pause_event.set()
+
     @property
     def is_running(self) -> bool:
         """Check if the worker is running."""
         return self._running and self._thread is not None and self._thread.is_alive()
+
+    @property
+    def is_paused(self) -> bool:
+        """Check if the worker is paused."""
+        return self._paused
 
     def _run(self) -> None:
         """Main worker loop."""
@@ -124,6 +148,12 @@ class TaskWorker:
 
         while not self._stop_event.is_set():
             try:
+                # Handle pause
+                if self._paused:
+                    logger.debug("Worker is paused, waiting...")
+                    self._pause_event.wait(timeout=1.0)
+                    continue
+
                 # Get next pending task
                 task = self._queue.get_next_pending()
 
@@ -737,6 +767,18 @@ def stop_worker() -> None:
             _worker.stop()
 
 
+def pause_worker() -> None:
+    """Pause the background task worker."""
+    worker = get_worker()
+    worker.pause()
+
+
+def resume_worker() -> None:
+    """Resume the background task worker."""
+    worker = get_worker()
+    worker.resume()
+
+
 def reset_worker() -> None:
     """Reset the singleton worker (for testing)."""
     global _worker
@@ -753,4 +795,6 @@ __all__ = [
     "reset_worker",
     "start_worker",
     "stop_worker",
+    "pause_worker",
+    "resume_worker",
 ]

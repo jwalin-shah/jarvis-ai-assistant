@@ -275,14 +275,7 @@ main() {
     monitor_socket_server &
     SOCKET_MONITOR_PID=$!
 
-    # Step 5: Start the background task worker
-    log_info "Starting background task worker..."
-    cd "$PROJECT_ROOT"
-    uv run python scripts/production/start_worker_loop.py &
-    WORKER_PID=$!
-    log_info "Background worker started (PID: $WORKER_PID)"
-
-    # Step 6: Start the Tauri desktop app
+    # Step 5: Start the Tauri desktop app
     log_info "Starting JARVIS desktop app..."
     log_info "Ensuring frontend port $FRONTEND_PORT is free..."
     if ! check_port "$FRONTEND_PORT"; then
