@@ -1,303 +1,223 @@
 #!/usr/bin/env python3
-"""Direct prompt optimization without DSPy complexity.
+"""Pipeline optimization: Sweep through context depths and optimize prompts via MIPROv2.
 
-Tests multiple universal prompt variations and picks the best one.
-Much simpler than DSPy and works better with small models.
+This script find the best 'structural' variables (like context_depth) 
+AND the best 'textual' variables (instructions/demos) at the same time.
 
 Usage:
-    uv run python evals/optimize_universal_prompt.py --judge
+    uv run python evals/optimize_universal_prompt.py --trials 10 --depths 3,5,10
 """
-
-from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
-
-from tqdm import tqdm
+import dspy
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset
-from evals.judge_config import JUDGE_MODEL, get_judge_client
+from evals.dspy_client import DSPYMLXClient
+from evals.dspy_reply import (
+    TRAIN_EXAMPLES,
+    clean_reply,
+    judge_metric,
+)
 
-# Test different universal prompt variations
-PROMPT_VARIANTS = {
-    "baseline": """You are NOT an AI assistant. You are texting from your phone.
-Reply naturally, matching the conversation style.
-Be brief (1-2 sentences), casual, and sound like a real person.""",
-    "minimal": """Text back naturally. Be brief, casual, human.""",
-    "negative": """You are NOT an AI assistant. You are texting from your phone.
-Rules:
-- Be brief (1-2 sentences max)
-- NO phrases like "I understand", "I'd be happy to", "Let me know"
-- NO formal greetings or sign-offs
-- Match their energy and style exactly
-- Sound like a real person, not a bot""",
-    "style_focused": """Reply to this text message as yourself.
-Match their exact texting style (length, formality, punctuation, emoji).
-Be brief and natural. No AI-sounding phrases.""",
-    "persona": """You're a busy person texting from your iPhone.
-Quick replies only. Match their vibe.
-Don't overthink it - just text back like you normally would.""",
-    "constraints": """Generate a casual text reply.
-Constraints:
-- Max 2 sentences
-- Start lowercase if they did
-- No "I would be happy to" or similar AI phrases
-- Match their abbreviations and style
-- Don't ask follow-up questions unless essential""",
-}
+# ---------------------------------------------------------------------------
+# Student Module
+# ---------------------------------------------------------------------------
 
-
-@dataclass
-class PromptResult:
-    name: str
-    prompt: str
-    avg_judge_score: float
-    anti_ai_rate: float
-    avg_latency_ms: float
-    per_category_scores: dict[str, float]
-
-
-def build_chatml_prompt(system: str, context: list[str], last_message: str) -> str:
-    """Build ChatML format prompt."""
-    context_str = "\n".join([f"[{i}] {msg}" for i, msg in enumerate(context[-10:], 1)])
-
-    return (
-        f"<|im_start|>system\n{system}<|im_end|>\n"
-        f"<|im_start|>user\n"
-        f"Conversation:\n{context_str}\n\n"
-        f"Reply to: {last_message}<|im_end|>\n"
-        f"<|im_start|>assistant\n"
-    )
-
-
-def judge_single(
-    judge_client,
-    context: list[str],
-    last_message: str,
-    ideal_response: str,
-    generated: str,
-    category: str,
-) -> tuple[float, str]:
-    """Judge a single example."""
-    if not judge_client:
-        return 5.0, "no judge"
-
-    prompt = (
-        "You are an expert evaluator for text message replies.\n\n"
-        f"Conversation: {chr(10).join(context)}\n"
-        f"Message: {last_message}\n"
-        f"Generated reply: {generated}\n"
-        f"Ideal reply: {ideal_response}\n"
-        f"Category: {category}\n\n"
-        "Score 0-10 based on:\n"
-        "- Does it sound like a real text (not AI)?\n"
-        "- Is it appropriate for the conversation?\n"
-        "- Does it match the ideal reply's intent?\n\n"
-        'Respond: {"score": <0-10>, "reasoning": "<brief>"}'
-    )
-
-    try:
-        resp = judge_client.chat.completions.create(
-            model=JUDGE_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0,
-            max_tokens=100,
-        )
-        text = resp.choices[0].message.content.strip()
-
-        if text.startswith("```"):
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-
-        data = json.loads(text)
-        return float(data["score"]), data.get("reasoning", "")
-
-    except Exception as e:
-        return 0.0, f"judge error: {e}"
-
-
-def test_prompt_variant(
-    name: str,
-    system_prompt: str,
-    examples: list[Any],
-    judge_client: Any | None,
-) -> PromptResult:
-    """Test a single prompt variant on all examples."""
-
-    from models.loader import get_model
-
-    loader = get_model()
-    if not loader.is_loaded():
-        loader.load()
-
-    scores = []
-    anti_ai_count = 0
-    latencies = []
-    by_category: dict[str, list[float]] = {}
-
-    print(f"\n{'=' * 70}")
-    print(f"Testing: {name}")
-    print(f"{'=' * 70}\n")
-
-    for ex in tqdm(examples, desc=f"Testing {name}"):
-        # Build prompt
-        prompt = build_chatml_prompt(system_prompt, ex.context, ex.last_message)
-
+class SimpleTextAdapter(dspy.Adapter):
+    """Bypasses JSON/formatting and just takes the raw LM output as the 'reply'."""
+    def __call__(self, lm, lm_kwargs, signature, demos, inputs):
+        # Build a simple text prompt
+        prompt = ""
+        # Handle instruction if it exists in signature (MIPRO v2 puts it there)
+        if hasattr(signature, "instructions"):
+            prompt += f"{signature.instructions}\n\n"
+            
+        for field_name, value in inputs.items():
+            # Skip signature metadata
+            if field_name in ["instructions"]: continue
+            prompt += f"{field_name}: {value}\n"
+        prompt += "reply:"
+        
         # Generate
-        start = time.perf_counter()
-        try:
-            result = loader.generate_sync(
-                prompt=prompt,
-                temperature=0.1,
-                max_tokens=50,
-                top_p=0.9,
-                top_k=50,
-                repetition_penalty=1.05,
-            )
-            reply = result.text.strip()
-        except Exception as e:
-            reply = f"[ERROR: {e}]"
-        latency = (time.perf_counter() - start) * 1000
-        latencies.append(latency)
+        response = lm(prompt, **lm_kwargs)
+        if isinstance(response, str):
+            text = response
+        elif hasattr(response, "choices"):
+            text = response.choices[0].message.content if hasattr(response.choices[0], "message") else response.choices[0].text
+        else:
+            text = str(response)
+            
+        # Strip potential label if model repeats it
+        if text.lower().startswith("reply:"):
+            text = text[6:].strip()
+            
+        # Create prediction object matching signature
+        return dspy.Prediction(reply=text)
 
-        # Check anti-AI
-        if check_anti_ai(reply):
-            anti_ai_count += 1
+class UniversalReplySignature(dspy.Signature):
+    """Generate a natural, human-like text message reply."""
+    
+    context: str = dspy.InputField(desc="Conversation history with timestamps")
+    last_message: str = dspy.InputField(desc="The message to reply to")
+    tone: str = dspy.InputField(desc="Tone: casual or professional")
+    user_style: str = dspy.InputField(desc="User's texting style description")
+    reply: str = dspy.OutputField(desc="Brief, natural reply matching the user's style. No AI filler.")
 
-        # Judge
-        score, reasoning = judge_single(
-            judge_client,
-            ex.context,
-            ex.last_message,
-            ex.ideal_response,
-            reply,
-            ex.category,
-        )
-        scores.append(score)
+class UniversalReplyModule(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.generate = dspy.Predict(UniversalReplySignature)
 
-        # Track by category
-        if ex.category not in by_category:
-            by_category[ex.category] = []
-        by_category[ex.category].append(score)
+    def forward(self, **kwargs):
+        return self.generate(**kwargs)
 
-        # Print progress
-        status = "AI!" if check_anti_ai(reply) else "clean"
-        print(f"[{ex.category:12s}] {status} | Judge: {score:.0f}/10 | {reply[:50]}")
+# ---------------------------------------------------------------------------
+# Optimization Logic
+# ---------------------------------------------------------------------------
 
-    # Calculate averages
-    avg_score = sum(scores) / len(scores) if scores else 0
-    anti_ai_rate = anti_ai_count / len(examples) if examples else 0
-    avg_latency = sum(latencies) / len(latencies) if latencies else 0
+def get_context_at_depth(full_context: list[str], depth: int) -> str:
+    """Helper to format context for DSPy examples."""
+    selected = full_context[-depth:] if len(full_context) >= depth else full_context
+    return "\n".join(selected)
 
-    per_category = {cat: sum(scores) / len(scores) for cat, scores in by_category.items()}
+def prepare_trainset(depth: int):
+    """Re-prepare the training set with the specified context depth."""
+    new_trainset = []
+    for ex in TRAIN_EXAMPLES:
+        # TRAIN_EXAMPLES context is usually a list of strings
+        if isinstance(ex.context, list):
+            ctx_str = get_context_at_depth(ex.context, depth)
+        else:
+            ctx_str = ex.context
+            
+        # Create new example with modified context
+        new_ex = dspy.Example(
+            context=ctx_str,
+            last_message=ex.last_message,
+            tone=ex.tone,
+            user_style=ex.user_style
+        ).with_inputs("context", "last_message", "tone", "user_style")
+        
+        # Transfer metadata (needed for judge_metric)
+        for attr in ["_rubric", "_max_words", "_max_chars", "_banned", "_category"]:
+            if hasattr(ex, attr):
+                setattr(new_ex, attr, getattr(ex, attr))
+                
+        new_trainset.append(new_ex)
+    return new_trainset
 
-    return PromptResult(
-        name=name,
-        prompt=system_prompt,
-        avg_judge_score=avg_score,
-        anti_ai_rate=anti_ai_rate,
-        avg_latency_ms=avg_latency,
-        per_category_scores=per_category,
+def build_teacher_lm():
+    from evals.judge_config import JUDGE_BASE_URL, JUDGE_MODEL, get_judge_api_key
+    key = get_judge_api_key()
+    # Teacher models (Cerebras) can handle JSON/Chat via ChatAdapter
+    return dspy.LM(
+        model=f"openai/{JUDGE_MODEL}",
+        api_base=JUDGE_BASE_URL,
+        api_key=key,
+        temperature=0.7,
+        max_tokens=500,
     )
 
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Optimize Universal Prompt")
-    parser.add_argument("--judge", action="store_true", help="Enable LLM judge")
-    parser.add_argument(
-        "--variants",
-        nargs="+",
-        choices=list(PROMPT_VARIANTS.keys()) + ["all"],
-        default=["all"],
-        help="Which variants to test",
-    )
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--trials", type=int, default=15, help="MIPROv2 trials per depth")
+    parser.add_argument("--depths", type=str, default="3,5,10", help="Comma-separated context depths to test")
+    parser.add_argument("--candidates", type=int, default=5, help="MIPROv2 candidates")
+    parser.add_argument("--demos", type=int, default=3, help="Max bootstrapped demos (set to 0 to test no few-shot)")
     args = parser.parse_args()
 
-    # Load dataset
-    examples = load_eval_dataset(EVAL_DATASET_PATH)
-    print(f"Loaded {len(examples)} examples")
-
-    # Initialize judge
-    judge_client = None
-    if args.judge:
-        judge_client = get_judge_client()
-        if judge_client:
-            print(f"Judge ready: {JUDGE_MODEL}")
-
-    # Determine variants to test
-    if "all" in args.variants:
-        variants_to_test = PROMPT_VARIANTS
-    else:
-        variants_to_test = {k: v for k, v in PROMPT_VARIANTS.items() if k in args.variants}
-
-    # Test each variant
+    depths = [int(d.strip()) for d in args.depths.split(",")]
+    
+    print("=" * 70)
+    print("JARVIS FULL PIPELINE OPTIMIZATION (MIPROv2 + Context Sweep)")
+    print(f"Teacher/Judge: {args.demos} bootstrapped demos")
+    print("=" * 70)
+    
+    teacher_lm = build_teacher_lm()
+    # Configure teacher to use ChatAdapter for instruction generation/proposing
+    dspy.configure(lm=teacher_lm, adapter=dspy.ChatAdapter())
+    
+    student_lm = DSPYMLXClient(max_tokens=50, temperature=0.1)
+    student_adapter = SimpleTextAdapter()
+    
+    # We DON'T set a global adapter here, so student uses default "Field: Value" text
+    # When we want to use the student, we'll use a local dspy.context
+    
+    best_overall_score = -1.0
+    best_config = None
     results = []
-    for name, prompt in variants_to_test.items():
-        result = test_prompt_variant(name, prompt, examples, judge_client)
-        results.append(result)
 
-    # Sort by judge score
-    results.sort(key=lambda r: r.avg_judge_score, reverse=True)
+    for depth in depths:
+        print(f"\n>>> OPTIMIZING FOR CONTEXT_DEPTH: {depth}")
+        trainset = prepare_trainset(depth)
+        
+        student = UniversalReplyModule()
+        
+        optimizer = dspy.MIPROv2(
+            metric=judge_metric,
+            prompt_model=teacher_lm,
+            auto=None,
+            num_candidates=args.candidates,
+            max_bootstrapped_demos=args.demos,
+            max_labeled_demos=4,
+        )
 
-    # Print summary
+        with dspy.context(lm=student_lm, adapter=student_adapter):
+            # Student evaluation runs here using SimpleTextAdapter
+            compiled = optimizer.compile(
+                student=student,
+                trainset=trainset,
+                num_trials=args.trials,
+                minibatch=False,
+            )
+        
+        # Evaluate the compiled program for this depth
+        scores = []
+        with dspy.context(lm=student_lm, adapter=student_adapter):
+            for ex in trainset:
+                inputs = {
+                    "context": ex.context,
+                    "last_message": ex.last_message,
+                    "tone": ex.tone,
+                    "user_style": ex.user_style
+                }
+                pred = compiled(**inputs)
+                score = judge_metric(ex, pred)
+                scores.append(score)
+        
+        avg_score = sum(scores) / len(scores) if scores else 0
+        print(f"Final Optimized Score for Depth {depth}: {avg_score:.3f}")
+        
+        # Save results
+        save_path = PROJECT_ROOT / "evals" / f"optimized_universal_d{depth}.json"
+        compiled.save(str(save_path))
+        
+        res = {
+            "depth": depth,
+            "avg_score": avg_score,
+            "save_path": str(save_path)
+        }
+        results.append(res)
+        
+        if avg_score > best_overall_score:
+            best_overall_score = avg_score
+            best_config = res
+
     print("\n" + "=" * 70)
-    print("PROMPT OPTIMIZATION RESULTS")
+    print("OPTIMIZATION COMPLETE")
     print("=" * 70)
-
-    for i, r in enumerate(results, 1):
-        print(f"\n{i}. {r.name.upper()}")
-        print(f"   Judge Score: {r.avg_judge_score:.2f}/10")
-        print(f"   Anti-AI Rate: {r.anti_ai_rate:.1%}")
-        print(f"   Avg Latency: {r.avg_latency_ms:.0f}ms")
-        print("   By Category:")
-        for cat, score in sorted(r.per_category_scores.items()):
-            print(f"      {cat:12s}: {score:.2f}")
-        print(f"   Prompt (first 100 chars): {r.prompt[:100]}...")
-
-    # Winner
-    winner = results[0]
-    print("\n" + "=" * 70)
-    print(f"🏆 WINNER: {winner.name.upper()}")
-    print("=" * 70)
-    print(f"Score: {winner.avg_judge_score:.2f}/10")
-    print(f"Anti-AI: {winner.anti_ai_rate:.1%}")
-    print(f"\nFull Prompt:\n{winner.prompt}")
-
-    # Save results
-    output_path = PROJECT_ROOT / "results" / "universal_prompt_optimization.json"
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    output_data = {
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "judge_model": JUDGE_MODEL,
-        "winner": winner.name,
-        "results": [
-            {
-                "name": r.name,
-                "avg_score": r.avg_judge_score,
-                "anti_ai_rate": r.anti_ai_rate,
-                "avg_latency_ms": r.avg_latency_ms,
-                "per_category": r.per_category_scores,
-                "prompt": r.prompt,
-            }
-            for r in results
-        ],
-    }
-
-    output_path.write_text(json.dumps(output_data, indent=2))
-    print(f"\n📊 Results saved to: {output_path}")
-
-    return 0
-
+    for r in results:
+        print(f"Depth {r['depth']}: {r['avg_score']:.3f}")
+    
+    print(f"\n🏆 WINNER: Depth {best_config['depth']} with score {best_config['avg_score']:.3f}")
+    print(f"Saved at: {best_config['save_path']}")
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

@@ -29,14 +29,30 @@ To ensure that personal data (like names or facts) from one chat doesn't "trip" 
 ### 3. Prompt Engineering & Performance
 
 #### The "Just Texting" Universal Prompt
-Research showed that category-specific prompts (e.g., "They asked a question") actually hurt quality. We now use a **Universal Prompt** that anchors the model in a human persona.
+Research showed that category-specific prompts actually hurt quality. We now use a **Universal Prompt** that anchors the model in a human persona, optimized via Bayesian sweep.
 
-**Universal System Prefix (Constant):**
+**Optimized System Prefix (Constant):**
 ```
-You are texting from your phone. Reply naturally. 
-Be brief (1-2 sentences), casual, like a real person.
+Reply in the same tone as the last user message: brief, casual, and human‑like. 
+Match their style, keep it short, and avoid any AI references or filler words.
 ```
 *Note: This prefix is kept 100% constant to enable KV-Cache reuse, dropping generation time from ~3s to <450ms.*
+
+#### Liquid AI ChatML Format
+We use the official **ChatML** format to ensure high instruction-following performance on LFM models:
+```text
+<|im_start|>system
+{instruction}<|im_end|>
+<|im_start|>user
+Context:
+{context}
+
+Last Message: {last_message}<|im_end|>
+<|im_start|>assistant
+```
+
+#### Context Depth
+Small models (0.7B/1.2B) are sensitive to noise. Optimization sweeps found that **Context Depth = 3** is the "sweet spot" for maintaining coherence without hallucination or echoing.
 
 #### RAG & Fact Anchoring
 To prevent hallucinations (like the "Neuropathy" issue), the model is "anchored" with:

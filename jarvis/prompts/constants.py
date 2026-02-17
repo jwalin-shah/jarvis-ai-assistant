@@ -312,8 +312,8 @@ TEXT_ABBREVIATIONS: set[str] = {
 
 # Static system prefix for KV cache reuse.
 SYSTEM_PREFIX = (
-    "You are texting from your phone. Reply naturally. "
-    "Be brief (1-2 sentences), casual, like a real person.\n"
+    "Reply in the same tone as the last user message: brief, casual, and human-like. "
+    "Match their style, keep it short, and avoid any AI references or filler words.\n"
 )
 
 REPLY_PROMPT = PromptTemplate(
@@ -328,10 +328,10 @@ SIMPLE_REPLY_PROMPT = PromptTemplate(
     name="simple_reply_generation",
     system_message="",
     template=(
-        "<|im_start|>system\n" + SYSTEM_PREFIX + "{instruction}<|im_end|>\n"
+        "<|im_start|>system\n" + SYSTEM_PREFIX + "{current_time}{instruction}<|im_end|>\n"
         "<|im_start|>user\n"
-        "{context}"
-        "{last_message}<|im_end|>\n"
+        "Context:\n{context}\n\n"
+        "Last Message: {last_message}<|im_end|>\n"
         "<|im_start|>assistant\n"
     ),
     max_output_tokens=25,
@@ -343,9 +343,9 @@ RAG_REPLY_PROMPT = PromptTemplate(
     template=(
         "<|im_start|>system\n" + SYSTEM_PREFIX + "{instruction}<|im_end|>\n"
         "<|im_start|>user\n"
-        "{extra_context}"
-        "{context}\n"
-        "{last_message}<|im_end|>\n"
+        "{extra_context}\n"
+        "Context:\n{context}\n\n"
+        "Last Message: {last_message}<|im_end|>\n"
         "<|im_start|>assistant\n"
     ),
     max_output_tokens=25,
@@ -490,26 +490,26 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
     "question": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=7,  # Reduced from 15 per research (5-7 optimal)
+        context_depth=3,  # Optimized via sweep
         system_prompt=None,  # Uses universal SYSTEM_PREFIX (was: "They asked a question...")
     ),
     "request": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=7,  # Reduced from 15 per research (5-7 optimal)
+        context_depth=3,  # Optimized via sweep
         system_prompt=None,  # Uses universal SYSTEM_PREFIX (was: "They're asking you...")
     ),
     "emotion": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=7,  # Reduced from 15 per research (5-7 optimal)
+        context_depth=3,  # Optimized via sweep
         # Uses universal SYSTEM_PREFIX (was: "They're sharing something emotional...")
         system_prompt=None,
     ),
     "statement": CategoryConfig(
         skip_slm=False,
         prompt="reply_generation",
-        context_depth=7,  # Reduced from 15 per research (5-7 optimal)
+        context_depth=3,  # Optimized via sweep
         system_prompt=None,  # Uses universal SYSTEM_PREFIX (was: "They're sharing or chatting...")
     ),
 }

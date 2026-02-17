@@ -792,6 +792,7 @@ class MLXModelLoader:
         pre_formatted: bool,
         negative_constraints: list[str] | None = None,
         system_prompt: str | None = None,
+        logit_bias: dict[int, float] | None = None,
     ) -> tuple[str, int, Any, list[Any]]:
         """Resolve defaults and prepare shared generation parameters.
 
@@ -843,7 +844,7 @@ class MLXModelLoader:
             )
 
         min_p = min_p if min_p is not None else 0.0
-        sampler = make_sampler(temp=temperature, top_p=top_p, min_p=min_p, top_k=top_k)
+        sampler = make_sampler(temp=temperature, top_p=top_p, min_p=min_p, top_k=top_k, logit_bias=logit_bias)
 
         logits_processors: list[Any] = []
         if repetition_penalty > 1.0:

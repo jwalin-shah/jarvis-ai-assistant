@@ -34,8 +34,11 @@ if _env_path.exists():
 # Option 1: Llama 3.3 70B - Reliable, well-tested
 # JUDGE_MODEL = "llama-3.3-70b"
 
+# Option 1: GPT-OSS-120B - Ultra fast, high intelligence (NEW)
+JUDGE_MODEL = "gpt-oss-120b"
+
 # Option 2: Llama 3.3 70B - Reliable, well-tested (RECOMMENDED)
-JUDGE_MODEL = "llama-3.3-70b"
+# JUDGE_MODEL = "llama3.3-70b"
 
 # Option 3: Qwen 2.5 72B - Strong multilingual, good for complex reasoning
 # JUDGE_MODEL = "qwen-2.5-72b"

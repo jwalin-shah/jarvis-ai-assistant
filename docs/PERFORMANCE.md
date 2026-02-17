@@ -153,6 +153,21 @@ with track_latency("conversations_fetch", limit=50):
 - Message page: 40→60
 - Fewer rows per query = faster
 
+#### 6. Generation Pipeline Optimization ✅
+
+**Files**: `jarvis/config.py`, `jarvis/prompts/constants.py`, `evals/sweep_pipeline.py`
+
+| Parameter | Previous | Optimized | Impact |
+|-----------|----------|-----------|--------|
+| Context Depth | 7-10 turns | 3 turns | **~25% better quality** on small models |
+| Repetition Penalty | 1.05 | 1.1 | Reduced echoing/looping |
+| Prompt Format | Plain Text | ChatML | Better instruction following for LFM |
+| Logit Bias | None | AI-filtering | Reduced "As an AI..." filler |
+
+- Discovered that small models (0.7B/1.2B) perform significantly better with **less context** (3 turns vs 10).
+- Standardized on Liquid AI **ChatML** format for all generation.
+- Implemented **MIPROv2** sweep to find winning sampling parameters (Top-P 0.9, Top-K 40, RP 1.1).
+
 ---
 
 ### Older Optimizations

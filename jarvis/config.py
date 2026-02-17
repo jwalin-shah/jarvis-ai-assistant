@@ -219,8 +219,8 @@ class ModelSettings(BaseModel):
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)  # Low temp from Liquid AI docs
     top_p: float = Field(default=0.1, ge=0.0, le=1.0)  # From Liquid AI LFM docs
     top_k: int = Field(default=50, ge=0, le=200)  # From Liquid AI LFM docs
-    repetition_penalty: float = Field(default=1.05, ge=1.0, le=2.0)
-    context_depth: int = Field(default=7, ge=0, le=50)  # 5-7 per research
+    repetition_penalty: float = Field(default=1.1, ge=1.0, le=2.0)
+    context_depth: int = Field(default=3, ge=0, le=50)  # Optimized via MIPROv2 sweep
     generation_timeout_seconds: float = Field(default=60.0, ge=1.0, le=600.0)
     idle_timeout_seconds: float = Field(default=300.0, ge=0.0, le=3600.0)
     warm_on_startup: bool = False
@@ -464,6 +464,7 @@ class SegmentationConfig(BaseModel):
         forward_context_window: Messages to look ahead for continuity check.
         forward_continuity_threshold: Similarity above this means topic continues
             (reduces false boundary scores).
+        index_segments: Whether to index segments into vec_chunks for RAG.
     """
 
     enabled: bool = True
@@ -482,6 +483,7 @@ class SegmentationConfig(BaseModel):
     boundary_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     forward_context_window: int = Field(default=2, ge=1, le=10)
     forward_continuity_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    index_segments: bool = False
 
 
 class SimilarityThresholds(BaseModel):
