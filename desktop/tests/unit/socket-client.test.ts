@@ -521,6 +521,53 @@ describe("JarvisSocket", () => {
       expect(result.suggestions[0].text).toBe("Sure!");
     });
 
+    it("generateDraftStream() parses numbered suggestions from streamed text", async () => {
+      const { client, ws } = await createConnectedClient();
+
+      const draftPromise = client.generateDraftStream({ chat_id: "chat_abc" });
+
+      await vi.advanceTimersByTimeAsync(0);
+      const sentMsg = JSON.parse(ws.send.mock.calls[0][0]);
+      expect(sentMsg.method).toBe("generate_draft");
+      expect(sentMsg.params.stream).toBe(true);
+      const requestId = sentMsg.id;
+
+      ws.simulateMessage({
+        method: "stream.token",
+        params: {
+          token: "Here are 3 suggestions:\n",
+          index: 0,
+          final: false,
+          request_id: requestId,
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      ws.simulateMessage({
+        method: "stream.token",
+        params: {
+          token: "1. Sounds good, see you then!\n2. Works for me.\n3. Let's do it.",
+          index: 1,
+          final: false,
+          request_id: requestId,
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      ws.simulateMessage({
+        id: requestId,
+        result: { done: true },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      const result = await draftPromise;
+      expect(result.suggestions.map((s) => s.text)).toEqual([
+        "Sounds good, see you then!",
+        "Works for me.",
+        "Let's do it.",
+      ]);
+    });
+
     it("classifyIntent() calls 'classify_intent' with text", async () => {
       const { client, ws } = await createConnectedClient();
 

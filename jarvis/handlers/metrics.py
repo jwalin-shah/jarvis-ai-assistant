@@ -21,12 +21,16 @@ class MetricsHandler(BaseHandler):
         self.server.register("get_draft_metrics", self._get_draft_metrics)
 
     @rpc_handler("Failed to get routing metrics")
-    async def _get_routing_metrics(self) -> dict[str, Any]:
-        """Get model routing statistics."""
-        from jarvis.reply_service import get_reply_service
+    async def _get_routing_metrics(self, limit: int = 100) -> dict[str, Any]:
+        """Get routing metrics for dashboard display.
 
-        # get_routing_stats returns StatsResponse which is compatible with dict[str, Any]
-        return get_reply_service().get_routing_stats()
+        Args:
+            limit: Maximum number of recent requests to return.
+        """
+        from jarvis.observability.metrics_router import get_routing_metrics_store
+
+        safe_limit = max(1, min(int(limit), 500))
+        return get_routing_metrics_store().query_metrics(limit=safe_limit)
 
     @rpc_handler("Failed to get performance SLOs")
     async def _get_performance_slo(self) -> dict[str, Any]:

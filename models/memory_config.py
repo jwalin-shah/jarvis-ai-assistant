@@ -17,14 +17,36 @@ import psutil
 _total_ram = psutil.virtual_memory().total
 
 # Memory limits for different model types (in bytes)
-# On 8GB systems, we allow up to 4GB for weights and 1GB for KV cache.
-# This ensures that 4-bit models (usually 800MB-1.5GB) have plenty of room.
-LLM_MEMORY_LIMIT = 4 * 1024 * 1024 * 1024
-LLM_CACHE_LIMIT = 1024 * 1024 * 1024
+# Defaults are used if config load fails.
+DEFAULT_LLM_MEMORY_LIMIT = 1024 * 1024 * 1024  # 1 GB for weights/working set
+DEFAULT_LLM_CACHE_LIMIT = 512 * 1024 * 1024  # 512 MB for KV/cache
 
-# Embedders, cross-encoders, and utility models are smaller
-EMBEDDER_MEMORY_LIMIT = min(512 * 1024 * 1024, int(_total_ram * 0.10))
-EMBEDDER_CACHE_LIMIT = min(256 * 1024 * 1024, int(_total_ram * 0.05))
+# Embedders, cross-encoders, and utility models are smaller.
+DEFAULT_EMBEDDER_MEMORY_LIMIT = min(256 * 1024 * 1024, int(_total_ram * 0.05))
+DEFAULT_EMBEDDER_CACHE_LIMIT = min(128 * 1024 * 1024, int(_total_ram * 0.025))
+
+
+def _mb_to_bytes(value_mb: int) -> int:
+    return max(1, value_mb) * 1024 * 1024
+
+
+def _resolve_limits() -> tuple[int, int, int, int]:
+    try:
+        from jarvis.config import get_config
+
+        model_cfg = get_config().model
+        llm_memory = _mb_to_bytes(model_cfg.llm_memory_limit_mb)
+        llm_cache = _mb_to_bytes(model_cfg.llm_cache_limit_mb)
+        embedder_memory = _mb_to_bytes(model_cfg.embedder_memory_limit_mb)
+        embedder_cache = _mb_to_bytes(model_cfg.embedder_cache_limit_mb)
+        return llm_memory, llm_cache, embedder_memory, embedder_cache
+    except Exception:
+        return (
+            DEFAULT_LLM_MEMORY_LIMIT,
+            DEFAULT_LLM_CACHE_LIMIT,
+            DEFAULT_EMBEDDER_MEMORY_LIMIT,
+            DEFAULT_EMBEDDER_CACHE_LIMIT,
+        )
 
 
 def _get_gpu_lock() -> threading.Lock:
@@ -41,16 +63,18 @@ def apply_llm_limits() -> None:
     """Apply MLX memory limits for LLM model loading."""
     import mlx.core as mx
 
-    mx.set_memory_limit(LLM_MEMORY_LIMIT)
-    mx.set_cache_limit(LLM_CACHE_LIMIT)
+    llm_memory, llm_cache, _, _ = _resolve_limits()
+    mx.set_memory_limit(llm_memory)
+    mx.set_cache_limit(llm_cache)
 
 
 def apply_embedder_limits() -> None:
     """Apply MLX memory limits for embedder/utility model loading."""
     import mlx.core as mx
 
-    mx.set_memory_limit(EMBEDDER_MEMORY_LIMIT)
-    mx.set_cache_limit(EMBEDDER_CACHE_LIMIT)
+    _, _, embedder_memory, embedder_cache = _resolve_limits()
+    mx.set_memory_limit(embedder_memory)
+    mx.set_cache_limit(embedder_cache)
 
 
 @contextmanager

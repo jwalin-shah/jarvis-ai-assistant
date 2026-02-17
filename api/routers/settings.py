@@ -43,8 +43,8 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 # Models to expose in the UI (subset of MODEL_REGISTRY)
-# Show LFM models for comparison
-ENABLED_MODEL_IDS = ["lfm-0.3b", "lfm-0.7b", "lfm-1.2b"]
+# Ordered from fastest/smallest to strongest quality.
+ENABLED_MODEL_IDS = ["lfm-350m", "lfm-0.7b", "lfm-1.2b-base", "lfm-1.2b"]
 
 
 def _get_enabled_models() -> list[ModelSpec]:
@@ -60,7 +60,7 @@ def _get_default_settings() -> dict[str, Any]:
     """Get default generation and behavior settings."""
     return {
         "generation": {
-            "temperature": 0.7,
+            "temperature": 0.15,
             "max_tokens_reply": 150,
             "max_tokens_summary": 500,
         },
@@ -269,8 +269,12 @@ async def get_settings(request: Request) -> SettingsResponse:
     settings = _load_settings()
 
     return SettingsResponse(
-        model_id=config.model_path,
-        generation=GenerationSettings(**settings.get("generation", {})),
+        model_id=config.model.model_id,
+        generation=GenerationSettings(
+            temperature=config.model.temperature,
+            max_tokens_reply=config.model.max_tokens_reply,
+            max_tokens_summary=config.model.max_tokens_summary,
+        ),
         behavior=BehaviorSettings(**settings.get("behavior", {})),
         system=_get_system_info(),
     )
@@ -341,6 +345,8 @@ async def update_settings(
     config = get_config()
     settings = _load_settings()
 
+    config_changed = False
+
     # Update model if provided
     if settings_request.model_id is not None:
         # Validate model_id is in our registry (accepts short ID or full path)
@@ -354,14 +360,22 @@ async def update_settings(
             raise HTTPException(
                 status_code=400, detail=f"Unknown model: {settings_request.model_id}"
             )
+        config.model.model_id = spec.id
         config.model_path = spec.path
-        save_config(config)
+        config_changed = True
 
-    # Update generation settings if provided (merge, don't replace)
+    # Update generation settings in main runtime config (source of truth)
     if settings_request.generation is not None:
-        existing_gen = settings.get("generation", {})
-        existing_gen.update(settings_request.generation.model_dump(exclude_unset=True))
-        settings["generation"] = existing_gen
+        gen_updates = settings_request.generation.model_dump(exclude_unset=True)
+        if "temperature" in gen_updates:
+            config.model.temperature = float(gen_updates["temperature"])
+            config_changed = True
+        if "max_tokens_reply" in gen_updates:
+            config.model.max_tokens_reply = int(gen_updates["max_tokens_reply"])
+            config_changed = True
+        if "max_tokens_summary" in gen_updates:
+            config.model.max_tokens_summary = int(gen_updates["max_tokens_summary"])
+            config_changed = True
 
     # Update behavior settings if provided (merge, don't replace)
     if settings_request.behavior is not None:
@@ -371,10 +385,16 @@ async def update_settings(
 
     # Save updated settings
     _save_settings(settings)
+    if config_changed:
+        save_config(config)
 
     return SettingsResponse(
-        model_id=config.model_path,
-        generation=GenerationSettings(**settings.get("generation", {})),
+        model_id=config.model.model_id,
+        generation=GenerationSettings(
+            temperature=config.model.temperature,
+            max_tokens_reply=config.model.max_tokens_reply,
+            max_tokens_summary=config.model.max_tokens_summary,
+        ),
         behavior=BehaviorSettings(**settings.get("behavior", {})),
         system=_get_system_info(),
     )
@@ -471,7 +491,7 @@ async def list_models(request: Request) -> list[AvailableModelInfo]:
                 size_gb=spec.size_gb,
                 quality_tier=spec.quality_tier,
                 ram_requirement_gb=float(spec.min_ram_gb),
-                is_downloaded=is_model_available(spec.id),
+                is_downloaded=is_model_available(spec.id, use_cache=False),
                 is_loaded=_check_model_loaded(spec.path),
                 is_recommended=(spec.id == recommended_model),
                 description=spec.description,

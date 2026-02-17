@@ -181,7 +181,10 @@
         </div>
         <p class="metric-detail">
           {#if $healthStore.data.model_loaded}
-            Ready for inference
+            {$healthStore.data.model?.display_name || "Ready for inference"}
+            {#if $healthStore.data.model?.memory_usage_mb}
+              · {$healthStore.data.model.memory_usage_mb.toFixed(0)} MB
+            {/if}
           {:else}
             Will load on first request
           {/if}

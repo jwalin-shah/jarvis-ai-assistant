@@ -17,6 +17,7 @@ import type {
   AttachmentStats,
   AttachmentType,
   AttachmentWithContext,
+  BuiltInTemplateInfo,
   Calendar,
   CalendarEvent,
   ClusterResult,
@@ -426,10 +427,13 @@ class ApiClient {
     chatId: string,
     instruction?: string,
     numSuggestions: number = 3,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: { preferSocket?: boolean }
   ): Promise<DraftReplyResponse> {
-    // Try socket first in Tauri context
-    const socketReady = await ensureSocketConnected();
+    const preferSocket = options?.preferSocket ?? true;
+
+    // Try socket first in Tauri context (unless explicitly disabled)
+    const socketReady = preferSocket ? await ensureSocketConnected() : false;
     if (socketReady) {
       try {
         const params: { chat_id: string; context_messages: number; instruction?: string } = {
@@ -581,6 +585,10 @@ class ApiClient {
       throw new APIError("Export failed", response.status, null);
     }
     return response.blob();
+  }
+
+  async getBuiltInTemplates(): Promise<BuiltInTemplateInfo[]> {
+    return this.request<BuiltInTemplateInfo[]>("/analytics/templates/list");
   }
 
   // PDF Export endpoints

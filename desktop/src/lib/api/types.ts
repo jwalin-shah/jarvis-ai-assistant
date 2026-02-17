@@ -68,6 +68,14 @@ export interface Conversation {
 }
 
 // Health types
+export interface HealthModelInfo {
+  id: string | null;
+  display_name: string;
+  loaded: boolean;
+  memory_usage_mb: number;
+  quality_tier: string | null;
+}
+
 export interface HealthResponse {
   status: "healthy" | "degraded" | "unhealthy";
   imessage_access: boolean | null;
@@ -79,7 +87,7 @@ export interface HealthResponse {
   details: Record<string, string> | string | null;
   jarvis_rss_mb: number | null;
   jarvis_vms_mb: number | null;
-  model?: string | null;
+  model?: HealthModelInfo | null;
   recommended_model?: string | null;
   system_ram_gb?: number | null;
 }
@@ -288,6 +296,12 @@ export interface TemplateCoverage {
 export interface PieChartData {
   template_responses: number;
   model_responses: number;
+}
+
+export interface BuiltInTemplateInfo {
+  name: string;
+  pattern_count: number;
+  sample_patterns: string[];
 }
 
 export interface TemplateAnalyticsDashboard {

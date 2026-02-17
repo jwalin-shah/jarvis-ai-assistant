@@ -9,9 +9,11 @@ set -e
 API_PORT=8742
 SOCKET_PORT=8743
 FRONTEND_PORT=1420
-SOCKET_PORT=8743
 SOCKET_PATH="$HOME/.jarvis/jarvis.sock"
-PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Resolve repo root from this script location:
+# scripts/production/launch.sh -> project root is two levels up.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DESKTOP_DIR="$PROJECT_ROOT/desktop"
 API_PID=""
 SOCKET_PID=""
@@ -253,7 +255,7 @@ main() {
     # Step 3: Start the FastAPI backend
     log_info "Starting FastAPI backend on port $API_PORT..."
     cd "$PROJECT_ROOT"
-    uvicorn api.main:app --port "$API_PORT" --host 127.0.0.1 &
+    uv run uvicorn api.main:app --port "$API_PORT" --host 127.0.0.1 &
     API_PID=$!
     log_info "API server started (PID: $API_PID)"
 

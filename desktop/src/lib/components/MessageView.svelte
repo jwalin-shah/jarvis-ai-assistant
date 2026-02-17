@@ -13,6 +13,7 @@
     clearOptimisticMessages,
     clearPrefetchedDraft,
     pollMessages,
+    updateConversationAfterLocalSend,
   } from '../stores/conversations.svelte';
   import type { DraftSuggestion, Message } from '../types';
   import {
@@ -70,11 +71,13 @@
 
   // Compose state
   let sendingMessage = $state(false);
+  let composeAreaRef = $state<InstanceType<typeof ComposeArea> | null>(null);
 
   // Virtual scrolling configuration
   const ESTIMATED_MESSAGE_HEIGHT = 80;
   const BUFFER_SIZE = 10;
   const MIN_VISIBLE_MESSAGES = 20;
+  const VIRTUALIZATION_THRESHOLD = 120;
 
   // Virtual scrolling state
   let messageHeights = $state<Map<number, number>>(new Map());
@@ -86,6 +89,7 @@
 
   // Scroll tracking
   let messagesContainer = $state<HTMLDivElement | null>(null);
+  let loadEarlierSectionEl = $state<HTMLDivElement | null>(null);
   let isAtBottom = $state(true);
   let hasNewMessagesBelow = $state(false);
   let newMessageIds = $state<Set<number>>(new Set());
@@ -101,6 +105,14 @@
   // cloning the Map on every individual resize callback
   let pendingHeightUpdates = new Map<number, number>();
   let heightUpdateRafId: number | null = null;
+
+  function getScrollOffsets() {
+    const style = messagesContainer ? getComputedStyle(messagesContainer) : null;
+    const paddingTop = style ? parseFloat(style.paddingTop) || 0 : 0;
+    const paddingBottom = style ? parseFloat(style.paddingBottom) || 0 : 0;
+    const loadEarlierHeight = loadEarlierSectionEl?.offsetHeight ?? 0;
+    return { paddingTop, paddingBottom, loadEarlierHeight };
+  }
 
   function handleMessageHeightChange(messageId: number, height: number) {
     if (!messageId || height <= 0 || messageHeights.get(messageId) === height) return;
@@ -149,9 +161,27 @@
       virtualBottomPadding = 0;
       return;
     }
+    if (messages.length <= VIRTUALIZATION_THRESHOLD) {
+      visibleStartIndex = 0;
+      visibleEndIndex = messages.length;
+      virtualTopPadding = 0;
+      virtualBottomPadding = 0;
+      return;
+    }
 
-    const loadSectionHeight = 48;
-    const adjustedScrollTop = Math.max(0, scrollTop - loadSectionHeight);
+    const { paddingTop, paddingBottom, loadEarlierHeight } = getScrollOffsets();
+    const adjustedScrollTop = Math.max(0, scrollTop - loadEarlierHeight - paddingTop);
+    const visibleHeight = Math.max(0, containerHeight - paddingTop - paddingBottom);
+    const totalHeight = cumHeights[messages.length]!;
+
+    // Clamp to full-tail rendering near bottom to avoid oscillating bottom spacer.
+    if (adjustedScrollTop + visibleHeight >= totalHeight - 2 * ESTIMATED_MESSAGE_HEIGHT) {
+      visibleEndIndex = messages.length;
+      visibleStartIndex = Math.max(0, messages.length - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
+      virtualTopPadding = cumHeights[visibleStartIndex]!;
+      virtualBottomPadding = 0;
+      return;
+    }
 
     // Binary search to find first message whose bottom edge >= adjustedScrollTop
     let lo = 0;
@@ -169,7 +199,8 @@
     const topPadding = cumHeights[startIdx]!;
 
     // Binary search to find first message whose top edge > adjustedScrollTop + containerHeight
-    const scrollBottom = adjustedScrollTop + containerHeight + BUFFER_SIZE * ESTIMATED_MESSAGE_HEIGHT;
+    const scrollBottom =
+      adjustedScrollTop + visibleHeight + BUFFER_SIZE * ESTIMATED_MESSAGE_HEIGHT;
     lo = startIdx;
     hi = messages.length;
     while (lo < hi) {
@@ -182,7 +213,6 @@
     }
     let endIdx = Math.min(messages.length, Math.max(lo, startIdx + MIN_VISIBLE_MESSAGES));
 
-    const totalHeight = cumHeights[messages.length]!;
     const bottomPadding = totalHeight - cumHeights[endIdx]!;
 
     visibleStartIndex = startIdx;
@@ -217,7 +247,8 @@
     const msgIndex = messages.findIndex((m) => m.id === messageId);
     if (msgIndex === -1) return;
 
-    const scrollPosition = cumulativeHeights[msgIndex]! + 48;
+    const { paddingTop, paddingBottom, loadEarlierHeight } = getScrollOffsets();
+    const scrollPosition = cumulativeHeights[msgIndex]! + loadEarlierHeight + paddingTop;
 
     visibleStartIndex = Math.max(0, msgIndex - BUFFER_SIZE);
     visibleEndIndex = Math.min(messages.length, msgIndex + BUFFER_SIZE + MIN_VISIBLE_MESSAGES);
@@ -229,7 +260,8 @@
 
     if (messagesContainer) {
       const containerHeight = messagesContainer.clientHeight;
-      const targetScroll = scrollPosition - containerHeight / 2 + getMessageHeight(messageId) / 2;
+      const visibleHeight = Math.max(0, containerHeight - paddingTop - paddingBottom);
+      const targetScroll = scrollPosition - visibleHeight / 2 + getMessageHeight(messageId) / 2;
       messagesContainer.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
     }
 
@@ -239,6 +271,7 @@
   // Send message
   async function handleSendMessage(text: string, retryId?: string) {
     if (!conversationsStore.selectedConversation) return;
+    sendingMessage = true;
 
     let optimisticId: string;
     if (retryId) {
@@ -291,6 +324,7 @@
 
       if (result.success) {
         updateOptimisticMessage(optimisticId, { status: 'sent' });
+        updateConversationAfterLocalSend(chatId, text);
         // Watcher push (handleNewMessagePush) clears optimistic when real message arrives.
         // Proactively poll after 1.5s to catch the chat.db update from AppleScript
         setTimeout(() => pollMessages(), 1500);
@@ -367,25 +401,29 @@
     suppressScrollRecalc = true;
     const prevCount = conversationsStore.messages.length;
     const prevScrollTop = messagesContainer.scrollTop;
+    const prevScrollHeight = messagesContainer.scrollHeight;
 
     await loadMoreMessages();
 
     const addedCount = conversationsStore.messages.length - prevCount;
     if (addedCount > 0 && messagesContainer) {
-      // Shift visible range to keep the same messages rendered
-      visibleStartIndex += addedCount;
-      visibleEndIndex += addedCount;
+      if (conversationsStore.messages.length > VIRTUALIZATION_THRESHOLD) {
+        // Shift visible range to keep the same messages rendered
+        visibleStartIndex += addedCount;
+        visibleEndIndex += addedCount;
 
-      // Update padding using cumulative heights
-      virtualTopPadding = cumulativeHeights[visibleStartIndex]!;
-      const totalLen = conversationsStore.messages.length;
-      virtualBottomPadding = cumulativeHeights[totalLen]! - cumulativeHeights[visibleEndIndex]!;
+        // Update padding using cumulative heights
+        virtualTopPadding = cumulativeHeights[visibleStartIndex]!;
+        const totalLen = conversationsStore.messages.length;
+        virtualBottomPadding = cumulativeHeights[totalLen]! - cumulativeHeights[visibleEndIndex]!;
+      }
 
       await tick();
 
-      // Compensate scroll position for the added top padding
-      const addedPadding = addedCount * ESTIMATED_MESSAGE_HEIGHT;
-      messagesContainer.scrollTop = prevScrollTop + addedPadding;
+      // Compensate based on actual rendered delta to avoid jumpy scroll behavior.
+      const newScrollHeight = messagesContainer.scrollHeight;
+      const addedHeight = Math.max(0, newScrollHeight - prevScrollHeight);
+      messagesContainer.scrollTop = prevScrollTop + addedHeight;
     }
 
     requestAnimationFrame(() => {
@@ -499,6 +537,9 @@
       visibleEndIndex = MIN_VISIBLE_MESSAGES;
       virtualTopPadding = 0;
       virtualBottomPadding = 0;
+      // Auto-open AI drafts on chat focus so generation starts immediately.
+      prefetchedSuggestions = undefined;
+      showDraftPanel = true;
       if (oldChatId) {
         clearOptimisticMessages(oldChatId);
       }
@@ -519,17 +560,21 @@
 
   async function scrollToBottom(instant = false) {
     await tick();
-    await tick(); // Double tick for complex layouts
-    // Short delay to ensure browser has completed layout and any images/elements are rendered
-    setTimeout(() => {
-      if (messagesContainer) {
-        messagesContainer.scrollTo({
-          top: messagesContainer.scrollHeight,
-          behavior: instant ? 'instant' : 'smooth',
-        });
-        hasNewMessagesBelow = false;
-      }
-    }, 100);
+    await tick();
+    if (!messagesContainer) return;
+
+    messagesContainer.scrollTo({
+      top: messagesContainer.scrollHeight,
+      behavior: instant ? 'auto' : 'smooth',
+    });
+
+    // One more frame helps after late height updates (images, font/layout, observers).
+    requestAnimationFrame(() => {
+      if (!messagesContainer) return;
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      hasNewMessagesBelow = false;
+      updateVirtualScroll();
+    });
   }
 
   function handleNewMessagesClick() {
@@ -626,12 +671,13 @@
   }
 
   function handleDraftSelect(text: string) {
-    const textarea = document.querySelector<HTMLTextAreaElement>('.compose-input');
-    if (textarea) {
-      textarea.value = text;
-      textarea.style.height = 'auto';
-      textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-      textarea.focus();
+    let normalized = text.replace(/\r/g, '').trim();
+    normalized = normalized.replace(/^["'`]+|["'`]+$/g, '').trim();
+    normalized = normalized.replace(/^(?:\(?\d{1,2}\)?[.):\-]\s*|[-*\u2022]\s+)/, '').trim();
+    normalized = normalized.replace(/:\s*$/, '').trim();
+
+    if (normalized && composeAreaRef) {
+      composeAreaRef.setValue(normalized);
     }
     showDraftPanel = false;
     prefetchedSuggestions = undefined;
@@ -741,7 +787,7 @@
         <div class="empty">No messages in this conversation</div>
       {:else}
         <!-- Load earlier messages section -->
-        <div class="load-earlier-section">
+        <div class="load-earlier-section" bind:this={loadEarlierSectionEl}>
           {#if conversationsStore.loadingMore}
             <div class="loading-more">
               <div class="spinner"></div>
@@ -817,22 +863,36 @@
     {/if}
 
     {#if showDraftPanel && conversationsStore.selectedConversation}
-      <SuggestionBar
-        chatId={conversationsStore.selectedConversation.chat_id}
-        onSelect={handleDraftSelect}
-        onClose={() => {
-          showDraftPanel = false;
-          prefetchedSuggestions = undefined;
-        }}
-        {...(prefetchedSuggestions && { initialSuggestions: prefetchedSuggestions })}
-      />
+      {#key conversationsStore.selectedConversation.chat_id}
+        <SuggestionBar
+          chatId={conversationsStore.selectedConversation.chat_id}
+          onSelect={handleDraftSelect}
+          onClose={() => {
+            showDraftPanel = false;
+            prefetchedSuggestions = undefined;
+          }}
+          {...(prefetchedSuggestions && { initialSuggestions: prefetchedSuggestions })}
+        />
+      {/key}
     {/if}
 
-    <ComposeArea
-      onSend={(text) => handleSendMessage(text)}
-      disabled={!conversationsStore.selectedConversation}
-      sending={sendingMessage}
-    />
+    {#if conversationsStore.selectedConversation}
+      {#key conversationsStore.selectedConversation.chat_id}
+        <ComposeArea
+          bind:this={composeAreaRef}
+          onSend={(text) => handleSendMessage(text)}
+          disabled={!conversationsStore.selectedConversation}
+          sending={sendingMessage}
+        />
+      {/key}
+    {:else}
+      <ComposeArea
+        bind:this={composeAreaRef}
+        onSend={(text) => handleSendMessage(text)}
+        disabled={!conversationsStore.selectedConversation}
+        sending={sendingMessage}
+      />
+    {/if}
 
     {#if conversationsStore.selectedConversation && !conversationsStore.selectedConversation.is_group}
       <ContactHoverCard
@@ -957,11 +1017,14 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    overflow-anchor: none;
+    overscroll-behavior-y: contain;
   }
 
   .virtual-spacer-top,
   .virtual-spacer-bottom {
     flex-shrink: 0;
+    overflow-anchor: none;
   }
 
   .virtual-content {

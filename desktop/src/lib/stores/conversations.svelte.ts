@@ -31,8 +31,11 @@ import type { NewMessageEvent } from "../socket/client";
 /** Check if running in Tauri context */
 const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
 
-/** Default number of messages to fetch per page */
-const PAGE_SIZE = 20;
+/** Number of messages to fetch per page */
+const PAGE_SIZE = 40;
+
+/** Number of conversations to fetch for the list */
+const CONVERSATIONS_PAGE_SIZE = 150;
 
 /** Max conversations to keep in message cache (LRU eviction) */
 const MAX_CACHE_SIZE = 50;
@@ -316,10 +319,12 @@ export async function fetchConversations(isPolling = false) {
     if (isTauri) {
       if (isDirectAccessAvailable()) {
         // Direct SQLite is ~50ms vs 1-3s through socket RPC
-        conversations = await getConversationsDirect(50);
+        conversations = await getConversationsDirect(CONVERSATIONS_PAGE_SIZE);
       } else {
         try {
-          const result = await jarvis.call<{ conversations: Conversation[] }>("list_conversations", { limit: 50 });
+          const result = await jarvis.call<{ conversations: Conversation[] }>("list_conversations", {
+            limit: CONVERSATIONS_PAGE_SIZE,
+          });
           conversations = result.conversations;
         } catch (e) {
           conversations = await api.getConversations();
@@ -440,6 +445,10 @@ export async function selectConversation(chatId: string) {
 
   // Track which chat the prefetch is for so we can discard stale results (FE-04)
   pendingPrefetchChatId = chatId;
+
+  // Update focused chat synchronously BEFORE triggering any generation
+  // This ensures stale generation gets cancelled immediately
+  jarvis.call("prefetch_focus", { chat_id: chatId }).catch(() => {});
 
   // Background prefetch - fire and forget, but guard against stale results
   void jarvis.call<{
@@ -585,6 +594,15 @@ function updateConversationInPlace(chatId: string, textPreview: string | null) {
 
   // Update last known date to prevent false "new message" detection on next full fetch
   conversationsStore.lastKnownMessageDates.set(chatId, now);
+}
+
+/**
+ * Update selected conversation preview/date immediately after a local send.
+ * Keeps the conversation list in sync before watcher/poll catches up.
+ */
+export function updateConversationAfterLocalSend(chatId: string, textPreview: string) {
+  updateConversationInPlace(chatId, textPreview);
+  clearNewMessageIndicator(chatId);
 }
 
 // User activity tracking for adaptive polling

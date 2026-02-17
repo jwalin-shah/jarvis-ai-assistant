@@ -116,7 +116,9 @@
       <div class="card-content">
         <h3>AI Model</h3>
         <p class="stat">{$healthStore.data?.model_loaded ? "Loaded" : "Not Loaded"}</p>
-        <p class="sub">{$healthStore.data?.memory_mode || "FULL"} mode</p>
+        <p class="sub">
+          {$healthStore.data?.model?.display_name || "Unknown model"}
+        </p>
       </div>
     </div>
 

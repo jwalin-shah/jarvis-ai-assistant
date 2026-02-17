@@ -40,6 +40,99 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
+function sanitizeSuggestionCandidate(text: string): string {
+  let cleaned = text.replace(/\s+/g, " ").trim();
+  cleaned = cleaned.replace(/^["'`]+|["'`]+$/g, "").trim();
+  cleaned = cleaned.replace(
+    /^(?:\(?\d{1,2}\)?[.):\-]\s*|[-*\u2022]\s+|(?:option|reply)\s*\d+\s*[:\-]\s*|suggestion\s*\d+\s*[:\-]\s*)/i,
+    ""
+  ).trim();
+  cleaned = cleaned.replace(/^\s*(?:suggestion|reply|option)\s*:\s*/i, "").trim();
+  cleaned = cleaned.replace(/:\s*$/, "").trim();
+  return cleaned;
+}
+
+function isHeaderLikeDraftLine(line: string): boolean {
+  const text = line.trim();
+  if (!text) return true;
+  if (/^```/.test(text)) return true;
+  const lower = text.toLowerCase();
+  if (
+    /^(here'?s|here are|possible|options?|replies|reply options?|suggestions?)/.test(lower) &&
+    /:\s*$/.test(text)
+  ) {
+    return true;
+  }
+  if (/^(suggestions?|replies|options?)\s*:?\s*$/i.test(text)) return true;
+  return false;
+}
+
+function parseDraftSuggestionsFromText(fullText: string, maxSuggestions = 3): DraftSuggestion[] {
+  const normalized = fullText.replace(/\r/g, "").trim();
+  if (!normalized) return [];
+
+  // Try structured JSON first.
+  try {
+    const parsed = JSON.parse(normalized) as unknown;
+    let candidates: string[] = [];
+    if (Array.isArray(parsed)) {
+      candidates = parsed.filter((v): v is string => typeof v === "string");
+    } else if (parsed && typeof parsed === "object") {
+      const obj = parsed as { suggestions?: Array<{ text?: string } | string> };
+      if (Array.isArray(obj.suggestions)) {
+        candidates = obj.suggestions
+          .map((s) => (typeof s === "string" ? s : s?.text))
+          .filter((v): v is string => typeof v === "string");
+      }
+    }
+    if (candidates.length > 0) {
+      return candidates.slice(0, maxSuggestions).map((text, idx) => ({
+        text: sanitizeSuggestionCandidate(text),
+        confidence: Math.max(0.6, 0.9 - idx * 0.1),
+      })).filter((s) => s.text.length > 0);
+    }
+  } catch {
+    // Not JSON; continue with text parsing.
+  }
+
+  const lineCandidates: string[] = [];
+  for (const raw of normalized.split("\n")) {
+    const line = raw.trim();
+    if (isHeaderLikeDraftLine(line)) continue;
+    const cleaned = sanitizeSuggestionCandidate(line);
+    if (!cleaned || !/[a-z0-9]/i.test(cleaned)) continue;
+    lineCandidates.push(cleaned);
+  }
+
+  const numberedChunks = normalized
+    .split(/\n?\s*(?:\d{1,2}[.)]|[-*\u2022])\s+/)
+    .map((c) => sanitizeSuggestionCandidate(c))
+    .filter((c) => c.length > 0);
+
+  const rawCandidates = lineCandidates.length > 0 ? lineCandidates : numberedChunks;
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of rawCandidates) {
+    const key = candidate.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(candidate);
+    if (deduped.length >= maxSuggestions) break;
+  }
+
+  if (deduped.length === 0) {
+    const fallback = sanitizeSuggestionCandidate(normalized);
+    if (fallback) {
+      deduped.push(fallback);
+    }
+  }
+
+  return deduped.slice(0, maxSuggestions).map((text, idx) => ({
+    text,
+    confidence: Math.max(0.6, 0.9 - idx * 0.1),
+  }));
+}
+
 // Dynamic imports for Tauri APIs - only available in Tauri context
 let invoke: (<T>(cmd: string, args?: InvokeArgs, options?: InvokeOptions) => Promise<T>) | null = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1213,8 +1306,10 @@ class JarvisSocket {
       tokenCount++;
     }
 
+    const parsedSuggestions = parseDraftSuggestionsFromText(fullText);
+
     return {
-      suggestions: [{ text: fullText.trim(), confidence: 0.8 }],
+      suggestions: parsedSuggestions,
       context_used: {
         num_messages: 0,
         participants: [],

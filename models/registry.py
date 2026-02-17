@@ -230,6 +230,14 @@ def is_model_available(model_id: str, use_cache: bool = True) -> bool:
     if spec is None:
         return False
 
+    # Local project path models (e.g., models/lfm-0.7b-4bit)
+    # should be treated as available when the directory/files exist.
+    local_model_path = Path(spec.path)
+    if local_model_path.exists():
+        is_local_available = local_model_path.is_file() or any(local_model_path.iterdir())
+        _availability_cache[model_id] = is_local_available
+        return is_local_available
+
     # Check HuggingFace cache
     cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
     if not cache_dir.exists():

@@ -129,6 +129,20 @@ export async function fetchHealth(): Promise<void> {
       const connected = await jarvis.connect();
       if (connected) {
         const result = await jarvis.call<Record<string, unknown>>("get_health", {});
+        const rawModel = result.model;
+        const modelInfo =
+          rawModel && typeof rawModel === "object"
+            ? {
+                id: (rawModel as { id?: string | null }).id ?? null,
+                display_name:
+                  (rawModel as { display_name?: string }).display_name ?? "Unknown model",
+                loaded: (rawModel as { loaded?: boolean }).loaded ?? false,
+                memory_usage_mb:
+                  (rawModel as { memory_usage_mb?: number }).memory_usage_mb ?? 0,
+                quality_tier:
+                  (rawModel as { quality_tier?: string | null }).quality_tier ?? null,
+              }
+            : null;
         const data: HealthResponse = {
           status: (result.status as HealthResponse["status"]) ?? "degraded",
           imessage_access: (result.imessage_access as boolean) ?? null,
@@ -140,7 +154,7 @@ export async function fetchHealth(): Promise<void> {
           details: (result.details as HealthResponse["details"]) ?? null,
           jarvis_rss_mb: (result.jarvis_rss_mb as number) ?? null,
           jarvis_vms_mb: (result.jarvis_vms_mb as number) ?? null,
-          model: (result.model as string) ?? null,
+          model: modelInfo,
           recommended_model: (result.recommended_model as string) ?? null,
           system_ram_gb: (result.system_ram_gb as number) ?? null,
         };

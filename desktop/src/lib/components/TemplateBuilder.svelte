@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { api } from "../api/client";
   import type {
+    BuiltInTemplateInfo,
     CustomTemplate,
     CustomTemplateCreateRequest,
     CustomTemplateListResponse,
@@ -14,6 +15,9 @@
   let categories: string[] = $state([]);
   let allTags: string[] = $state([]);
   let usageStats: CustomTemplateUsageStats | null = $state(null);
+  let builtInTemplateCount = $state<number | null>(null);
+  let builtInTemplates: BuiltInTemplateInfo[] = $state([]);
+  let showBuiltInTemplates = $state(false);
   let loading = $state(true);
   let error: string | null = $state(null);
 
@@ -58,8 +62,12 @@
   let saving = $state(false);
 
   onMount(async () => {
-    await loadTemplates();
-    await loadUsageStats();
+    await Promise.all([
+      loadTemplates(),
+      loadUsageStats(),
+      loadBuiltInTemplateCount(),
+      loadBuiltInTemplates(),
+    ]);
   });
 
   async function loadTemplates() {
@@ -89,6 +97,23 @@
     }
   }
 
+  async function loadBuiltInTemplateCount() {
+    try {
+      const analytics = await api.getTemplateAnalyticsDashboard();
+      builtInTemplateCount = analytics.coverage.total_templates;
+    } catch {
+      builtInTemplateCount = null;
+    }
+  }
+
+  async function loadBuiltInTemplates() {
+    try {
+      builtInTemplates = await api.getBuiltInTemplates();
+    } catch {
+      builtInTemplates = [];
+    }
+  }
+
   function openEditor(template?: CustomTemplate) {
     if (template) {
       editingTemplate = template;
@@ -111,6 +136,20 @@
       formMaxGroupSize = null;
       formEnabled = true;
     }
+    showEditor = true;
+    showTester = false;
+  }
+
+  function openEditorFromBuiltIn(template: BuiltInTemplateInfo) {
+    editingTemplate = null;
+    formName = `${template.name} Custom`;
+    formTemplateText = "";
+    formTriggerPhrases = template.sample_patterns.join("\n");
+    formCategory = "general";
+    formTags = "built-in";
+    formMinGroupSize = null;
+    formMaxGroupSize = null;
+    formEnabled = true;
     showEditor = true;
     showTester = false;
   }
@@ -336,7 +375,12 @@
   <header class="header">
     <div class="header-left">
       <h1>Template Builder</h1>
-      <p class="subtitle">Create and manage custom response templates</p>
+      <p class="subtitle">
+        Create and manage custom response templates
+        {#if builtInTemplateCount !== null}
+          · {builtInTemplateCount} built-in templates active
+        {/if}
+      </p>
     </div>
     <div class="header-actions">
       <button class="btn-secondary" onclick={() => (showImportExport = true)}>
@@ -364,7 +408,7 @@
       class:active={activeTab === "list"}
       onclick={() => (activeTab = "list")}
     >
-      Templates ({templates.length})
+      Custom Templates ({templates.length})
     </button>
     <button
       class="tab"
@@ -519,6 +563,49 @@
         {/each}
       </div>
     {/if}
+
+    <div class="built-in-section">
+      <button
+        class="built-in-toggle"
+        onclick={() => (showBuiltInTemplates = !showBuiltInTemplates)}
+        aria-expanded={showBuiltInTemplates}
+        aria-label="Toggle built-in templates"
+      >
+        <span>Built-in Templates ({builtInTemplates.length})</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          {#if showBuiltInTemplates}
+            <polyline points="18 15 12 9 6 15"></polyline>
+          {:else}
+            <polyline points="6 9 12 15 18 9"></polyline>
+          {/if}
+        </svg>
+      </button>
+
+      {#if showBuiltInTemplates}
+        <div class="built-in-list">
+          {#if builtInTemplates.length === 0}
+            <div class="built-in-empty">Built-in templates are unavailable right now.</div>
+          {:else}
+            {#each builtInTemplates as tmpl (tmpl.name)}
+              <div class="built-in-item">
+                <div class="built-in-name">{tmpl.name}</div>
+                <div class="built-in-count">{tmpl.pattern_count} patterns</div>
+                <div class="built-in-samples">
+                  {#each tmpl.sample_patterns as pattern}
+                    <span class="trigger-chip">{pattern}</span>
+                  {/each}
+                </div>
+                <div class="built-in-actions">
+                  <button class="btn-secondary" onclick={() => openEditorFromBuiltIn(tmpl)}>
+                    Use as Base
+                  </button>
+                </div>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      {/if}
+    </div>
   {:else if activeTab === "stats"}
     <!-- Usage Stats -->
     {#if usageStats}
@@ -1152,6 +1239,80 @@
     background: var(--bg-hover);
     font-size: 12px;
     color: var(--text-secondary);
+  }
+
+  .built-in-section {
+    margin-top: 16px;
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    background: var(--surface-base);
+  }
+
+  .built-in-toggle {
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .built-in-toggle:hover {
+    background: var(--surface-hover);
+  }
+
+  .built-in-toggle svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .built-in-list {
+    border-top: 1px solid var(--border-default);
+    padding: 10px 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .built-in-item {
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+  }
+
+  .built-in-name {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .built-in-count {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .built-in-samples {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .built-in-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .built-in-empty {
+    color: var(--text-secondary);
+    font-size: 13px;
   }
 
   /* Stats */

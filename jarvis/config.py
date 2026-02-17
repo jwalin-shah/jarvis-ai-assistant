@@ -229,6 +229,10 @@ class ModelSettings(BaseModel):
     speculative_num_draft_tokens: int = Field(default=4, ge=1, le=10)
 
     kv_cache_bits: int = Field(default=8, ge=2, le=16)
+    llm_memory_limit_mb: int = Field(default=1024, ge=256, le=16384)
+    llm_cache_limit_mb: int = Field(default=512, ge=128, le=8192)
+    embedder_memory_limit_mb: int = Field(default=256, ge=64, le=4096)
+    embedder_cache_limit_mb: int = Field(default=128, ge=32, le=2048)
 
 
 class TaskQueueConfig(BaseModel):

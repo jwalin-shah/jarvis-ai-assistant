@@ -19,8 +19,29 @@
   let suggestions: DraftReplyResponse["suggestions"] = $state([]);
   let errorMessage = $state("");
   let abortController: AbortController | null = null;
+  let runId = 0;
+
+  const STREAM_TIMEOUT_MS = 15000;
+  const FALLBACK_TIMEOUT_MS = 12000;
+
+  function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+      promise.then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (err) => {
+          clearTimeout(timer);
+          reject(err);
+        }
+      );
+    });
+  }
 
   async function generateReplies() {
+    const currentRun = ++runId;
     abortController?.abort();
     abortController = new AbortController();
 
@@ -30,35 +51,48 @@
 
     try {
       // Stream tokens via socket for typewriter effect
-      const result = await jarvis.generateDraftStream(
-        { chat_id: chatId },
-        (token: string) => {
-          streamingText += token;
-        }
+      const result = await withTimeout(
+        jarvis.generateDraftStream(
+          { chat_id: chatId },
+          (token: string) => {
+            if (currentRun !== runId) return;
+            streamingText += token;
+          }
+        ),
+        STREAM_TIMEOUT_MS,
+        "AI draft stream"
       );
+      if (currentRun !== runId) return;
       if (result.gated || result.suggestions.length === 0) {
-        handleClose();
-        return;
+        throw new Error("No draft suggestions returned from stream");
       }
       suggestions = result.suggestions;
       barState = "results";
     } catch {
+      if (currentRun !== runId) return;
       // Fall back to non-streaming API
       try {
         barState = "loading";
-        const response = await apiClient.getDraftReplies(
-          chatId,
-          undefined,
-          3,
-          abortController!.signal
+        const safeResponse = await withTimeout(
+          apiClient.getDraftReplies(
+            chatId,
+            undefined,
+            3,
+            abortController!.signal,
+            { preferSocket: false }
+          ),
+          FALLBACK_TIMEOUT_MS,
+          "AI draft fallback"
         );
-        if (response.gated || response.suggestions.length === 0) {
+        if (currentRun !== runId) return;
+        if (safeResponse.gated || safeResponse.suggestions.length === 0) {
           handleClose();
           return;
         }
-        suggestions = response.suggestions;
+        suggestions = safeResponse.suggestions;
         barState = "results";
       } catch (e2) {
+        if (currentRun !== runId) return;
         if (e2 instanceof Error && e2.name === "AbortError") return;
         barState = "error";
         if (e2 instanceof APIError) {

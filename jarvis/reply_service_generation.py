@@ -12,8 +12,6 @@ from typing import Any
 import numpy as np
 
 from contracts.models import GenerationRequest as ModelGenerationRequest
-from jarvis.classifiers.cascade import classify_with_cascade
-from jarvis.classifiers.response_mobilization import ResponsePressure
 from jarvis.config import get_config
 from jarvis.contracts.pipeline import (
     GenerationRequest,
@@ -61,13 +59,22 @@ def prepare_streaming_context(
     if contact is None:
         contact = service.context_service.get_contact(None, chat_id)
 
+    # Direct-to-LLM: skip classification, use universal defaults
+    # Classification runs in background (prefetch) for analytics, not at request time
     if classification_result is None:
-        mobilization = classify_with_cascade(normalized_incoming)
-        classification_result = service._build_classification_result(
-            normalized_incoming,
-            thread_messages,
-            mobilization,
-        )
+        from dataclasses import dataclass
+
+        @dataclass
+        class DefaultClassification:
+            category: str = "statement"
+            confidence: float = 0.5
+            metadata: dict = None
+
+            def __post_init__(self):
+                if self.metadata is None:
+                    self.metadata = {"category_name": "statement"}
+
+        classification_result = DefaultClassification()
 
     if search_results is None:
         hybrid_searcher = get_hybrid_searcher()
@@ -99,19 +106,14 @@ def prepare_streaming_context(
 
     similarity = search_results[0].get("similarity", 0.0) if search_results else 0.0
     example_diversity = service._compute_example_diversity(search_results)
-    pressure = service._pressure_from_classification(classification_result)
 
-    base_confidence = {
-        ResponsePressure.HIGH: 0.85,
-        ResponsePressure.MEDIUM: 0.65,
-        ResponsePressure.LOW: 0.45,
-        ResponsePressure.NONE: 0.30,
-    }[pressure]
+    # Direct-to-LLM: use medium confidence as default (LLM decides response)
+    base_confidence = 0.65
 
     config = get_config()
     if similarity < config.similarity_thresholds.rag_min_similarity:
         base_confidence *= config.similarity_thresholds.low_similarity_penalty
-    if example_diversity < 0.3:  # Keep 0.3 as it's not in config yet
+    if example_diversity < 0.3:
         base_confidence *= config.similarity_thresholds.medium_similarity_factor
 
     if base_confidence >= config.similarity_thresholds.high_confidence:
@@ -126,7 +128,6 @@ def prepare_streaming_context(
         "confidence_score": base_confidence,
         "similarity_score": similarity,
         "example_diversity": example_diversity,
-        "mobilization_pressure": pressure.value,
     }
     return model_request, metadata
 
