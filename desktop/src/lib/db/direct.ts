@@ -107,7 +107,7 @@ export async function initDatabases(): Promise<void> {
       await chatDb.execute("PRAGMA journal_mode=WAL");
       await chatDb.execute("PRAGMA cache_size=-64000"); // 64MB cache
       await chatDb.execute("PRAGMA synchronous=NORMAL");
-      await chatDb.execute("PRAGMA mmap_size=268435456"); // 256MB memory-mapped I/O
+      await chatDb.execute("PRAGMA mmap_size=134217728"); // 128MB memory-mapped I/O
       await chatDb.execute("PRAGMA temp_store=MEMORY");
     } catch (dbError: unknown) {
       const msg = dbError instanceof Error ? dbError.message : String(dbError);
