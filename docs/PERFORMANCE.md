@@ -105,7 +105,57 @@ with track_latency("conversations_fetch", limit=50):
 
 ## Optimization Summary
 
-### Recent Optimizations
+### Recent Optimizations (Feb 2026)
+
+#### 1. SQLite Performance Tuning ✅
+
+**Files**: `jarvis/db/core.py`, `desktop/src/lib/db/direct.ts`
+
+| Database | Cache | mmap | Notes |
+|----------|-------|------|-------|
+| chat.db | 64MB | 128MB | Messages (~200MB) |
+| jarvis.db | 64MB | 512MB | Embeddings (~827MB) |
+
+- WAL mode for concurrent reads
+- Memory-mapped I/O for faster reads
+- Temp tables in memory
+- App-level message cache: 500 chats (~30k messages)
+
+#### 2. Health Check Fast ✅
+
+**File**: `jarvis/handlers/health.py`, `api/routers/health_readiness.py`
+
+- Replaced slow `psutil` (~200-500ms) with native `vm_stat` command (~50ms)
+- Added 5-second cache for health status
+- Falls back to psutil if vm_stat fails
+
+#### 3. Streaming Timeouts ✅
+
+**Files**: `desktop/src/lib/components/SuggestionBar.svelte`, `desktop/src/lib/socket/stream-manager.ts`
+
+- Increased frontend timeouts: 15s→45s stream, 12s→30s fallback
+- Increased StreamManager idle: 60s→90s
+- Added stale generation cancellation when switching chats
+
+#### 4. Lazy Loading ✅
+
+**File**: `desktop/src/lib/db/direct.ts`
+
+- Skip attachment/reaction queries for "load more" (scroll-up)
+- Only fetch full context for initial message load
+- Reduces scroll-up time by ~50%
+
+#### 5. Reduced Page Sizes ✅
+
+**File**: `desktop/src/lib/stores/conversations.svelte.ts`
+
+- Conversation page: 150→50
+- Message page: 40→60
+- Fewer rows per query = faster
+
+---
+
+### Older Optimizations
 
 #### 1. Batched Fact Extraction ✅
 
