@@ -7,11 +7,12 @@
   interface Props {
     chatId: string;
     onSelect: (text: string) => void;
+    onAccept?: (text: string) => void;
     onClose: () => void;
     initialSuggestions?: DraftReplyResponse["suggestions"];
   }
 
-  let { chatId, onSelect, onClose, initialSuggestions }: Props = $props();
+  let { chatId, onSelect, onAccept, onClose, initialSuggestions }: Props = $props();
 
   type BarState = "loading" | "streaming" | "results" | "error";
   let barState: BarState = $state("loading");
@@ -148,7 +149,17 @@
   <span class="bar-icon"><Icon name="sparkles" size={16} /></span>
 
   {#if barState === "streaming"}
-    <div class="bar-content streaming">
+    <button 
+      class="bar-content streaming" 
+      onclick={() => {
+        if (streamingText) {
+          onSelect(streamingText);
+          onAccept?.(streamingText);
+        }
+      }}
+      disabled={!streamingText}
+      title="Click to use current draft"
+    >
       {#if streamingText}
         <span class="streaming-text">{streamingText}<span class="cursor"></span></span>
       {:else}
@@ -159,7 +170,7 @@
         </div>
         <span class="loading-text">AI is thinking...</span>
       {/if}
-    </div>
+    </button>
   {/if}
 
   {#if barState === "loading"}
@@ -179,7 +190,10 @@
         <button
           class="chip"
           style:opacity={suggestion.confidence < 0.7 ? 0.85 : 1}
-          onclick={() => onSelect(suggestion.text)}
+          onclick={() => {
+            onSelect(suggestion.text);
+            onAccept?.(suggestion.text);
+          }}
           title="{suggestion.text} (confidence: {Math.round(suggestion.confidence * 100)}%)"
         >
           {truncate(suggestion.text, 100)}
@@ -276,6 +290,18 @@
     font-size: 13px;
     color: var(--text-primary);
     overflow: hidden;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    width: 100%;
+  }
+
+  .bar-content.streaming:disabled {
+    cursor: default;
   }
 
   .streaming-text {

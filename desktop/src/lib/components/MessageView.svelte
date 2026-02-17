@@ -24,6 +24,7 @@
     announce,
   } from '../stores/keyboard';
   import { WS_HTTP_BASE } from '../api/websocket';
+  import { jarvis } from '../socket/client';
   import SuggestionBar from './SuggestionBar.svelte';
   import MessageSkeleton from './MessageSkeleton.svelte';
   import ContactHoverCard from './ContactHoverCard.svelte';
@@ -37,6 +38,7 @@
   // Panel visibility state
   let showDraftPanel = $state(false);
   let prefetchedSuggestions = $state<DraftSuggestion[] | undefined>(undefined);
+  let lastDraftUsed = $state<{ text: string, timestamp: number } | null>(null);
 
   // Contact hover state
   let hoverCardVisible = $state(false);
@@ -325,6 +327,20 @@
       if (result.success) {
         updateOptimisticMessage(optimisticId, { status: 'sent' });
         updateConversationAfterLocalSend(chatId, text);
+
+        // Record feedback if this was derived from a draft
+        if (lastDraftUsed && Date.now() - lastDraftUsed.timestamp < 300000) {
+          const action = text.trim() === lastDraftUsed.text.trim() ? 'sent' : 'edited';
+          void jarvis.recordFeedback({
+            action,
+            suggestion_text: lastDraftUsed.text,
+            chat_id: chatId,
+            edited_text: action === 'edited' ? text : undefined,
+            context_messages: conversationsStore.messages.slice(-5).map(m => m.text || '')
+          }).catch(() => {});
+          lastDraftUsed = null;
+        }
+
         // Watcher push (handleNewMessagePush) clears optimistic when real message arrives.
         // Proactively poll after 1.5s to catch the chat.db update from AppleScript
         setTimeout(() => pollMessages(), 1500);
@@ -683,6 +699,26 @@
     prefetchedSuggestions = undefined;
   }
 
+  async function handleDraftAccept(text: string) {
+    if (!conversationsStore.selectedConversation) return;
+    
+    // Store for 'sent' or 'edited' tracking later
+    lastDraftUsed = { text, timestamp: Date.now() };
+    
+    // Record feedback as 'copied' (user has put it in the compose box)
+    // We'll record 'sent' later when they actually send.
+    try {
+      await jarvis.recordFeedback({
+        action: 'copied',
+        suggestion_text: text,
+        chat_id: conversationsStore.selectedConversation.chat_id,
+        context_messages: conversationsStore.messages.slice(-5).map(m => m.text || '')
+      });
+    } catch (e) {
+      console.warn('Failed to record draft feedback:', e);
+    }
+  }
+
   // Date header logic
   function shouldShowDateHeader(visibleIndex: number): boolean {
     const actualIndex = visibleStartIndex + visibleIndex;
@@ -851,6 +887,7 @@
         <SuggestionBar
           chatId={conversationsStore.selectedConversation.chat_id}
           onSelect={handleDraftSelect}
+          onAccept={handleDraftAccept}
           onClose={() => {
             showDraftPanel = false;
             prefetchedSuggestions = undefined;

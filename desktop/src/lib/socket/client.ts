@@ -1447,6 +1447,20 @@ class JarvisSocket {
   }
 
   /**
+   * Record user feedback on a suggestion
+   */
+  async recordFeedback(params: {
+    action: "sent" | "edited" | "dismissed" | "copied";
+    suggestion_text: string;
+    chat_id: string;
+    context_messages?: string[];
+    edited_text?: string;
+    metadata?: object;
+  }): Promise<{ success: boolean }> {
+    return this.call("record_feedback", params);
+  }
+
+  /**
    * Ping the server
    */
   async ping(): Promise<Record<string, unknown>> {

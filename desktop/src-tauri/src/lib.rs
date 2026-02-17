@@ -109,10 +109,6 @@ pub fn run() {
             // Set up the system tray
             tray::setup_tray(app)?;
 
-            // Auto-launch backend socket server
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(backend::ensure_backend_running(handle));
-
             // Get the main window
             if let Some(window) = app.get_webview_window("main") {
                 // Restore saved window position and size

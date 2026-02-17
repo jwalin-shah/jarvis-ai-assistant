@@ -33,6 +33,35 @@ class MessageHandler(BaseHandler):
         self.server.register("get_smart_replies", self._get_smart_replies)
         self.server.register("list_conversations", self._list_conversations)
         self.server.register("chat", self._chat, streaming=True)
+        self.server.register("record_feedback", self._record_feedback)
+
+    @rpc_handler("Failed to record feedback")
+    async def _record_feedback(
+        self,
+        action: str,
+        suggestion_text: str,
+        chat_id: str,
+        context_messages: list[str] = None,
+        edited_text: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, bool]:
+        """Record user feedback on an AI suggestion."""
+        from jarvis.eval.evaluation import SuggestionAction, get_feedback_store
+
+        store = get_feedback_store()
+        try:
+            store.record_feedback(
+                action=SuggestionAction(action),
+                suggestion_text=suggestion_text,
+                chat_id=chat_id,
+                context_messages=context_messages or [],
+                edited_text=edited_text,
+                metadata=metadata,
+            )
+            return {"success": True}
+        except ValueError as e:
+            logger.warning(f"Invalid feedback action: {e}")
+            return {"success": False}
 
     @rpc_handler("Chat failed")
     async def _chat(
