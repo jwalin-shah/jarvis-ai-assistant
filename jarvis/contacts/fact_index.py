@@ -18,12 +18,17 @@ import json
 import logging
 import sqlite3
 from datetime import datetime
+from typing import cast
 
 import numpy as np
 
 from jarvis.contacts.contact_profile import Fact
+from jarvis.infrastructure.cache import TTLCache
 
 logger = logging.getLogger(__name__)
+
+# Cache relevant facts for 60 seconds
+_facts_cache = TTLCache(maxsize=128, ttl_seconds=60.0)
 
 # Int8 quantization scale (matches vec_search.py)
 _INT8_SCALE = 127.0
@@ -241,6 +246,11 @@ def search_relevant_facts(
     Returns:
         List of Fact objects sorted by relevance.
     """
+    cache_key = f"{contact_id}:{query}:{limit}"
+    cached = _facts_cache.get(cache_key)
+    if cached is not None:
+        return cast(list[Fact], cached)
+
     from jarvis.db import get_db
     from jarvis.embedding_adapter import get_embedder
 
@@ -383,7 +393,9 @@ def search_relevant_facts(
 
     # Sort by confidence (which now includes decay)
     facts_with_scores.sort(key=lambda x: x[1], reverse=True)
-    return [f for f, s in facts_with_scores[:limit]]
+    result = [f for f, s in facts_with_scores[:limit]]
+    _facts_cache.set(cache_key, result)
+    return result
 
 
 def find_conflicting_facts(

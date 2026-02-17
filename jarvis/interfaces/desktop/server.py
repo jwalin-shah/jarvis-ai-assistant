@@ -262,7 +262,7 @@ class JarvisSocketServer:
         await send_stream_response(writer, request_id, result)
 
     async def start(self) -> None:
-        """Start the socket server."""
+        """Start the socket server without blocking."""
         SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if SOCKET_PATH.exists():
             SOCKET_PATH.unlink()
@@ -329,6 +329,11 @@ class JarvisSocketServer:
                 self._prefetch_manager.start()
             except Exception as e:
                 logger.warning(f"Prefetch manager failed to start: {e}")
+
+    async def serve_forever(self) -> None:
+        """Block and serve until stopped. Useful for integration into existing loops."""
+        if self._server is None:
+            await self.start()
 
         async with self._server:
             await self._server.serve_forever()

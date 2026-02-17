@@ -265,17 +265,7 @@ main() {
         exit 1
     fi
 
-    # Step 4: Start the socket server for direct desktop communication
-    # Use --no-preload to avoid blocking startup with model loading
-    # Models will load on-demand when first used (first message generation, etc.)
-    start_socket_server
-
-    # Start socket health monitor in background
-    log_info "Starting socket health monitor..."
-    monitor_socket_server &
-    SOCKET_MONITOR_PID=$!
-
-    # Step 5: Start the Tauri desktop app
+    # Step 4: Start the Tauri desktop app
     log_info "Starting JARVIS desktop app..."
     log_info "Ensuring frontend port $FRONTEND_PORT is free..."
     if ! check_port "$FRONTEND_PORT"; then

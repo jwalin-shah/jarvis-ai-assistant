@@ -362,108 +362,35 @@ def generate_llm_reply(
     try:
         model_request = to_model_generation_request(service, request)
 
-        # --- Best of N Generation ---
-        # Generate 2 candidates with different temperatures to explore style options
-        # LFM models often prefer lower temperatures (0.1-0.3) for stability.
-        import copy
+        # Generate a single candidate at low temperature for stability
         import random
+        jitter = random.uniform(-0.02, 0.02)
+        model_request.temperature = max(0.01, 0.1 + jitter)
 
-        candidates = []
-        temperatures = [0.1, 0.3]
+        # Ensure repetition penalty is set if not already
+        if not model_request.repetition_penalty:
+            from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY
+            model_request.repetition_penalty = DEFAULT_REPETITION_PENALTY
 
-        for temp in temperatures:
-            # Add small random jitter to ensure variance on regeneration
-            jitter = random.uniform(-0.05, 0.05)
-            actual_temp = max(0.01, temp + jitter)
+        response = service.generator.generate(model_request)
+        text = response.text.strip()
 
-            # Clone request with specific temp
-            variant_req = copy.deepcopy(model_request)
-            variant_req.temperature = actual_temp
-            # Ensure repetition penalty is set if not already
-            # Use centralized default if not set
-            if not variant_req.repetition_penalty:
-                from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY
+        # Basic cleanup
+        if "</reply>" in text:
+            text = text.split("</reply>")[0].strip()
 
-                variant_req.repetition_penalty = DEFAULT_REPETITION_PENALTY
+        for tag in ["(Note:", "Note:", "<system>", "<style", "[lowercase]"]:
+            if tag in text:
+                text = text.split(tag)[0].strip()
 
-            response = service.generator.generate(variant_req)
-            text = response.text.strip()
-
-            # Basic cleanup
-            if "</reply>" in text:
-                text = text.split("</reply>")[0].strip()
-
-            for tag in ["(Note:", "Note:", "<system>", "<style", "[lowercase]"]:
-                if tag in text:
-                    text = text.split(tag)[0].strip()
-
-            if text:
-                candidates.append(text)
-
-        if not candidates:
+        if not text:
             return GenerationResponse(
                 response="...",
                 confidence=0.1,
-                metadata={"reason": "empty_candidates"},
+                metadata={"reason": "empty_candidate"},
             )
 
-        # --- Heuristic Reranking ---
-        # Prefer: shorter, lowercase, fewer emojis (unless style dictates otherwise)
-        # Penalize: hallucinated names/entities not in context
-        best_candidate = candidates[0]
-        best_score = -float("inf")
-
-        # Gather context tokens for hallucination check
-        cname = str(request.context.metadata.get("contact_name", "them"))
-        context_text = (incoming + " " + " ".join(thread or []) + " " + cname).lower()
-        context_tokens = set(re.findall(r"\w+", context_text))
-
-        for cand in candidates:
-            score = 0.0
-
-            # Length penalty (prefer concise)
-            words = cand.split()
-            num_words = len(words)
-            if num_words > 20:
-                score -= 1.0
-            config = get_config()
-            if num_words < config.text_processing.short_reply_word_threshold:
-                score += config.scoring_weights.short_reply_bonus
-
-            # Lowercase bonus (casual)
-            if cand.islower():
-                score += 1.0
-
-            # Emoji penalty (unless very short)
-            emojis = len(re.findall(r"[^\w\s,.]", cand))
-            if emojis > 1 and num_words > config.text_processing.emoji_penalty_word_threshold:
-                score -= config.scoring_weights.emoji_penalty
-
-            # Hallucination Guard: Check for capitalized words (potential names) not in context
-            # We ignore common starting words or 'I', 'I'm' etc via simple length/stoplist check
-            potential_names = [w for w in words if w[0].isupper() and len(w) > 1]
-            hallucination_penalty = 0.0
-            for name in potential_names:
-                clean_name = re.sub(r"[^\w]", "", name).lower()
-                common_words = ["hey", "yeah", "sure", "okay", "wow", "lol", "omg"]
-                if clean_name not in context_tokens and clean_name not in common_words:
-                    hallucination_penalty += 2.0  # Heavy penalty for invented names
-
-            # Sentiment Mismatch Guard
-            sad_emojis = ["😢", "😭", "😔", "💔", "☹️"]
-            has_sad_response = any(e in cand for e in sad_emojis)
-            has_sad_input = any(e in incoming for e in sad_emojis)
-            if has_sad_response and not has_sad_input:
-                hallucination_penalty += 1.5
-
-            score -= hallucination_penalty
-
-            if score > best_score:
-                best_score = score
-                best_candidate = cand
-
-        text = best_candidate
-        logger.info("[reply] Selected candidate: %r (score=%.1f)", text, best_score)
+        logger.info("[reply] Generated response: %r", text)
 
         # Direct-to-LLM: simple confidence
         # Coherence check only
