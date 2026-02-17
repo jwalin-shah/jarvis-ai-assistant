@@ -102,6 +102,13 @@ export async function initDatabases(): Promise<void> {
     const uri = `sqlite:${chatDbPath}?mode=ro`;
     try {
       chatDb = await Database.load(uri);
+
+      // SQLite performance optimizations
+      await chatDb.execute("PRAGMA journal_mode=WAL");
+      await chatDb.execute("PRAGMA cache_size=-64000"); // 64MB cache
+      await chatDb.execute("PRAGMA synchronous=NORMAL");
+      await chatDb.execute("PRAGMA mmap_size=268435456"); // 256MB memory-mapped I/O
+      await chatDb.execute("PRAGMA temp_store=MEMORY");
     } catch (dbError: unknown) {
       const msg = dbError instanceof Error ? dbError.message : String(dbError);
       // SQLite error code 14 = SQLITE_CANTOPEN
