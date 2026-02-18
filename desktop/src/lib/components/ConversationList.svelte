@@ -442,13 +442,29 @@
   <div class="header">
     <h2>Messages</h2>
     {#if connectionInfo.state !== 'connected'}
-      <span class="connection-badge disconnected" title="Disconnected from server">
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <div
+        class="connection-badge disconnected"
+        role="status"
+        aria-live="polite"
+        tabindex="0"
+        title="Disconnected from server"
+      >
         <span class="connection-dot"></span>
-      </span>
+        <span class="sr-only">Disconnected from server</span>
+      </div>
     {:else if connectionInfo.isFallback}
-      <span class="connection-badge fallback" title="Using WebSocket fallback (Unix socket unavailable)">
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <div
+        class="connection-badge fallback"
+        role="status"
+        aria-live="polite"
+        tabindex="0"
+        title="Using WebSocket fallback (Unix socket unavailable)"
+      >
         <span class="connection-dot"></span>
-      </span>
+        <span class="sr-only">Using WebSocket fallback</span>
+      </div>
     {/if}
   </div>
 
@@ -667,6 +683,13 @@
     display: flex;
     align-items: center;
     margin-left: auto;
+    padding: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  .connection-badge:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
   }
 
   .connection-dot {

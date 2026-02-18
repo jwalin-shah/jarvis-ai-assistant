@@ -416,7 +416,7 @@ class JarvisSocket {
 
     try {
       // Initialize Tauri APIs
-      const apisReady = await this.initTauriApis();
+      const apisReady = await JarvisSocket.initTauriApis();
       if (!apisReady || !invoke) {
         throw new Error("Failed to initialize Tauri APIs");
       }
@@ -778,6 +778,11 @@ class JarvisSocket {
     // Send as batch
     logger.log(`Sending Tauri batch of ${batch.length} requests`);
 
+    if (!invoke) {
+      batch.forEach((req) => req.reject(new Error("Tauri invoke not available")));
+      return;
+    }
+
     try {
       const results = await withTimeout(
         invoke("send_batch", { requests: batch.map(r => ({ method: r.method, params: r.params })) }),
@@ -983,28 +988,6 @@ class JarvisSocket {
           completed = true;
           break;
         }
-        yield nextToken;
-      }
-    } catch (error) {
-      // ... rest of error handling ...
-    }
-            }
-          }),
-          // 5 second timeout to periodically check overall duration
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('TOKEN_TIMEOUT')), 5000)
-          )
-        ]).catch((err) => {
-          if (err.message === 'TOKEN_TIMEOUT') {
-            return null; // Return null to continue loop and check overall timeout
-          }
-          throw err;
-        });
-
-        if (nextToken === null) {
-          continue; // Continue to check overall timeout
-        }
-
         yield nextToken;
       }
 
