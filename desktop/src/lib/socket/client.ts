@@ -978,33 +978,20 @@ class JarvisSocket {
               resolveNextToken = null;
             }
           }),
+          // 5 second timeout to periodically check overall duration
+          new Promise<string | null>((resolve) =>
+            setTimeout(() => resolve('TOKEN_TIMEOUT'), 5000)
+          )
         ]);
+
+        if (nextToken === 'TOKEN_TIMEOUT') {
+          continue; // Loop back to check overall duration
+        }
+
         if (nextToken === null) {
           completed = true;
           break;
         }
-        yield nextToken;
-      }
-    } catch (error) {
-      // ... rest of error handling ...
-    }
-            }
-          }),
-          // 5 second timeout to periodically check overall duration
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('TOKEN_TIMEOUT')), 5000)
-          )
-        ]).catch((err) => {
-          if (err.message === 'TOKEN_TIMEOUT') {
-            return null; // Return null to continue loop and check overall timeout
-          }
-          throw err;
-        });
-
-        if (nextToken === null) {
-          continue; // Continue to check overall timeout
-        }
-
         yield nextToken;
       }
 

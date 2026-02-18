@@ -209,23 +209,12 @@ export function getNewMessagesQuery(): string {
   return `
     SELECT
       message.ROWID as id,
-      message.guid,
-      chat.guid as chat_id,
-      COALESCE(handle.id, 'me') as sender,
-      CASE
-        WHEN message.text IS NOT NULL AND message.text != ''
-        THEN message.text
-        ELSE NULL
-      END as text,
-      message.attributedBody,
-      message.date as date,
-      message.is_from_me
+      chat.guid as chat_id
     FROM message
     JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
     JOIN chat ON chat_message_join.chat_id = chat.ROWID
-    LEFT JOIN handle ON message.handle_id = handle.ROWID
     WHERE message.ROWID > ?
-    ORDER BY message.date ASC
+    ORDER BY message.ROWID ASC
   `;
 }
 

@@ -437,9 +437,13 @@ export async function pollMessages(force = false): Promise<Message[]> {
     const freshMessages = await fetchMessages(chatId);
     if (conversationsStore.selectedChatId !== chatId) return [];
 
+    // Calculate delta for return value (to match direct access behavior)
+    const existingIds = new Set(conversationsStore.messages.map((m) => m.id));
+    const delta = freshMessages.filter((m) => !existingIds.has(m.id));
+
     reconcileMessages(chatId, freshMessages);
     conversationsStore.lastSyncTimestamp = now;
-    return freshMessages;
+    return delta;
   } catch (e) {
     return [];
   } finally {

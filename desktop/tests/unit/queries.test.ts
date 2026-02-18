@@ -467,12 +467,25 @@ describe('getNewMessagesQuery', () => {
     expect(sql).toContain('SELECT');
     expect(sql).toContain('FROM message');
     expect(sql).toContain('WHERE message.ROWID > ?');
-    expect(sql).toContain('ORDER BY message.date ASC');
+    expect(sql).toContain('ORDER BY message.ROWID ASC');
   });
 
   it('does not include LIMIT clause', () => {
     const sql = getNewMessagesQuery();
     expect(sql).not.toContain('LIMIT');
+  });
+
+  it('should only select necessary columns', () => {
+    const query = getNewMessagesQuery();
+
+    // Check for necessary columns
+    expect(query).toContain('message.ROWID as id');
+    expect(query).toContain('chat.guid as chat_id');
+
+    // Check that we are NOT selecting heavy columns or joining unnecessary tables
+    expect(query).not.toContain('attributedBody');
+    expect(query).not.toContain('handle.id');
+    expect(query).not.toContain('LEFT JOIN handle');
   });
 });
 
