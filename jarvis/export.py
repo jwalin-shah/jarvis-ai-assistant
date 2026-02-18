@@ -31,6 +31,29 @@ def _serialize_datetime(dt: datetime | None) -> str | None:
     return dt.isoformat()
 
 
+def _sanitize_csv_field(value: Any) -> str:
+    """Sanitize a field for CSV export to prevent injection.
+
+    Prefixes fields starting with =, +, -, or @ with a single quote.
+
+    Args:
+        value: The value to sanitize.
+
+    Returns:
+        Sanitized string.
+    """
+    if value is None:
+        return ""
+
+    str_value = str(value)
+    if not str_value:
+        return ""
+
+    if str_value.startswith(("=", "+", "-", "@")):
+        return f"'{str_value}"
+    return str_value
+
+
 def _message_to_dict(message: Message) -> dict[str, Any]:
     """Convert a Message dataclass to a serializable dictionary.
 
@@ -167,13 +190,13 @@ def export_messages_csv(
     for message in messages:
         row = {
             "id": message.id,
-            "chat_id": message.chat_id,
-            "sender": message.sender,
-            "sender_name": message.sender_name or "",
-            "text": message.text.replace("\n", "\\n"),  # Escape newlines
+            "chat_id": _sanitize_csv_field(message.chat_id),
+            "sender": _sanitize_csv_field(message.sender),
+            "sender_name": _sanitize_csv_field(message.sender_name),
+            "text": _sanitize_csv_field(message.text.replace("\n", "\\n")),  # Escape newlines
             "date": _serialize_datetime(message.date) or "",
             "is_from_me": message.is_from_me,
-            "reply_to_id": message.reply_to_id or "",
+            "reply_to_id": _sanitize_csv_field(message.reply_to_id),
             "is_system_message": message.is_system_message,
             "reaction_count": len(message.reactions),
         }
