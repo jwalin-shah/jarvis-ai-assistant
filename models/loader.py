@@ -95,24 +95,14 @@ class ModelConfig:
 
     def __post_init__(self) -> None:
         """Resolve model_id to model_path and estimated_memory_mb."""
-        # ABSOLUTE GATE: Directly read the file to bypass any potential caching
         if not self.model_id and not self.model_path:
             try:
-                import json
-                from pathlib import Path
-
-                raw_cfg_path = Path.home() / ".jarvis" / "config.json"
-                if raw_cfg_path.exists():
-                    with open(raw_cfg_path) as f:
-                        raw_data = json.load(f)
-                        # The config file has a "model" nested object
-                        model_data = raw_data.get("model", {})
-                        direct_model_id = model_data.get("model_id")
-                        if direct_model_id:
-                            print(f"DEBUG: DIRECT DISK LOAD OF MODEL_ID: {direct_model_id}")
-                            self.model_id = direct_model_id
+                from jarvis.config import get_config
+                cfg = get_config()
+                if cfg.model.model_id:
+                    self.model_id = cfg.model.model_id
             except Exception as e:
-                print(f"DEBUG: CONFIG DISK LOAD FAILED: {e}")
+                logger.debug("Failed to load model_id from config: %s", e)
 
         if self.model_id:
             spec = get_model_spec(self.model_id)
@@ -253,6 +243,22 @@ class NegativeConstraintLogitsProcessor:
                     next_token = phrase[i]
                     logits[:, next_token] -= self.penalty
 
+        return logits
+
+
+class LogitBiasLogitsProcessor:
+    """Logits processor that applies specified biases to token IDs.
+
+    Used to force or suppress specific tokens during generation.
+    """
+
+    def __init__(self, logit_bias: dict[int, float]) -> None:
+        self.logit_bias = logit_bias
+
+    def __call__(self, input_ids: mx.array, logits: mx.array) -> mx.array:
+        """Apply biases to logits."""
+        for token_id, bias in self.logit_bias.items():
+            logits[:, token_id] += bias
         return logits
 
 
@@ -844,9 +850,12 @@ class MLXModelLoader:
             )
 
         min_p = min_p if min_p is not None else 0.0
-        sampler = make_sampler(temp=temperature, top_p=top_p, min_p=min_p, top_k=top_k, logit_bias=logit_bias)
+        sampler = make_sampler(temp=temperature, top_p=top_p, min_p=min_p, top_k=top_k)
 
         logits_processors: list[Any] = []
+        if logit_bias:
+            logits_processors.append(LogitBiasLogitsProcessor(logit_bias))
+
         if repetition_penalty > 1.0:
             logits_processors.append(make_repetition_penalty(repetition_penalty))
 
@@ -990,23 +999,60 @@ class MLXModelLoader:
         # so we do NOT prepend it here. Doing so would duplicate it.
 
         try:
-            from mlx_lm import generate
+            from mlx_lm import stream_generate
 
             start_time = time.perf_counter()
-            with MLXModelLoader._mlx_load_lock:
+            response_text = ""
+            
+            # Add stylistic biasing via custom logits processor
+            from models.memory_config import PersonaLogitsProcessor
+            
+            persona_processor = PersonaLogitsProcessor(self._tokenizer)
+            if logits_processors:
+                logits_processors.append(persona_processor)
+            else:
+                logits_processors = [persona_processor]
+
+            # Use non-blocking lock with timeout to prevent deadlocks
+            # Lock for 60s max per generation
+            lock_acquired = MLXModelLoader._mlx_load_lock.acquire(timeout=60)
+            if not lock_acquired:
+                logger.error("Failed to acquire MLX model lock after 60s")
+                raise ModelGenerationError("Model is busy (lock timeout)", code=ErrorCode.MDL_BUSY)
+                
+            try:
                 apply_llm_limits()
-                # Direct MLX call
-                response = generate(
+                
+                # Use stream_generate to implement manual stop sequences
+                # which is the most compatible way across mlx_lm versions.
+                for t_resp in stream_generate(
                     model=self._model,
                     tokenizer=self._tokenizer,
                     prompt=prompt,
                     max_tokens=max_tokens,
                     sampler=sampler,
-                    verbose=False,
-                )
+                    logits_processors=logits_processors,
+                ):
+                    response_text += t_resp.text
+                    
+                    # Check for stop sequences
+                    if stop_sequences:
+                        should_stop = False
+                        for stop_seq in stop_sequences:
+                            if stop_seq in response_text:
+                                response_text = response_text[:response_text.index(stop_seq)]
+                                should_stop = True
+                                break
+                        if should_stop:
+                            break
+                    
+                    if t_resp.finish_reason is not None:
+                        break
+            finally:
+                MLXModelLoader._mlx_load_lock.release()
 
             return self._process_generation_result(
-                response, formatted_prompt, stop_sequences, start_time, 0, False
+                response_text, formatted_prompt, stop_sequences, start_time, 0, False
             )
 
         except Exception as e:
@@ -1028,6 +1074,7 @@ class MLXModelLoader:
         num_draft_tokens: int | None = None,
         pre_formatted: bool = False,
         system_prompt: str | None = None,
+        negative_constraints: list[str] | None = None,
     ) -> Any:
         """Generate text with true streaming output (yields tokens as generated).
 
@@ -1044,6 +1091,7 @@ class MLXModelLoader:
             stop_sequences: Strings that stop generation
             stop_event: If set, generation stops early (e.g. on client disconnect)
             system_prompt: Optional system prompt to include in chat template.
+            negative_constraints: Optional list of phrases to penalize.
 
         Yields:
             StreamToken objects with individual tokens as they're generated
@@ -1078,10 +1126,20 @@ class MLXModelLoader:
                     repetition_penalty,
                     pre_formatted,
                     system_prompt=system_prompt,
+                    negative_constraints=negative_constraints,
                 )
             )
 
             logger.debug("Prompt sent to model (%d chars)", len(formatted_prompt))
+
+            # Add stylistic biasing via custom logits processor
+            from models.memory_config import PersonaLogitsProcessor
+            
+            persona_processor = PersonaLogitsProcessor(self._tokenizer)
+            if logits_processors:
+                logits_processors.append(persona_processor)
+            else:
+                logits_processors = [persona_processor]
 
             # Use real streaming with mlx_lm.stream_generate
             # Hold the shared GPU lock for the entire generation to prevent

@@ -8,15 +8,20 @@ Reciprocal Rank Fusion (RRF) to provide the best of both worlds:
 
 from __future__ import annotations
 
-import json
+import hashlib
 import logging
 import pickle  # nosec B403
 import sqlite3
 import threading
+import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import orjson
+
 from jarvis.config import get_config
+from jarvis.observability.tracing import SpanContext, add_span_attribute
 from jarvis.search.bm25_search import BM25Searcher
 from jarvis.search.vec_search import VecSearchResult, get_vec_searcher
 
@@ -32,7 +37,16 @@ class HybridSearcher:
 
     BM25 index is cached to disk to avoid rebuilding on every instantiation.
     Cache is invalidated when chunk count or max timestamp changes.
+    
+    Search results are also cached in memory for 60 seconds to avoid
+    redundant work on repeated queries.
     """
+
+    # Search result cache: (query_hash, limit, rerank) -> (results, timestamp)
+    _SEARCH_CACHE: dict[tuple[str, int, bool], tuple[list[dict[str, Any]], float]] = {}
+    _SEARCH_CACHE_LOCK = threading.RLock()
+    _SEARCH_CACHE_TTL = 60.0  # 60 seconds
+    _SEARCH_CACHE_MAX_SIZE = 1000
 
     def __init__(self) -> None:
         self.vec_searcher = get_vec_searcher()
@@ -40,6 +54,53 @@ class HybridSearcher:
         self._lock = threading.RLock()
         self._initialized = False
         self._cache_metadata: dict[str, Any] | None = None
+
+    @classmethod
+    def _get_search_cache_key(cls, query: str, limit: int, rerank: bool) -> tuple[str, int, bool]:
+        """Generate cache key from search parameters."""
+        query_hash = hashlib.blake2b(query.encode("utf-8"), digest_size=8).hexdigest()
+        return (query_hash, limit, rerank)
+
+    @classmethod
+    def _get_cached_search(
+        cls, query: str, limit: int, rerank: bool
+    ) -> list[dict[str, Any]] | None:
+        """Get cached search results if valid."""
+        key = cls._get_search_cache_key(query, limit, rerank)
+        with cls._SEARCH_CACHE_LOCK:
+            if key in cls._SEARCH_CACHE:
+                results, timestamp = cls._SEARCH_CACHE[key]
+                if time.time() - timestamp < cls._SEARCH_CACHE_TTL:
+                    logger.debug("Search cache hit for query: %s", query[:50])
+                    return results
+                # Expired, remove it
+                del cls._SEARCH_CACHE[key]
+        return None
+
+    @classmethod
+    def _set_cached_search(
+        cls, query: str, limit: int, rerank: bool, results: list[dict[str, Any]]
+    ) -> None:
+        """Cache search results."""
+        key = cls._get_search_cache_key(query, limit, rerank)
+        with cls._SEARCH_CACHE_LOCK:
+            # Evict oldest entries if at capacity
+            if len(cls._SEARCH_CACHE) >= cls._SEARCH_CACHE_MAX_SIZE:
+                # Remove 10% oldest entries
+                sorted_items = sorted(
+                    cls._SEARCH_CACHE.items(), key=lambda x: x[1][1]
+                )
+                for old_key, _ in sorted_items[: cls._SEARCH_CACHE_MAX_SIZE // 10]:
+                    del cls._SEARCH_CACHE[old_key]
+            
+            cls._SEARCH_CACHE[key] = (results, time.time())
+
+    @classmethod
+    def clear_search_cache(cls) -> None:
+        """Clear the search result cache."""
+        with cls._SEARCH_CACHE_LOCK:
+            cls._SEARCH_CACHE.clear()
+            logger.info("Cleared search result cache")
 
     def _get_cache_metadata(self) -> dict[str, Any] | None:
         """Get metadata for cache staleness check.
@@ -192,64 +253,84 @@ class HybridSearcher:
         Returns:
             Ranked list of chunk dictionaries.
         """
-        if limit is None:
-            limit = get_config().retrieval.hybrid_search_limit
+        with SpanContext("search.hybrid", {"query_length": len(query), "limit": limit or 0, "rerank": rerank}) as span:
+            if limit is None:
+                limit = get_config().retrieval.hybrid_search_limit
 
-        self._ensure_initialized()
+            # Check cache first
+            cached = self._get_cached_search(query, limit, rerank)
+            if cached is not None:
+                span.set_attribute("cache_hit", True)
+                add_span_attribute("search_cache_hit", True)
+                return cached
+            
+            span.set_attribute("cache_hit", False)
+            add_span_attribute("search_cache_hit", False)
 
-        from concurrent.futures import ThreadPoolExecutor
+            self._ensure_initialized()
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            # 1. Get semantic results (top 20) in parallel
-            f_vec = executor.submit(
-                self.vec_searcher.search_with_chunks_global,
-                query=query,
-                limit=max(20, limit * 2),
-                rerank=rerank,
-            )
+            from concurrent.futures import ThreadPoolExecutor
 
-            # 2. Get keyword results (top 20) in parallel
-            f_bm25 = executor.submit(self.bm25_searcher.search, query, limit=20)
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                # 1. Get semantic results (top 20) in parallel
+                f_vec = executor.submit(
+                    self.vec_searcher.search_with_chunks_global,
+                    query=query,
+                    limit=max(20, limit * 2),
+                    rerank=rerank,
+                )
 
-            # Wait for both results
-            vec_results = f_vec.result()
-            bm25_results = f_bm25.result()
+                # 2. Get keyword results (top 20) in parallel
+                f_bm25 = executor.submit(self.bm25_searcher.search, query, limit=20)
 
-        # 3. Reciprocal Rank Fusion (RRF)
-        # score = sum(1 / (k + rank))
-        k = 60
-        rrf_scores: dict[int, float] = {}
+                # Wait for both results
+                vec_results = f_vec.result()
+                bm25_results = f_bm25.result()
 
-        # Semantic ranks
-        for rank, res in enumerate(vec_results, 1):
-            rrf_scores[res.rowid] = rrf_scores.get(res.rowid, 0.0) + (1.0 / (k + rank))
+            # 3. Reciprocal Rank Fusion (RRF)
+            # score = sum(1 / (k + rank))
+            k = 60
+            rrf_scores: dict[int, float] = {}
 
-        # Keyword ranks
-        for rank, bm25_res in enumerate(bm25_results, 1):
-            rrf_scores[bm25_res.rowid] = rrf_scores.get(bm25_res.rowid, 0.0) + (1.0 / (k + rank))
+            # Semantic ranks
+            for rank, res in enumerate(vec_results, 1):
+                rrf_scores[res.rowid] = rrf_scores.get(res.rowid, 0.0) + (1.0 / (k + rank))
 
-        # 4. Sort by fused score
-        sorted_rowids = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[:limit]
+            # Keyword ranks
+            for rank, bm25_res in enumerate(bm25_results, 1):
+                rrf_scores[bm25_res.rowid] = rrf_scores.get(bm25_res.rowid, 0.0) + (1.0 / (k + rank))
 
-        # 5. Fetch full metadata for top results
-        if not sorted_rowids:
-            return []
+            # 4. Sort by fused score
+            sorted_rowids = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[:limit]
 
-        # Use vec_searcher's logic to fetch enriched metadata
-        # Create dummy VecSearchResult objects for the fetcher
-        top_results = []
-        for rid, score in sorted_rowids:
-            top_results.append(VecSearchResult(rowid=rid, distance=0.0, score=score))
+            # 5. Fetch full metadata for top results
+            if not sorted_rowids:
+                return []
 
-        # Enrich with segment data if possible
-        # We'll use search_with_full_segments approach but with our fused rowids
-        enriched = self._enrich_results([rid for rid, _ in sorted_rowids])
+            # Use vec_searcher's logic to fetch enriched metadata
+            # Create dummy VecSearchResult objects for the fetcher
+            top_results = []
+            for rid, score in sorted_rowids:
+                top_results.append(VecSearchResult(rowid=rid, distance=0.0, score=score))
 
-        # Add fused scores to output
-        for item in enriched:
-            item["fused_score"] = rrf_scores.get(item["rowid"], 0.0)
+            # Enrich with segment data if possible
+            # We'll use search_with_full_segments approach but with our fused rowids
+            enriched = self._enrich_results([rid for rid, _ in sorted_rowids])
 
-        return enriched
+            # Add fused scores to output
+            for item in enriched:
+                item["fused_score"] = rrf_scores.get(item["rowid"], 0.0)
+
+            # Record metrics
+            span.set_attribute("vec_results", len(vec_results))
+            span.set_attribute("bm25_results", len(bm25_results))
+            span.set_attribute("final_results", len(enriched))
+            add_span_attribute("search_results", len(enriched))
+
+            # Cache the results
+            self._set_cached_search(query, limit, rerank, enriched)
+
+            return enriched
 
     def _enrich_results(self, rowids: list[int]) -> list[dict[str, Any]]:
         """Enrich rowids with full chunk metadata and segment info."""
@@ -270,7 +351,7 @@ class HybridSearcher:
                         FROM vec_chunks
                         WHERE rowid IN (SELECT value FROM json_each(?))
                         """,
-                        (json.dumps(batch),),
+                        (orjson.dumps(batch).decode('utf-8'),),
                     ).fetchall()
                     all_rows.extend(rows)
 

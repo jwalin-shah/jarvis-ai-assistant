@@ -11,6 +11,7 @@ from jarvis.contacts.contact_profile_context import (
     ContactProfileContext,
     is_contact_profile_context_enabled,
 )
+from jarvis.contacts.junk_filters import is_bot_message
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.search.vec_search import VecSearchResult
 
@@ -63,33 +64,46 @@ class ContextService:
         """Determine if a chat is with an automated service or bot.
 
         Uses heuristics like shortcodes (<= 6 digits) and keyword matching
-        on the contact name.
+        on the contact name, plus specialized junk filters.
         """
         if not chat_id:
             return False
 
-        # 1. Check for shortcodes or service-like identifiers
+        # 1. Content-based filter (from junk_filters)
+        # We don't have the text here, but we can check the chat_id
+        if is_bot_message("", chat_id):
+            return True
+
+        # 2. Check for shortcodes or service-like identifiers
         # chat_id often looks like "iMessage;-;+1234567890" or "iMessage;-;12345"
         identifier = chat_id.rsplit(";", 1)[-1] if ";" in chat_id else chat_id
         if identifier.isdigit() and len(identifier) <= 6:
             return True
 
-        # 2. Keyword matching on contact name
+        # 3. Keyword matching on contact name or text pattern
         if contact_name:
             cname_lower = contact_name.lower()
             bot_keywords = [
-                "airline",
-                "bank",
-                "cvs",
-                "uber",
-                "doordash",
-                "verification",
-                "auth",
-                "notify",
                 "alert",
-                "delivery",
+                "notice",
+                "verification",
+                "system",
+                "no-reply",
+                "automated",
+                "reminder",
+                "support",
             ]
             if any(k in cname_lower for k in bot_keywords):
+                return True
+        
+        # Check if the chat ID or identifier contains bot markers
+        if identifier and any(k in identifier.lower() for k in ["info", "united", "reply"]):
+            return True
+
+        # 4. Check for alphanumeric sender IDs (Business handles like "INFO", "UNITED")
+        if identifier and not identifier.isdigit() and "+" not in identifier and "@" not in identifier:
+            # If it's a short alphanumeric string without typical phone/email markers
+            if len(identifier) < 15:
                 return True
 
         return False
@@ -120,7 +134,9 @@ class ContextService:
             last_msg_time: datetime | None = None
 
             # Filter messages: Keep all within last 24 hours, or the most recent cluster
-            now = datetime.now()
+            # Handle timezone-aware vs naive datetimes
+            first_msg_tz = chronological[0].date.tzinfo if chronological else None
+            now = datetime.now(first_msg_tz)
             cutoff = now - timedelta(hours=24)
 
             # We already have chronological list. Let's find the start index.
@@ -137,6 +153,12 @@ class ContextService:
             if not recent_chronological and chronological:
                 # If nothing in last 24h, just take the last 3 messages anyway
                 recent_chronological = chronological[-3:]
+            
+            # Respect limit: only take the most recent messages up to 'limit'
+            if len(recent_chronological) > limit:
+                recent_chronological = recent_chronological[-limit:]
+
+            last_date: date | None = None
 
             for msg in recent_chronological:
                 sender = "You" if msg.is_from_me else (msg.sender_name or msg.sender or "Contact")
@@ -144,6 +166,18 @@ class ContextService:
                 text = (msg.text or "").strip()
                 if not text:
                     continue
+
+                # Add date header if date changed
+                msg_date = msg.date.date()
+                if msg_date != last_date:
+                    if current_sender is not None:
+                        context_turns.append(f"{current_sender}: {' '.join(current_text_parts)}")
+                        current_sender = None
+                        current_text_parts = []
+                    
+                    date_label = "Today" if msg_date == now.date() else "Yesterday" if msg_date == (now.date() - timedelta(days=1)) else msg_date.strftime("%A, %b %d")
+                    context_turns.append(f"--- {date_label} ---")
+                    last_date = msg_date
 
                 # Add time gap marker if > 6 hours
                 if last_msg_time and (msg.date - last_msg_time).total_seconds() > 21600:

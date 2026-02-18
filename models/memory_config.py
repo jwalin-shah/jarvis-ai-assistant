@@ -77,6 +77,47 @@ def apply_embedder_limits() -> None:
     mx.set_cache_limit(embedder_cache)
 
 
+class PersonaLogitsProcessor:
+    """Custom logits processor to enforce Jwalin's persona style.
+    
+    1. Penalizes uppercase tokens to encourage lowercase.
+    2. Penalizes formal punctuation (., !) to encourage casual texting.
+    """
+    def __init__(self, tokenizer, lowercase_bias: float = 10.0, punctuation_penalty: float = 5.0):
+        self.tokenizer = tokenizer
+        self.lowercase_bias = lowercase_bias
+        self.punctuation_penalty = punctuation_penalty
+        
+        # Pre-calculate token IDs to minimize per-step overhead
+        self.capital_indices = []
+        self.punct_indices = []
+        
+        # Scan vocab once
+        for i in range(tokenizer.vocab_size):
+            token = tokenizer.decode([i])
+            if not token: continue
+            
+            # Penalize any token containing capital letters
+            if any(c.isupper() for c in token):
+                self.capital_indices.append(i)
+                
+            # Penalize formal termination punctuation
+            if any(c in '.!?;' for c in token):
+                self.punct_indices.append(i)
+
+    def __call__(self, input_ids, scores):
+        import mlx.core as mx
+        
+        # Apply penalties (subtracting from log-probabilities)
+        if self.capital_indices:
+            scores[:, self.capital_indices] -= self.lowercase_bias
+            
+        if self.punct_indices:
+            scores[:, self.punct_indices] -= self.punctuation_penalty
+            
+        return scores
+
+
 @contextmanager
 def gpu_context(*, embedder: bool = True) -> Generator[None, None, None]:
     """Acquire the shared GPU lock and apply appropriate memory limits.

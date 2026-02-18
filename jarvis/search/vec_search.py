@@ -22,7 +22,7 @@ Usage:
 
 from __future__ import annotations
 
-import json
+import orjson
 import logging
 import threading
 from dataclasses import dataclass
@@ -491,7 +491,7 @@ class VecSearcher:
                              AND vc.message_count = ir.message_count
                             ORDER BY vc.rowid DESC
                             """,
-                            (json.dumps(rows_payload),),
+                            (orjson.dumps(rows_payload).decode('utf-8'),),
                         )
 
                         for row in cursor:
@@ -842,7 +842,7 @@ class VecSearcher:
                     FROM vec_chunks
                     WHERE rowid IN (SELECT value FROM json_each(?))
                     """,
-                    (json.dumps(chunk_rowids),),
+                    (orjson.dumps(chunk_rowids).decode('utf-8'),),
                 ).fetchall()
 
                 results = []
@@ -1053,7 +1053,7 @@ class VecSearcher:
                     WHERE segment_id IN (SELECT value FROM json_each(?))
                     ORDER BY segment_id, position
                     """,
-                    (json.dumps(seg_ids),),
+                    (orjson.dumps(seg_ids).decode('utf-8'),),
                 ).fetchall()
 
             # Group messages by segment

@@ -218,8 +218,9 @@ class MLXGenerator:
                 top_k=request.top_k,
                 repetition_penalty=request.repetition_penalty,
                 stop_sequences=request.stop_sequences,
+                negative_constraints=request.negative_constraints,
                 prompt_cache=prompt_cache,
-                pre_formatted=True,
+                pre_formatted=False,
                 system_prompt=request.system_prompt,
             )
 
@@ -416,8 +417,9 @@ class MLXGenerator:
                         max_tokens=request.max_tokens,
                         temperature=request.temperature,
                         stop_sequences=request.stop_sequences,
+                        negative_constraints=request.negative_constraints,
                         prompt_cache=stream_prompt_cache,
-                        pre_formatted=True,
+                        pre_formatted=False,
                         system_prompt=request.system_prompt,
                     ):
                         token_queue.put(

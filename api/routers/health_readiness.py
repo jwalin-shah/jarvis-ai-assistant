@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 from typing import Any
 
@@ -35,6 +36,14 @@ def _get_memory_fast() -> tuple[float, float, float]:
             raise RuntimeError("vm_stat failed")
 
         lines = result.stdout.strip().split("\n")
+        
+        # Parse page size from first line: "Mach Virtual Memory Statistics: (page size of 16384 bytes)"
+        page_size = 4096
+        if len(lines) > 0 and "page size of" in lines[0]:
+            match = re.search(r"page size of (\d+) bytes", lines[0])
+            if match:
+                page_size = int(match.group(1))
+
         stats = {}
         for line in lines:
             if ":" in line:
@@ -44,17 +53,22 @@ def _get_memory_fast() -> tuple[float, float, float]:
                 except ValueError:
                     continue
 
-        page_size = 4096  # default page size on macOS
-        wired = stats.get("Pages wired:", 0) * page_size
-        active = stats.get("Pages active:", 0) * page_size
+        # macOS memory categories
+        # Available = Free + Inactive + Speculative
         free = stats.get("Pages free:", 0) * page_size
-        total = wired + active + free
+        inactive = stats.get("Pages inactive:", 0) * page_size
+        speculative = stats.get("Pages speculative:", 0) * page_size
+        
+        # Used = Active + Wired
+        active = stats.get("Pages active:", 0) * page_size
+        wired = (stats.get("Pages wired down:", 0) or stats.get("Pages wired:", 0)) * page_size
+        compressed = stats.get("Pages occupied by compressor:", 0) * page_size
+        
+        total = free + inactive + speculative + active + wired + compressed
+        available = free + inactive + speculative
+        used = active + wired + compressed
 
-        total_gb = total / BYTES_PER_GB
-        used_gb = (wired + active) / BYTES_PER_GB
-        available_gb = free / BYTES_PER_GB
-
-        return available_gb, used_gb, total_gb
+        return available / BYTES_PER_GB, used / BYTES_PER_GB, total / BYTES_PER_GB
     except Exception as e:
         logger.warning(f"vm_stat failed, falling back to psutil: {e}")
         memory = psutil.virtual_memory()

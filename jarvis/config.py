@@ -60,7 +60,7 @@ def validate_path(path: str | Path, description: str = "path") -> Path:
 
 
 # Current config schema version for migration tracking
-CONFIG_VERSION = 14
+CONFIG_VERSION = 15
 
 
 class MemoryThresholds(BaseModel):
@@ -234,6 +234,26 @@ class ModelSettings(BaseModel):
     llm_cache_limit_mb: int = Field(default=64, ge=16, le=8192)
     embedder_memory_limit_mb: int = Field(default=256, ge=64, le=4096)
     embedder_cache_limit_mb: int = Field(default=128, ge=32, le=2048)
+
+    negative_constraints: list[str] = Field(
+        default_factory=lambda: [
+            "Me:",
+            "You:",
+            "Them:",
+            "Assistant:",
+            "System:",
+            "Sangati:",
+            "Mihir:",
+            "Shah:",
+            "Jwalin:",
+            "Friend:",
+            "Sangati Shah:",
+            "Mihir Shah:",
+            "5 Shahs:",
+            "--- Today ---",
+            "--- Yesterday ---",
+        ]
+    )
 
 
 class TaskQueueConfig(BaseModel):
@@ -1046,6 +1066,31 @@ def _migrate_v13_to_v14(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _migrate_v14_to_v15(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate from v14 to v15: Add negative_constraints to model section."""
+    if "model" not in data:
+        data["model"] = {}
+    if "negative_constraints" not in data["model"]:
+        data["model"]["negative_constraints"] = [
+            "Me:",
+            "You:",
+            "Them:",
+            "Assistant:",
+            "System:",
+            "Sangati:",
+            "Mihir:",
+            "Shah:",
+            "Jwalin:",
+            "Friend:",
+            "Sangati Shah:",
+            "Mihir Shah:",
+            "5 Shahs:",
+            "--- Today ---",
+            "--- Yesterday ---",
+        ]
+    return data
+
+
 # Migration registry mapping target versions to migration functions
 _MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
     2: _migrate_v1_to_v2,
@@ -1059,6 +1104,7 @@ _MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
     12: _migrate_v11_to_v12,
     13: _migrate_v12_to_v13,
     14: _migrate_v13_to_v14,
+    15: _migrate_v14_to_v15,
 }
 
 

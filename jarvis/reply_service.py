@@ -37,6 +37,7 @@ from jarvis.core.generation.metrics import (
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
 from jarvis.observability.logging import log_event
+from jarvis.observability.tracing import SpanContext, add_span_attribute, traced
 from jarvis.prompts import (
     ACKNOWLEDGE_TEMPLATES,
     CLOSING_TEMPLATES,
@@ -319,27 +320,31 @@ class ReplyService:
         lookup, classification, RAG search, prompt assembly) but returns the
         model request instead of generating. Pass precomputed to reuse results.
         """
-        if precomputed:
-            classification_result = precomputed.classification_result or classification_result
-            contact = precomputed.contact if precomputed.contact is not None else contact
-            search_results = (
-                precomputed.search_results
-                if precomputed.search_results is not None
-                else search_results
+        with SpanContext(
+            "reply.prepare_streaming_context",
+            {"chat_id": chat_id or "", "incoming_length": len(incoming)},
+        ):
+            if precomputed:
+                classification_result = precomputed.classification_result or classification_result
+                contact = precomputed.contact if precomputed.contact is not None else contact
+                search_results = (
+                    precomputed.search_results
+                    if precomputed.search_results is not None
+                    else search_results
+                )
+                cached_embedder = precomputed.cached_embedder or cached_embedder
+            return prepare_streaming_context_payload(
+                self,
+                incoming=incoming,
+                thread=thread,
+                chat_id=chat_id,
+                instruction=instruction,
+                classification_result=classification_result,
+                contact=contact,
+                search_results=search_results,
+                cached_embedder=cached_embedder,
+                reply_error_cls=ReplyServiceError,
             )
-            cached_embedder = precomputed.cached_embedder or cached_embedder
-        return prepare_streaming_context_payload(
-            self,
-            incoming=incoming,
-            thread=thread,
-            chat_id=chat_id,
-            instruction=instruction,
-            classification_result=classification_result,
-            contact=contact,
-            search_results=search_results,
-            cached_embedder=cached_embedder,
-            reply_error_cls=ReplyServiceError,
-        )
 
     def generate_reply(
         self,
@@ -359,118 +364,141 @@ class ReplyService:
         Pass precomputed to reuse classification, search, contact, or embedder and
         skip redundant work.
         """
-        if precomputed:
-            classification = precomputed.classification_result or classification
-            search_results = (
-                precomputed.search_results
-                if precomputed.search_results is not None
-                else search_results
+        with SpanContext(
+            "reply.generate_reply",
+            {"chat_id": context.chat_id or "", "message_length": len(context.message_text)},
+        ) as span:
+            if precomputed:
+                classification = precomputed.classification_result or classification
+                search_results = (
+                    precomputed.search_results
+                    if precomputed.search_results is not None
+                    else search_results
+                )
+                contact = precomputed.contact if precomputed.contact is not None else contact
+                cached_embedder = precomputed.cached_embedder or cached_embedder
+            routing_start = time.perf_counter()
+            latency_ms: dict[str, float] = {}
+
+            if cached_embedder is None:
+                cached_embedder = get_embedder()
+
+            incoming = context.message_text.strip()
+            if not incoming or not incoming.strip():
+                return self._empty_message_response()
+
+            chat_id = context.chat_id or None
+            thread_messages = self._resolve_thread(thread, context)
+
+            if classification is None:
+                with SpanContext("reply.classify") as classify_span:
+                    mobilization = classify_with_cascade(incoming)
+                    classification = self._build_classification_result(
+                        incoming, thread_messages, mobilization
+                    )
+                    classify_span.set_attribute("category", str(getattr(classification.category, "value", classification.category)))
+
+            category_name = classification.metadata.get("category_name")
+            if category_name is None:
+                category_name = getattr(classification.category, "value", classification.category)
+            category_name = str(category_name)
+            add_span_attribute("category", category_name)
+            category_config = get_category_config(category_name)
+
+            log_event(
+                logger,
+                "reply.generate.start",
+                level=logging.DEBUG,
+                chat_id=context.chat_id or "",
+                category=category_name,
             )
-            contact = precomputed.contact if precomputed.contact is not None else contact
-            cached_embedder = precomputed.cached_embedder or cached_embedder
-        routing_start = time.perf_counter()
-        latency_ms: dict[str, float] = {}
 
-        if cached_embedder is None:
-            cached_embedder = get_embedder()
+            # Try semantic template matching first (context-aware, 74 templates)
+            # This uses embeddings to match against universal texting patterns
+            semantic_result = self._try_semantic_template(incoming, embedder=cached_embedder)
+            if semantic_result:
+                span.set_attribute("result_type", "semantic_template")
+                latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
+                self._persist_reply_log(context, classification, None, semantic_result, latency_ms)
+                return semantic_result
 
-        incoming = context.message_text.strip()
-        if not incoming or not incoming.strip():
-            return self._empty_message_response()
+            # Fall back to simple templates for acknowledge/closing categories
+            if category_config.skip_slm:
+                span.set_attribute("result_type", "simple_template")
+                result = self._template_response(category_name, routing_start)
+                latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
+                self._persist_reply_log(context, classification, None, result, latency_ms)
+                return result
 
-        chat_id = context.chat_id or None
-        thread_messages = self._resolve_thread(thread, context)
+            # Search phase
+            with SpanContext("reply.search") as search_span:
+                logger.debug("   [debug] Starting RAG search...")
+                search_results, latency_ms = self._search_context(
+                    search_results,
+                    incoming,
+                    chat_id,
+                    contact,
+                    cached_embedder,
+                    latency_ms,
+                )
+                logger.debug("   [debug] RAG search complete (%d candidates)", len(search_results))
+                search_span.set_attribute("candidates", len(search_results))
+                add_span_attribute("search_candidates", len(search_results))
+                logger.debug("   [debug] RAG search complete (%d candidates)", len(search_results))
 
-        if classification is None:
-            mobilization = classify_with_cascade(incoming)
-            classification = self._build_classification_result(
-                incoming, thread_messages, mobilization
+            can_generate, health_reason = self.can_use_llm()
+            if not can_generate:
+                span.set_attribute("result_type", "fallback")
+                span.set_attribute("fallback_reason", health_reason)
+                log_event(logger, "reply.fallback", level=logging.WARNING, reason=health_reason)
+                result = GenerationResponse(
+                    response="",
+                    confidence=0.0,
+                    metadata={
+                        "type": "fallback",
+                        "reason": health_reason,
+                        "similarity_score": 0.0,
+                        "vec_candidates": len(search_results),
+                    },
+                )
+                latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
+                self._persist_reply_log(context, classification, search_results, result, latency_ms)
+                return result
+
+            # LLM generation phase
+            with SpanContext("reply.llm_generation") as gen_span:
+                logger.debug("   [debug] Starting LLM generation...")
+                result, latency_ms = self._generate_response(
+                    context,
+                    classification,
+                    search_results,
+                    contact,
+                    thread_messages,
+                    cached_embedder,
+                    latency_ms,
+                    instruction=instruction,
+                )
+                gen_span.set_attribute("confidence", result.confidence)
+                add_span_attribute("generation_confidence", result.confidence)
+                span.set_attribute("result_type", "llm_generation")
+                logger.debug("   [debug] LLM generation complete")
+
+            latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
+            add_span_attribute("total_latency_ms", round(latency_ms["total"], 2))
+            
+            self._log_and_record_metrics(
+                result,
+                category_name,
+                incoming,
+                search_results,
+                latency_ms,
+                cached_embedder,
             )
 
-        log_event(
-            logger,
-            "reply.generate.start",
-            level=logging.DEBUG,
-            chat_id=context.chat_id or "",
-            category=str(getattr(classification.category, "value", classification.category)),
-        )
+            # Persist full generation log for traceability
+            persist_reply_log(self.db, context, classification, search_results, result, latency_ms)
 
-        category_name = classification.metadata.get("category_name")
-        if category_name is None:
-            category_name = getattr(classification.category, "value", classification.category)
-        category_name = str(category_name)
-        category_config = get_category_config(category_name)
-
-        # Try semantic template matching first (context-aware, 74 templates)
-        # This uses embeddings to match against universal texting patterns
-        semantic_result = self._try_semantic_template(incoming, embedder=cached_embedder)
-        if semantic_result:
-            latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
-            self._persist_reply_log(context, classification, None, semantic_result, latency_ms)
-            return semantic_result
-
-        # Fall back to simple templates for acknowledge/closing categories
-        if category_config.skip_slm:
-            result = self._template_response(category_name, routing_start)
-            latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
-            self._persist_reply_log(context, classification, None, result, latency_ms)
             return result
-
-        logger.debug("   [debug] Starting RAG search...")
-        search_results, latency_ms = self._search_context(
-            search_results,
-            incoming,
-            chat_id,
-            contact,
-            cached_embedder,
-            latency_ms,
-        )
-        logger.debug("   [debug] RAG search complete (%d candidates)", len(search_results))
-
-        can_generate, health_reason = self.can_use_llm()
-        if not can_generate:
-            log_event(logger, "reply.fallback", level=logging.WARNING, reason=health_reason)
-            result = GenerationResponse(
-                response="",
-                confidence=0.0,
-                metadata={
-                    "type": "fallback",
-                    "reason": health_reason,
-                    "similarity_score": 0.0,
-                    "vec_candidates": len(search_results),
-                },
-            )
-            latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
-            self._persist_reply_log(context, classification, search_results, result, latency_ms)
-            return result
-
-        logger.debug("   [debug] Starting LLM generation...")
-        result, latency_ms = self._generate_response(
-            context,
-            classification,
-            search_results,
-            contact,
-            thread_messages,
-            cached_embedder,
-            latency_ms,
-            instruction=instruction,
-        )
-        logger.debug("   [debug] LLM generation complete")
-
-        latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
-        self._log_and_record_metrics(
-            result,
-            category_name,
-            incoming,
-            search_results,
-            latency_ms,
-            cached_embedder,
-        )
-
-        # Persist full generation log for traceability
-        persist_reply_log(self.db, context, classification, search_results, result, latency_ms)
-
-        return result
 
     def _empty_message_response(self) -> GenerationResponse:
         """Return a clarification response for empty messages."""
@@ -526,7 +554,7 @@ class ReplyService:
                     pattern=match.matched_pattern,
                 )
                 return GenerationResponse(
-                    response=match.template.response,
+                    response=match.template.response.lower(),
                     confidence=min(0.95, match.similarity),
                     metadata={
                         "type": "semantic_template",
@@ -559,7 +587,7 @@ class ReplyService:
             latency_ms=round((time.perf_counter() - routing_start) * 1000, 1),
         )
         return GenerationResponse(
-            response=template_response,
+            response=template_response.lower(),
             confidence=0.95,
             metadata={
                 "type": category_name,

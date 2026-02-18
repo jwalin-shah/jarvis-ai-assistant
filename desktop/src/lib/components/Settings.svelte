@@ -251,7 +251,7 @@
                 >
                   {downloadingModel === model.model_id ? "Downloading..." : "Download"}
                 </button>
-              {:else if !model.is_loaded && selectedModelId === model.model_id}
+              {:else if model.model_id !== settings?.model_id && selectedModelId === model.model_id}
                 <button
                   class="btn-secondary"
                   onclick={() => activateModel(model.model_id)}

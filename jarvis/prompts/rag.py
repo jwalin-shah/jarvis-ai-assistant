@@ -39,23 +39,8 @@ def _format_relationship_context(
     user_messages: list[str] | None = None,
     user_style: UserStyleAnalysis | None = None,
 ) -> str:
-    """Format relationship context for RAG prompt.
-
-    Returns a compact single-line style description (~30 tokens) instead of
-    verbose bullet points (~80 tokens). Small models parse dense text better.
-
-    Args:
-        contact_context: Optional typed contact profile context.
-        tone: Typical communication tone.
-        avg_length: Average message length.
-        response_patterns: Optional response pattern statistics.
-        user_messages: Optional list of user's messages for style analysis.
-        user_style: Optional pre-computed UserStyleAnalysis to avoid recomputation.
-
-    Returns:
-        Compact relationship context string.
-    """
-    parts: list[str] = []
+    """Format relationship context for RAG prompt."""
+    parts: list[str] = ["Your name is Jwalin Shah"]
 
     # If we have user messages, analyze their style directly
     if user_messages:
@@ -189,7 +174,8 @@ def build_rag_reply_prompt(
     from datetime import datetime
 
     now = datetime.now()
-    time_context = f"Current time: {now.strftime('%A, %I:%M %p')}."
+    # Include full date to help model distinguish "today" from "yesterday" messages
+    time_context = f"Today is {now.strftime('%A, %B %d, %Y')}. Current time: {now.strftime('%I:%M %p')}."
     extra_parts.append(time_context)
 
     extra_context = "\n".join(extra_parts) + "\n" if extra_parts else ""
@@ -251,14 +237,24 @@ def build_simple_reply_prompt(
         conversation = ""
 
     now = datetime.now()
-    time_str = f"Current time: {now.strftime('%A, %I:%M %p')}.\n"
+    time_str = f"Today is {now.strftime('%A, %B %d, %Y')}. Current time: {now.strftime('%I:%M %p')}.\n"
+
+    # Frame the last message clearly
+    label = "My last message" if last_is_from_me else "Their last message"
+    prefixed_last = f"{label}: {last_message}"
+    
+    # If I spoke last, the goal is to follow up
+    if last_is_from_me:
+        goal = "Goal: Continue the conversation or add more detail.\n"
+    else:
+        goal = "Goal: Text back a reply.\n"
 
     # Simple prompt - just conversation + last message
     prompt = SIMPLE_REPLY_PROMPT.template.format(
-        instruction=instruction,
+        instruction=f"{goal}{instruction}",
         current_time=time_str,
         context=conversation,
-        last_message=last_message,
+        last_message=prefixed_last,
     )
 
     return prompt
@@ -290,6 +286,21 @@ def build_prompt_from_request(req: Any) -> str:
 
     instruction_raw = req.context.metadata.get("instruction")
     instruction = instruction_raw if isinstance(instruction_raw, str) and instruction_raw else ""
+
+    # Inject style and contact info to help zero-shot reasoning
+    cname = req.context.metadata.get("contact_name")
+    style = req.context.metadata.get("relationship_profile")
+    
+    meta_parts = []
+    if cname and cname != "them":
+        meta_parts.append(f"You are talking to {cname}.")
+    if style and isinstance(style, dict):
+        tone = style.get("tone", "casual")
+        meta_parts.append(f"Use a {tone} tone.")
+    
+    if meta_parts:
+        meta_instruction = " ".join(meta_parts)
+        instruction = f"{meta_instruction}\n{instruction}" if instruction else meta_instruction
 
     # Use simple prompt - no extra context, facts, or examples
     # This is more like chatting directly with the model

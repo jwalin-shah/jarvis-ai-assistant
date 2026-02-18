@@ -200,7 +200,7 @@ def _extract_from_typedstream(data: bytes) -> str | None:
         return None
 
 
-def parse_attributed_body(data: bytes | None) -> str | None:
+def parse_attributed_body(data: bytes | None, row_id: int | str | None = None) -> str | None:
     """Extract plain text from attributedBody column.
 
     The attributedBody column in chat.db contains serialized NSAttributedString
@@ -212,6 +212,8 @@ def parse_attributed_body(data: bytes | None) -> str | None:
 
     Args:
         data: Raw bytes from attributedBody column, or None
+        row_id: Optional unique identifier (e.g. ROWID) to use as cache key.
+            If provided, avoids expensive hashing of the data blob.
 
     Returns:
         Extracted text string, or None if parsing fails
@@ -219,8 +221,12 @@ def parse_attributed_body(data: bytes | None) -> str | None:
     if data is None:
         return None
 
-    # Check cache first using hash of data
-    cache_key = hashlib.md5(data, usedforsecurity=False).hexdigest()
+    # Use row_id as cache key if available, otherwise fallback to hash
+    if row_id is not None:
+        cache_key = str(row_id)
+    else:
+        cache_key = hashlib.md5(data, usedforsecurity=False).hexdigest()
+    
     found, cached_result = _attributed_body_cache.get(cache_key)
     if found:
         return cached_result
@@ -518,13 +524,14 @@ def normalize_phone_number(phone: str | None) -> str | None:
     return cleaned
 
 
-def extract_text_from_row(row: dict[str, Any]) -> str:
+def extract_text_from_row(row: dict[str, Any], row_id: int | None = None) -> str:
     """Extract message text from database row.
 
     Tries text column first, falls back to attributedBody parsing.
 
     Args:
         row: Database row as dict with 'text' and 'attributedBody' keys
+        row_id: Optional ROWID for efficient caching
 
     Returns:
         Message text string, or empty string if no text available
@@ -537,7 +544,7 @@ def extract_text_from_row(row: dict[str, Any]) -> str:
     # Fall back to attributedBody
     attributed_body = row.get("attributedBody")
     if attributed_body:
-        parsed = parse_attributed_body(attributed_body)
+        parsed = parse_attributed_body(attributed_body, row_id=row_id)
         if parsed:
             return parsed.strip()
 

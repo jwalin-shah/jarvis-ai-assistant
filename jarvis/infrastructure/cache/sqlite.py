@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import orjson
 import sqlite3
 import time
 from collections.abc import Callable
@@ -49,7 +49,7 @@ class SQLiteBackend(CacheBackend):
             row = cursor.fetchone()
             if row:
                 try:
-                    return json.loads(row[0])
+                    return orjson.loads(row[0])
                 except json.JSONDecodeError:
                     return None
             return None
@@ -60,10 +60,10 @@ class SQLiteBackend(CacheBackend):
         ttl = ttl if ttl is not None else self.default_ttl
         expires_at = time.time() + ttl
         created_at = time.time()
-        tags_json = json.dumps(tags or [])
+        tags_json = orjson.dumps(tags or []).decode('utf-8')
 
         try:
-            value_json = json.dumps(value)
+            value_json = orjson.dumps(value).decode('utf-8')
         except (TypeError, ValueError):
             return
 

@@ -200,14 +200,6 @@
         </button>
       {/each}
     </div>
-    <button
-      class="bar-btn"
-      onclick={generateReplies}
-      title="Regenerate suggestions"
-      aria-label="Regenerate suggestions"
-    >
-      <Icon name="refresh-cw" size={14} />
-    </button>
   {/if}
 
   {#if barState === "error"}

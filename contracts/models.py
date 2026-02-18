@@ -27,6 +27,7 @@ class GenerationRequest:
         top_k: Limit vocabulary to top-k tokens.
         repetition_penalty: Penalty to reduce repetition (1.0 = no penalty).
         stop_sequences: Optional list of sequences that stop generation.
+        negative_constraints: Optional list of phrases to penalize during generation.
     """
 
     prompt: str
@@ -40,6 +41,7 @@ class GenerationRequest:
     # From jarvis.prompts.generation_config.DEFAULT_REPETITION_PENALTY
     repetition_penalty: float = 1.15
     stop_sequences: list[str] | None = None
+    negative_constraints: list[str] | None = None
 
     def __post_init__(self) -> None:
         """Validate field constraints."""

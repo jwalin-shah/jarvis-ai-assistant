@@ -103,6 +103,41 @@
           }
         }
       ]
+    },
+    {
+      "name": "SYSTEM_PREFIX",
+      "current_version": "3.1.0",
+      "description": "System-wide persona and style enforcement",
+      "changelog": [
+        {
+          "version": "1.0.0",
+          "date": "2026-02-17",
+          "changes": ["Initial stable persona"],
+          "score": 2.93,
+          "notes": "Good brevity, but too formal (capitalization/punctuation)."
+        },
+        {
+          "version": "2.0.0",
+          "date": "2026-02-17",
+          "changes": ["Strict lowercase, 10 word limit, blunt tone"],
+          "score": 2.79,
+          "notes": "Instruction overload. Small model became robotic/fragmented."
+        },
+        {
+          "version": "3.0.0",
+          "date": "2026-02-17",
+          "changes": ["Personality-driven, slang allowed, logit biasing active"],
+          "score": 3.50,
+          "notes": "Significant realism boost. Logit bias handled lowercase better than rules."
+        },
+        {
+          "version": "3.1.0",
+          "date": "2026-02-17",
+          "changes": ["Busy founder vibe, dynamic IDK responses"],
+          "score": null,
+          "notes": "Current active version. Focuses on natural founder voice."
+        }
+      ]
     }
   ],
   "few_shot_collections": [

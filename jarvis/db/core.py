@@ -73,7 +73,7 @@ class JarvisDBBase:
     """
 
     # Maximum number of concurrent connections to prevent unbounded growth
-    _MAX_CONNECTIONS = 20
+    _MAX_CONNECTIONS = 100
 
     def __init__(self, db_path: Path | None = None) -> None:
         """Initialize database manager.
@@ -93,7 +93,6 @@ class JarvisDBBase:
         # Track all thread-local connections for cleanup
         self._all_connections: set[sqlite3.Connection] = set()
         self._connections_lock = threading.Lock()
-        self._connection_semaphore = threading.Semaphore(self._MAX_CONNECTIONS)
 
     def _ensure_directory(self) -> None:
         """Ensure the database directory exists."""
@@ -105,15 +104,10 @@ class JarvisDBBase:
         Connections are reused per-thread for efficiency. SQLite pragmas are
         set for optimal read performance while maintaining data integrity.
 
-        Uses semaphore to limit total connections and prevent unbounded growth.
-
         Returns:
             SQLite connection with row_factory set to sqlite3.Row.
         """
         if not hasattr(self._local, "connection") or self._local.connection is None:
-            # Acquire semaphore to limit total connections (blocks if at max)
-            self._connection_semaphore.acquire()
-
             # Clean up stale connections before creating a new one
             self._cleanup_stale_connections()
 
@@ -192,12 +186,6 @@ class JarvisDBBase:
         with self._connections_lock:
             for conn in self._all_connections:
                 safe_close(conn, name="db connection shutdown")
-                # Release semaphore for each closed connection
-                try:
-                    self._connection_semaphore.release()
-                except ValueError:
-                    # Semaphore already at max value
-                    pass
             self._all_connections.clear()
 
         # Clear current thread's reference

@@ -69,7 +69,7 @@ _optimized_programs: dict[str, OptimizedCategoryProgram] | None = None
 _optimized_programs_lock = threading.Lock()
 
 # Path to per-category compiled programs
-_CATEGORY_DIR = Path(__file__).parent.parent.parent / "evals" / "optimized_categories"
+_CATEGORY_DIR = Path(__file__).parent.parent.parent / "evals" / "optimized_categories_temp07"
 
 
 def _load_optimized_programs() -> dict[str, OptimizedCategoryProgram]:

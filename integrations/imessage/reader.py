@@ -808,16 +808,21 @@ class ChatDBReader:
             else:
                 self._load_contacts_cache()
 
-        # Normalize the identifier for lookup
-        normalized = normalize_phone_number(identifier)
-        if normalized is None:
-            return None
-
         # Cache is guaranteed to be initialized after _load_contacts_cache
         cache = self._contacts_cache
         if cache is None:
             return None
-        return cache.get(normalized)
+
+        # 1. Fast path: check direct match (raw identifier)
+        if identifier in cache:
+            return cache[identifier]
+
+        # 2. Slow path: normalize and check
+        normalized = normalize_phone_number(identifier)
+        if normalized and normalized in cache:
+            return cache[normalized]
+
+        return None
 
     def _load_contacts_cache(self) -> None:
         """Load contacts from AddressBook database into cache.
@@ -903,10 +908,14 @@ class ChatDBReader:
                     """
                     )
                     for row in cursor.fetchall():
-                        identifier = normalize_phone_number(row["identifier"])
+                        raw_number = row["identifier"]
+                        normalized = normalize_phone_number(raw_number)
                         name = self._format_name(row["first_name"], row["last_name"])
-                        if identifier and name:
-                            cache[identifier] = name
+                        if name:
+                            if normalized:
+                                cache[normalized] = name
+                            if raw_number:
+                                cache[raw_number] = name
                 except (sqlite3.OperationalError, sqlite3.InterfaceError):
                     pass  # Table structure may differ
 
@@ -2022,11 +2031,15 @@ class ChatDBReader:
         message_id = row["id"]
         row_dict = dict(row)
 
-        # Get sender and resolve name from contacts
-        sender = normalize_phone_number(row["sender"]) or row["sender"]
+        # Resolve sender name from contacts
+        # Pass raw sender to resolve_contact_name which handles normalization internally
+        sender_raw = row["sender"]
         sender_name = None
-        if not row["is_from_me"] and sender:
-            sender_name = self._resolve_contact_name(sender)
+        if not row["is_from_me"] and sender_raw:
+            sender_name = self._resolve_contact_name(sender_raw)
+
+        # Normalize sender for the Message object
+        sender = normalize_phone_number(sender_raw) or sender_raw
 
         # Check for group events (system messages)
         group_action_type = row_dict.get("group_action_type", 0) or 0
@@ -2042,7 +2055,7 @@ class ChatDBReader:
             )
 
         # Extract text (tries text column, falls back to attributedBody)
-        text = extract_text_from_row(row_dict) or ""
+        text = extract_text_from_row(row_dict, row_id=message_id) or ""
 
         attachments = self._resolve_attachments(message_id, prefetched_attachments)
 

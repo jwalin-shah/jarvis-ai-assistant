@@ -105,13 +105,11 @@ async def build_draft_suggestions(
     variant_instructions: list[str | None] = [base_instruction]
     if num_suggestions > 1:
         variant_instructions.append(
-            (base_instruction + " (slightly more casual)")
-            if base_instruction
-            else "be slightly more casual"
+            (base_instruction + " (casual)") if base_instruction else None
         )
     if num_suggestions > 2:
         variant_instructions.append(
-            (base_instruction + " (concise)") if base_instruction else "be concise"
+            (base_instruction + " (concise)") if base_instruction else None
         )
 
     suggestions: list[DraftSuggestion] = []

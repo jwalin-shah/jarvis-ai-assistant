@@ -214,10 +214,36 @@ def to_model_generation_request(service: Any, request: GenerationRequest) -> Mod
     """Convert pipeline request into model-native request."""
     prompt = build_prompt_from_request(request)
     config = get_config()
+    
+    # Debug: Log the full prompt to a separate file
+    try:
+        from pathlib import Path
+        debug_log = Path("logs/last_prompt.txt")
+        debug_log.parent.mkdir(parents=True, exist_ok=True)
+        debug_log.write_text(prompt)
+    except Exception:
+        pass
+
     return ModelGenerationRequest(
         prompt=prompt,
-        max_tokens=config.model.max_tokens_reply,
-        stop_sequences=["</reply>", "<system>", "<conversation>", "<examples>"],
+        max_tokens=min(config.model.max_tokens_reply, 40),
+        stop_sequences=[
+            "<|im_end|>", 
+            "<|im_start|>", 
+            "</reply>", 
+            "<system>", 
+            "<conversation>", 
+            "<examples>",
+            "Context:",
+            "Last Message:",
+            "\n",
+            "[",
+            "You:",
+            "Me:",
+            "Them:",
+            "Assistant:",
+            "System:"
+        ],
     )
 
 
@@ -308,6 +334,20 @@ def generate_llm_reply(
 ) -> GenerationResponse:
     """Generate response from model and compute confidence metadata."""
     incoming = request.context.message_text.strip()
+    chat_id = request.context.chat_id
+    cname = request.context.metadata.get("contact_name", "")
+
+    # Skip obvious bot/automated chats
+    if service.context_service.is_bot_chat(chat_id, cname):
+        return GenerationResponse(
+            response="",
+            confidence=0.1,
+            metadata={
+                "type": "skip",
+                "reason": "bot_chat",
+            },
+        )
+
     # Direct-to-LLM: always let LLM decide whether to respond
     logger.info("[reply] Incoming: %r | direct-to-llm", incoming[:80])
 
@@ -339,36 +379,68 @@ def generate_llm_reply(
 
     try:
         model_request = to_model_generation_request(service, request)
+        config = get_config()
+
+        # Use negative constraints from config (generalizable)
+        model_request.negative_constraints = config.model.negative_constraints
 
         # Generate a single candidate at low temperature for stability
         import random
 
-        jitter = random.uniform(-0.02, 0.02)
-        model_request.temperature = max(0.01, 0.1 + jitter)
-
-        # Ensure repetition penalty is set if not already
-        if not model_request.repetition_penalty:
-            from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY
-
-            model_request.repetition_penalty = DEFAULT_REPETITION_PENALTY
+        jitter = random.uniform(-0.01, 0.01)
+        model_request.temperature = max(0.0, config.model.temperature + jitter)
+        
+        # High repetition penalty to prevent "AI loops" and encourage variety
+        model_request.repetition_penalty = 1.25
 
         response = service.generator.generate(model_request)
         text = response.text.strip()
 
-        # Basic cleanup
-        if "</reply>" in text:
-            text = text.split("</reply>")[0].strip()
-
-        for tag in ["(Note:", "Note:", "<system>", "<style", "[lowercase]"]:
+        # Advanced cleanup for 700M model leaks
+        import re
+        
+        # 1. Strip ChatML and system tags
+        text = re.sub(r'<\|im_.*?\|>', '', text)
+        
+        # 2. Aggressively strip transcript prefixes (e.g., "You: [10:00]", "Mihir Shah:", "Them:")
+        # Matches common patterns at the start of the string or after a newline
+        prefixes_to_strip = [
+            r'^(?:[A-Z][a-z]+(?:\s[A-Z][a-z]+)*|You|Me|Them|Assistant|System):\s*(?:\[\d{2}:\d{2}\])?\s*',
+            r'^Jwalin Shah:\s*',
+            r'^Mihir Shah:\s*',
+            r'^Sangati Shah:\s*',
+            r'^Friend:\s*'
+        ]
+        for p_regex in prefixes_to_strip:
+            text = re.sub(p_regex, '', text, flags=re.MULTILINE)
+        
+        # 3. Strip trailing AI notes or explanations
+        for tag in ["(Note:", "Note:", "<system>", "<style", "[lowercase]", "tone", "Energy:", "Energy"]:
             if tag in text:
                 text = text.split(tag)[0].strip()
+        
+        # 4. Strip any leading/trailing quotes often added by small models
+        text = text.strip('"\' ')
 
-        if not text:
-            return GenerationResponse(
-                response="...",
-                confidence=0.1,
-                metadata={"reason": "empty_candidate"},
-            )
+        # 5. Persona Normalization: Force lowercase and strip periods/formal punctuation
+        text = text.lower().strip()
+        # Remove trailing periods/exclamations
+        text = text.rstrip('.!')
+        
+        # Limit to 10 words max (Persona mandatory)
+        words = text.split()
+        if len(words) > 10:
+            text = " ".join(words[:10])
+        
+        # 6. Final Persona Cleanup:
+        # Keep it strictly under 10 words. 
+        words = text.split()
+        if len(words) > 10:
+            text = " ".join(words[:10])
+        
+        if not text or text == "...":
+            logger.warning("[reply] LLM generated empty/ellipsis text, using fallback.")
+            text = "copy"
 
         logger.info("[reply] Generated response: %r", text)
 

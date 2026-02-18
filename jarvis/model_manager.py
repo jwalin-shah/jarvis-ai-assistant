@@ -63,16 +63,22 @@ class ModelManager:
 
         logger.info(f"Preparing system for model type: {model_type}")
 
+        # OPTIMIZATION: On 8GB systems, bge-small (embedder) and LFM-700M (LLM) 
+        # can actually coexist comfortably (~1GB total). 
+        # We only unload if memory pressure is actually high.
+        
         # Unload based on requested type
         if model_type == "llm":
-            # LLM needs most memory, unload everything else
-            self._unload_embedder()
+            # LLM needs most memory, but can coexist with embedder if pressure is green/yellow
+            if pressure in ("orange", "red", "critical"):
+                self._unload_embedder()
             self._unload_nli()
         elif model_type == "embedder":
-            # Embedder can coexist with NLI but not LLM
-            self._unload_llm()
+            # Embedder can coexist with LLM unless pressure is critical
+            if pressure in ("red", "critical"):
+                self._unload_llm()
         elif model_type == "nli":
-            # NLI can coexist with Embedder but not LLM
+            # NLI is heavier, unload LLM to be safe
             self._unload_llm()
 
         self._active_type = model_type

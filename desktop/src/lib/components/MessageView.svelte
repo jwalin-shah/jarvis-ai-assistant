@@ -586,32 +586,46 @@
   });
 
   async function scrollToBottom(instant = false) {
+    // Multiple ticks to ensure Svelte 5 runes and DOM are synchronized
     await tick();
     await tick();
+    await tick();
+    
     if (!messagesContainer) return;
 
-    // Use a multi-pass approach to handle virtual scroll height shifts
-    const doScroll = () => {
+    const doScroll = (behavior: ScrollBehavior) => {
       if (!messagesContainer) return;
       messagesContainer.scrollTo({
         top: messagesContainer.scrollHeight,
-        behavior: instant ? 'auto' : 'smooth',
+        behavior,
       });
     };
 
-    doScroll();
+    // First pass: immediate
+    doScroll(instant ? 'auto' : 'smooth');
 
-    // Re-check after a frame for virtual scrolling adjustments
+    // Second pass: after a short delay for layout settling
     requestAnimationFrame(() => {
       if (!messagesContainer) return;
-      doScroll();
+      doScroll(instant ? 'auto' : 'smooth');
       
-      // Third pass for insurance on slow layout/height updates
+      // Third pass: slightly longer delay for virtual scroll and height updates
       setTimeout(() => {
         if (!messagesContainer) return;
+        
+        // Final forced scroll
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        
+        // Update virtual scroll visibility after reaching the bottom
         hasNewMessagesBelow = false;
         updateVirtualScroll();
+        
+        // One last check after 150ms for any late-loading images or attachments
+        setTimeout(() => {
+          if (messagesContainer && isAtBottom) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          }
+        }, 150);
       }, 100);
     });
   }
