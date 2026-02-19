@@ -93,6 +93,23 @@ def _conversation_to_dict(conversation: Conversation) -> dict[str, Any]:
     }
 
 
+def _sanitize_csv_field(value: str) -> str:
+    """Sanitize a field for CSV export to prevent formula injection.
+
+    If a field starts with =, +, -, or @, it is prepended with a single quote.
+    This prevents spreadsheet software from interpreting the cell as a formula.
+
+    Args:
+        value: The string value to sanitize.
+
+    Returns:
+        Sanitized string safe for CSV export.
+    """
+    if value and value.startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
+
+
 def export_messages_json(
     messages: list[Message],
     conversation: Conversation | None = None,
@@ -167,10 +184,10 @@ def export_messages_csv(
     for message in messages:
         row = {
             "id": message.id,
-            "chat_id": message.chat_id,
-            "sender": message.sender,
-            "sender_name": message.sender_name or "",
-            "text": message.text.replace("\n", "\\n"),  # Escape newlines
+            "chat_id": _sanitize_csv_field(message.chat_id),
+            "sender": _sanitize_csv_field(message.sender),
+            "sender_name": _sanitize_csv_field(message.sender_name or ""),
+            "text": _sanitize_csv_field(message.text.replace("\n", "\\n")),  # Escape newlines
             "date": _serialize_datetime(message.date) or "",
             "is_from_me": message.is_from_me,
             "reply_to_id": message.reply_to_id or "",
@@ -180,7 +197,8 @@ def export_messages_csv(
 
         if include_attachments:
             row["attachment_count"] = len(message.attachments)
-            row["attachment_filenames"] = "; ".join(a.filename for a in message.attachments)
+            attachment_filenames = "; ".join(a.filename for a in message.attachments)
+            row["attachment_filenames"] = _sanitize_csv_field(attachment_filenames)
 
         writer.writerow(row)
 
