@@ -264,7 +264,8 @@ optuna_studies.db
 bandit_report.json
 
 # Training data (personal, regeneratable)
-training_data/
+training_data/*
+!training_data/README.md
 
 # Data artifacts (personal, regeneratable)
 all_extracted_facts.json
@@ -304,7 +305,14 @@ review_prompt.txt
 set*_*_draft.md
 validation_evaluation_results*.txt
 fact_extraction_review.md
-\n# Data exports (PII)\ndata/*.txt
+
+# Data exports and private artifacts (PII)
+data/*.txt
+evals/data/chunks/
+logs_since_yesterday.txt
+recent_logs.txt
+*_eval_*.csv
+memory_performance_review_report.md
 
 # Local binaries
 bin/

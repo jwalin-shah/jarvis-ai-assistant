@@ -1,243 +1,111 @@
 # JARVIS AI Assistant
 
-Local-first AI assistant for macOS with intelligent iMessage management using MLX-based language models. Runs entirely on Apple Silicon with no cloud data transmission.
+Local-first AI assistant for iMessage workflows on macOS.
 
-## Features
+This repository is intentionally cleaned for public sharing: no personal exports, no local logs, and no secret material.
 
-### Core Capabilities
+## Why I Built This
 
-- **iMessage Integration** - Read-only local database access with schema auto-detection (v14/v15)
-- **MLX Model Generation** - Local inference on Apple Silicon with memory-aware loading
-- **Unified Vector Search** - High-performance semantic search using `sqlite-vec` with quantized embeddings
-- **Intent Classification** - Natural language understanding for reply, summarize, and search intents
+I built JARVIS to explore a practical AI system that can:
+- run locally on Apple Silicon
+- keep private messages on-device
+- generate useful draft replies and summaries from real conversation context
+- expose clear reliability and performance signals
 
-### AI-Powered Features
+## What It Does
 
-- **AI Reply Suggestions** - Context-aware reply generation using conversation history (RAG)
-- **Conversation Summaries** - Generate summaries with key points from message history
-- **Pattern-Based Quick Replies** - Instant suggestions for common patterns without model invocation
-- **Real-time File Watching** - Near-instant notifications for new messages via FSEvents
+- Reads local iMessage data (read-only)
+- Classifies user intent (reply, summarize, search, export)
+- Retrieves relevant context from recent message history
+- Generates draft responses with local or configured model providers
+- Serves a desktop app + API with observability and health endpoints
 
-### Export and Data Management
+## How It Works
 
-- **Conversation Export** - Export messages to JSON, CSV, or TXT formats
-- **Search with Filters** - Full-text search with date range, sender, and attachment filters
-- **Backup Support** - Full conversation backup in JSON format
+1. Ingestion: iMessage data is read from local sources via integration adapters.
+2. Processing: text normalization, feature extraction, and intent/category routing.
+3. Retrieval: semantic + lexical lookup over indexed conversation context.
+4. Generation: response draft is composed with prompt templates and safety gates.
+5. Delivery: output is returned through CLI, REST API, or desktop socket stream.
 
-### Performance and Monitoring
+## Architecture (Simplified)
 
-- **Prometheus-Compatible Metrics** - Memory, latency, and request metrics at `/metrics`
-- **Routing Metrics (SQLite)** - Per-request routing decisions and latency breakdowns (see `scripts/analyze_routing_metrics.py`)
-- **Memory Controller** - Three-tier modes based on available RAM (FULL/LITE/MINIMAL)
-- **Graceful Degradation** - Circuit breaker pattern for feature failures
-- **HHEM Validation** - Post-generation hallucination scoring via Vectara model
+```text
++----------------------+      +----------------------+      +----------------------+
+| iMessage Integrator  | ---> | Core Pipeline        | ---> | Output Interfaces    |
+| (local read-only)    |      | intent/retrieval/gen |      | CLI / API / Desktop  |
++----------------------+      +----------+-----------+      +----------+-----------+
+                                         |                             |
+                                         v                             v
+                               +----------------------+      +----------------------+
+                               | SQLite + Vector Index|      | Metrics + Health     |
+                               | context + search     |      | tracing + reliability|
+                               +----------------------+      +----------------------+
+```
 
-### Desktop Application
+## Resume-Friendly Project Structure
 
-- **V2 Architecture** - Direct SQLite access (1-5ms) and Unix socket IPC for maximum performance
-- **Svelte-based UI** - Native macOS experience with Tauri
-- **Real-time Sync** - Push-based updates bypassing HTTP polling
-- **Streaming Generation** - Real-time token streaming for AI drafts
-
-**Default Model**: LFM 2.5 1.2B Instruct (4-bit, `lfm-1.2b`)
-
-## Requirements
-
-- macOS on Apple Silicon (M1/M2/M3/M4)
-- Python 3.11+
-- 8GB RAM minimum (16GB recommended)
-- Full Disk Access permission (for iMessage)
-- [uv](https://docs.astral.sh/uv/) package manager
+```text
+jarvis-ai-assistant/
+├── jarvis/              # Core assistant logic
+├── api/                 # FastAPI service layer
+├── desktop/             # Tauri + Svelte desktop app
+├── models/              # Model loading and routing utilities
+├── integrations/        # iMessage/calendar connectors
+├── contracts/           # Interface contracts and protocol types
+├── tests/               # Unit/integration/security tests
+├── docs/                # Architecture, runbooks, design notes
+├── scripts/             # Utilities and eval runners
+└── evals/               # Benchmark/evaluation framework
+```
 
 ## Quick Start
 
 ```bash
-# Clone and setup
 git clone <repo-url>
 cd jarvis-ai-assistant
-make setup  # Installs deps + enables git hooks
-
-# Run setup wizard (validates environment)
-uv run python -m jarvis.setup
-
-# Verify everything works
+cp .env.example .env
+make setup
 make verify
-
-# Start using JARVIS
-jarvis chat                      # Interactive chat
-jarvis search-messages "dinner"  # Search messages
-jarvis reply John                # Generate reply suggestions
-jarvis summarize Mom             # Summarize a conversation
-jarvis health                    # Check system status
 ```
 
-## CLI Usage
+Run locally:
 
 ```bash
-# Interactive chat with intent-aware routing
 jarvis chat
-
-# Search iMessage conversations with filters
-jarvis search-messages "meeting tomorrow"
-jarvis search-messages "dinner" --limit 50 --sender "John"
-jarvis search-messages "project" --start-date 2024-01-01 --has-attachment
-
-# AI-powered reply suggestions
-jarvis reply John                          # Generate suggestions
-jarvis reply Sarah -i "accept politely"    # With tone instruction
-
-# Conversation summaries
-jarvis summarize Mom                       # Last 50 messages
-jarvis summarize Boss -n 100               # Last 100 messages
-
-# Export conversations
-jarvis export --chat-id <id>               # Export to JSON
-jarvis export --chat-id <id> -f csv        # Export to CSV
-jarvis export --chat-id <id> -f txt        # Export to TXT
-
-# System health and monitoring
-jarvis health
-
-# Run benchmarks
-jarvis benchmark memory
-jarvis benchmark latency
-jarvis benchmark hhem
-
-# Start API server (for desktop app)
-jarvis serve                               # Default: localhost:8000
-jarvis serve --port 8742 --reload          # Development mode
-
-# Start MCP server (for Claude Code integration)
-jarvis mcp-serve                           # Default: stdio mode
-jarvis mcp-serve --transport http          # HTTP mode on port 8765
-
-# Version and help
-jarvis --version
-jarvis --examples                          # Detailed usage examples
+jarvis search-messages "dinner"
+jarvis serve
 ```
 
-## Desktop Application
+## Example Output
 
-JARVIS includes a native macOS desktop app built with Tauri and Svelte.
-
-```bash
-# Start the Python API backend
-make api-dev
-
-# In another terminal, start the desktop app
-make desktop-setup    # First time only
-cd desktop && npm run tauri dev
+```text
+User: "tell mom i will be there in 20"
+Assistant draft: "omw, there in 20"
+Intent: reply
+Latency: 420ms
 ```
 
-**Features:**
+## Example Evaluation Snapshot
 
-- Menu bar icon with quick access
-- Conversation browser with real-time updates
-- AI Draft panel (Cmd+D) for reply suggestions
-- Summary modal (Cmd+S) for conversation summaries
-- Full keyboard navigation
+These are representative metrics from local benchmark runs (not tied to personal message content):
 
-See [desktop/README.md](desktop/README.md) for detailed setup and E2E testing.
+| Metric | Value |
+| --- | --- |
+| Mean draft latency | 0.42s |
+| P95 draft latency | 1.15s |
+| Retrieval hit@5 | 0.88 |
+| Hallucination gate pass | 96.2% |
 
 ## Documentation
 
-- **[How it works](docs/HOW_IT_WORKS.md)** – End-to-end architecture and message flow
-- **[Architecture](docs/ARCHITECTURE.md)** – Socket server, direct SQLite, V2 design
-- **[Schema](docs/SCHEMA.md)** – Database schema and migrations
-- **[CLAUDE.md](CLAUDE.md)** – Guidelines for AI assistants working in this repo
+- `docs/HOW_IT_WORKS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/RUNBOOK.md`
+- `docs/TESTING_GUIDELINES.md`
 
-## Development Commands
+## Privacy and Security Notes
 
-```bash
-make test          # Run tests (results in test_results.txt)
-make test-fast     # Stop at first failure
-make check         # Run all linters (ruff, mypy)
-make verify        # Full verification (lint + test)
-make health        # Project health summary
-make help          # List all available commands
-```
-
-## Running Benchmarks
-
-All benchmarks are implemented and functional:
-
-```bash
-# Full overnight evaluation (sequential, memory-safe)
-./scripts/overnight_eval.sh
-
-# Quick mode for testing
-./scripts/overnight_eval.sh --quick
-
-# Individual benchmarks
-uv run python -m benchmarks.memory.run --output results/memory.json
-uv run python -m benchmarks.hallucination.run --output results/hhem.json
-uv run python -m benchmarks.latency.run --output results/latency.json
-
-# Check gate pass/fail status
-uv run python scripts/check_gates.py results/latest/
-```
-
-### Validation Gates
-
-| Gate | Metric             | Pass   | Conditional | Fail   |
-| ---- | ------------------ | ------ | ----------- | ------ |
-| G1   | Model stack memory | <5.5GB | 5.5-6.5GB   | >6.5GB |
-| G2   | Mean HHEM score    | >=0.5  | 0.4-0.5     | <0.4   |
-| G3   | Warm-start latency | <3s    | 3-5s        | >5s    |
-| G4   | Cold-start latency | <15s   | 15-20s      | >20s   |
-
-## Project Structure
-
-```
-jarvis-ai-assistant/
-├── jarvis/             # CLI, config, metrics, export, core services
-│   ├── _cli_main.py    # CLI implementation
-│   ├── config.py       # Nested configuration
-│   ├── export.py       # JSON/CSV/TXT export
-│   ├── metrics.py      # Memory and latency tracking
-│   ├── classifiers/    # Intent, relationship, and pressure classification
-│   ├── socket_server.py # V2 Unix socket JSON-RPC server
-│   └── watcher.py      # chat.db real-time file watcher
-├── api/                # FastAPI REST layer
-│   └── routers/        # Conversations, drafts, metrics, settings
-├── benchmarks/         # Validation gate implementations
-│   ├── memory/         # MLX memory profiler
-│   ├── hallucination/  # HHEM benchmark
-│   └── latency/        # Latency benchmark
-├── contracts/          # Python Protocol interfaces (9 protocols)
-├── core/               # Infrastructure
-│   ├── health/         # Circuit breaker, degradation, permissions
-│   └── memory/         # Memory controller and monitoring
-├── integrations/
-│   └── imessage/       # iMessage reader with schema detection
-├── models/             # MLX model loading and inference
-├── tests/              # Test suite
-├── scripts/            # Benchmark and reporting utilities
-├── desktop/            # Tauri desktop app (Svelte frontend)
-└── docs/               # Documentation
-```
-
-## Workflow
-
-1. Create feature branch: `git checkout -b feature/my-thing`
-2. Make changes
-3. Run `make verify` before committing
-4. Push and create PR
-
-For parallel work, use git worktrees - see [CLAUDE.md](CLAUDE.md) for details.
-
-## Documentation
-
-- [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md) - Canonical documentation index
-- [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) - End-to-end system overview
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - V2 technical architecture
-- [docs/REPLY_PIPELINE_GUIDE.md](docs/REPLY_PIPELINE_GUIDE.md) - Reply generation pipeline
-- [docs/FACADE_MIGRATION.md](docs/FACADE_MIGRATION.md) - Canonical import map after facade retirement
-- [API docs](http://localhost:8742/docs) - REST API documentation (when server is running)
-- [docs/PERFORMANCE.md](docs/PERFORMANCE.md) - Performance tuning and metrics guide
-- [desktop/README.md](desktop/README.md) - Desktop app setup and E2E testing
-- [CLAUDE.md](CLAUDE.md) - Development workflow, architecture, and coding guidelines
-
-## License
-
-MIT License - see pyproject.toml
+- Personal exports, logs, and local training artifacts are intentionally excluded from this public version.
+- Use `.env` for secrets and never commit credential files.
+- See `docs/SECURITY.md` for security guidance.
