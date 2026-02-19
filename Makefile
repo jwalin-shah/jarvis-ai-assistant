@@ -975,7 +975,7 @@ endif
 
 auto-loop-file:
 ifndef PROMPT_FILE
-	$(error PROMPT_FILE is required. Usage: make auto-loop-file PROMPT_FILE=tasks/prompt.md END_CONDITION="Done")
+	$(error PROMPT_FILE is required. Usage: make auto-loop-file PROMPT_FILE=internal/ops/tasks/prompt.md END_CONDITION="Done")
 endif
 ifndef END_CONDITION
 	$(error END_CONDITION is required.)
@@ -991,16 +991,16 @@ endif
 		$(if $(REVIEWER_PROMPT),--reviewer-prompt $(REVIEWER_PROMPT))
 
 auto-loop-stop:
-	@touch tasks/.stop-loop
+	@touch internal/ops/tasks/.stop-loop
 	@echo "Stop signal sent. Loop will exit after current iteration."
 
 auto-loop-status:
-	@if [ -f tasks/loop-status.md ]; then \
+	@if [ -f internal/ops/tasks/loop-status.md ]; then \
 		echo "=== Loop Status ==="; \
-		head -5 tasks/loop-status.md; \
+		head -5 internal/ops/tasks/loop-status.md; \
 		echo ""; \
 		echo "=== Recent Activity ==="; \
-		tail -20 tasks/loop-status.md; \
+		tail -20 internal/ops/tasks/loop-status.md; \
 	else \
 		echo "No active loop. Start one with: make auto-loop"; \
 	fi

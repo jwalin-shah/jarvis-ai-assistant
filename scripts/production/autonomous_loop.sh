@@ -8,7 +8,7 @@
 # Usage:
 #   # Simple: Claude fixes issues
 #   ./scripts/autonomous_loop.sh \
-#     --prompt "Fix all issues in tasks/performance-audit-2025-02-11.md" \
+#     --prompt "Fix all issues in internal/ops/tasks/performance-audit-2025-02-11.md" \
 #     --end-condition "All H-priority issues resolved and make test passes"
 #
 #   # With review: Gemini works, Claude reviews
@@ -20,7 +20,7 @@
 #
 #   # From prompt file with custom settings
 #   ./scripts/autonomous_loop.sh \
-#     --prompt-file tasks/my-prompt.md \
+#     --prompt-file internal/ops/tasks/my-prompt.md \
 #     --end-condition "All done" \
 #     --max-iterations 30 \
 #     --agent codex \
@@ -38,9 +38,9 @@
 # Reviewers: claude-haiku (default), claude-sonnet, claude, gemini, codex, kimi, opencode
 #
 # Control:
-#   touch tasks/.stop-loop       Graceful stop after current iteration
-#   cat tasks/loop-status.md     Check progress
-#   tail -f tasks/sessions/*.log Follow live output
+#   touch internal/ops/tasks/.stop-loop       Graceful stop after current iteration
+#   cat internal/ops/tasks/loop-status.md     Check progress
+#   tail -f internal/ops/tasks/sessions/*.log Follow live output
 
 set -euo pipefail
 
@@ -75,9 +75,10 @@ PROMPT_FILE=""
 END_CONDITION=""
 DRY_RUN=false
 SESSION_NAME="loop-$(date +%Y%m%d-%H%M%S)"
-STATUS_FILE="tasks/loop-status.md"
-STOP_FILE="tasks/.stop-loop"
-LOG_DIR="tasks/sessions"
+TASKS_DIR="internal/ops/tasks"
+STATUS_FILE="${TASKS_DIR}/loop-status.md"
+STOP_FILE="${TASKS_DIR}/.stop-loop"
+LOG_DIR="${TASKS_DIR}/sessions"
 WORK_TIMEOUT=3600    # 1 hour per work iteration
 REVIEW_TIMEOUT=300   # 5 min per review
 
@@ -156,13 +157,13 @@ Claude-specific:
 
 Other:
   --session-name <name>     Session identifier (default: loop-YYYYMMDD-HHMMSS)
-  --status-file <path>      State file path (default: tasks/loop-status.md)
+  --status-file <path>      State file path (default: internal/ops/tasks/loop-status.md)
   --dry-run                 Print config without executing
 
 Runtime Control:
-  touch tasks/.stop-loop    Graceful stop after current iteration
-  cat tasks/loop-status.md  Check progress
-  tail -f tasks/sessions/loop-*.log  Follow live output
+  touch internal/ops/tasks/.stop-loop    Graceful stop after current iteration
+  cat internal/ops/tasks/loop-status.md  Check progress
+  tail -f internal/ops/tasks/sessions/loop-*.log  Follow live output
 
 Examples:
   # Claude works alone
@@ -174,7 +175,7 @@ Examples:
 
   # Codex works, Gemini reviews, custom review criteria
   autonomous_loop.sh --agent codex --reviewer gemini \
-    --reviewer-prompt tasks/review-criteria.md \
+    --reviewer-prompt internal/ops/tasks/review-criteria.md \
     --prompt "Add input validation" --end-condition "All endpoints validated"
 
   # Parallel overnight runs in isolated worktrees
@@ -511,7 +512,7 @@ if [[ "$DRY_RUN" == true ]]; then
   if [[ -n "$REVIEWER_AGENT" ]]; then
     echo ""
     echo -e "${BOLD}--- Review Prompt (iteration 1) ---${NC}"
-    build_review_prompt 1 "$WORKER_AGENT" "tasks/sessions/work-iter-1.log"
+    build_review_prompt 1 "$WORKER_AGENT" "${TASKS_DIR}/sessions/work-iter-1.log"
   fi
   echo ""
   echo "Would run up to $MAX_ITERATIONS iterations."

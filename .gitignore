@@ -148,6 +148,16 @@ tools/multi-agent/outputs/
 tasks/sessions/
 tasks/*.md
 tasks/prompts/
+internal/tooling/multi-agent/outputs/
+internal/ops/tasks/sessions/
+internal/ops/tasks/*.md
+!internal/ops/tasks/
+!internal/ops/tasks/extraction-opt-status.md
+internal/ops/tasks/prompts/
+!internal/ops/tasks/prompts/
+!internal/ops/tasks/prompts/extraction-deoverfit.md
+!internal/ops/tasks/prompts/extraction-optimizer.md
+!internal/ops/tasks/prompts/extraction-reviewer.md
 
 # Experiment artifacts (data, models, results - all regeneratable)
 experiments/**/data/*.jsonl
@@ -299,6 +309,7 @@ evals/results/
 
 # Multi-agent scratch outputs
 tools/multi-agent/prompts/
+internal/tooling/multi-agent/prompts/
 .hub/
 
 # Scratch notes and review drafts
