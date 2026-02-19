@@ -46,6 +46,8 @@ uv.lock
 
 # Claude Code local settings
 .claude/
+.Jules/
+.jules/
 
 # Testing
 .pytest_cache/
