@@ -576,7 +576,7 @@ git tag prompt-v1.1.0
 git push origin prompt-v1.1.0
 
 # 2. Update changelog
-cat >> CHANGELOG.md << 'EOF'
+cat >> docs/CHANGELOG.md << 'EOF'
 ## [1.1.0] - 2026-02-10
 ### Added
 - Planning category few-shot examples

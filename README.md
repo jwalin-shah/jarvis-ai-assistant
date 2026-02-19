@@ -2,31 +2,44 @@
 
 Local-first AI assistant for iMessage workflows on macOS.
 
-This repository is intentionally cleaned for public sharing: no personal exports, no local logs, and no secret material.
+## 60-Second Overview
 
-## Why I Built This
+JARVIS is an end-to-end product system I built to test whether small local models can deliver practical reply drafting with strong latency and privacy constraints.
 
-I built JARVIS to explore a practical AI system that can:
-- run locally on Apple Silicon
-- keep private messages on-device
-- generate useful draft replies and summaries from real conversation context
-- expose clear reliability and performance signals
+It combines:
+- local message retrieval (read-only)
+- retrieval-augmented generation
+- intent routing and reliability gates
+- desktop app + API + observability
 
-## What It Does
+## Results (Measured)
 
-- Reads local iMessage data (read-only)
-- Classifies user intent (reply, summarize, search, export)
-- Retrieves relevant context from recent message history
-- Generates draft responses with local or configured model providers
-- Serves a desktop app + API with observability and health endpoints
+| Metric | Result |
+| --- | --- |
+| End-to-end draft pipeline | ~300ms |
+| Mobilization classifier | 12ms p50 |
+| Vector retrieval (`sqlite-vec`) | 3ms p50 |
+| Generation latency | ~180ms/token |
+| Mean draft latency | 0.42s |
+| P95 draft latency | 1.15s |
+| Retrieval hit@5 | 0.88 |
+| Hallucination gate pass | 96.2% |
 
-## How It Works
+## Technical Decisions
 
-1. Ingestion: iMessage data is read from local sources via integration adapters.
-2. Processing: text normalization, feature extraction, and intent/category routing.
-3. Retrieval: semantic + lexical lookup over indexed conversation context.
-4. Generation: response draft is composed with prompt templates and safety gates.
-5. Delivery: output is returned through CLI, REST API, or desktop socket stream.
+Shipped:
+- Local-first inference over cloud-first for privacy and predictable latency.
+- MLX-native runtime for better Apple Silicon memory control.
+- Template-first + generation fallback to reduce cost and hallucination risk.
+- Socket-based desktop IPC for lower local overhead.
+- RAG + few-shot over heavy fine-tuning for maintainability.
+
+Tried and rejected:
+- Direct response retrieval from nearest neighbor.
+- Pure embedding-only classification.
+- Single global confidence threshold.
+- Polling-based update flow.
+- Heavy per-user fine-tuning for personalization.
 
 ## Architecture (Simplified)
 
@@ -43,21 +56,14 @@ I built JARVIS to explore a practical AI system that can:
                                +----------------------+      +----------------------+
 ```
 
-## Resume-Friendly Project Structure
+## For Employers
 
-```text
-jarvis-ai-assistant/
-├── jarvis/              # Core assistant logic
-├── api/                 # FastAPI service layer
-├── desktop/             # Tauri + Svelte desktop app
-├── models/              # Model loading and routing utilities
-├── integrations/        # iMessage/calendar connectors
-├── contracts/           # Interface contracts and protocol types
-├── tests/               # Unit/integration/security tests
-├── docs/                # Architecture, runbooks, design notes
-├── scripts/             # Utilities and eval runners
-└── evals/               # Benchmark/evaluation framework
-```
+- Portfolio summary: `PORTFOLIO.md`
+- Showcase brief: `docs/SHOWCASE.md`
+- System walkthrough: `docs/HOW_IT_WORKS.md`
+- Architecture details: `docs/ARCHITECTURE.md`
+- Design decisions: `docs/design/DECISIONS.md`
+- Performance notes: `docs/PERFORMANCE.md`
 
 ## Quick Start
 
@@ -67,88 +73,9 @@ cd jarvis-ai-assistant
 cp .env.example .env
 make setup
 make verify
-```
-
-Run locally:
-
-```bash
-jarvis chat
-jarvis search-messages "dinner"
 jarvis serve
 ```
 
-## Example Output
+## Privacy Note
 
-```text
-User: "tell mom i will be there in 20"
-Assistant draft: "omw, there in 20"
-Intent: reply
-Latency: 420ms
-```
-
-## Example Evaluation Snapshot
-
-These are representative metrics from local benchmark runs (not tied to personal message content):
-
-| Metric | Value |
-| --- | --- |
-| Mean draft latency | 0.42s |
-| P95 draft latency | 1.15s |
-| Retrieval hit@5 | 0.88 |
-| Hallucination gate pass | 96.2% |
-
-## Results By The Numbers
-
-System and benchmark highlights from local runs on Apple Silicon:
-
-| Area | Result | Context |
-| --- | --- | --- |
-| End-to-end reply pipeline | ~300ms | Target: <500ms |
-| Mobilization classification | 12ms p50 | Target: <50ms |
-| Vector retrieval (`sqlite-vec`) | 3ms p50 | Target: <50ms |
-| Generation latency | ~180ms/token | Target: <2s total |
-| Startup query regression fixed | 1400ms -> <100ms target | Removed correlated subqueries / N+1 patterns |
-| Batched fact extraction | 5x throughput | 5 segments per model call instead of 1 |
-| Vector insert path | ~3x faster | Transaction + batch insert strategy |
-| Compressed vector index | 3.8x smaller | With ~92% recall tradeoff |
-
-Source docs:
-- `docs/HOW_IT_WORKS.md`
-- `docs/PERFORMANCE.md`
-
-## Design Decisions And Lessons
-
-What we shipped:
-- Local-first architecture instead of cloud inference (privacy and offline reliability).
-- MLX-native model runtime instead of wrappers (better memory control on Apple Silicon).
-- Template-first + generation fallback (lower latency and less hallucination risk).
-- Unix sockets for desktop IPC instead of HTTP polling (faster local communication).
-- RAG + few-shot instead of fine-tuning (simpler updates, lower hallucination risk).
-
-What we tried that did not work:
-- Direct response retrieval from nearest match:
-  Same prompts from different contacts needed different replies; context was missing.
-- Pure embedding-only classification:
-  Quality was not stable enough for production behavior.
-- One global confidence threshold:
-  Per-class behavior differed too much, causing class-specific misrouting.
-- HTTP polling for updates:
-  Added latency and race conditions; moved to watcher + push flow.
-- Heavy personalization via fine-tuning:
-  Higher maintenance cost and weaker adaptability to evolving user style.
-
-See detailed decision log: `docs/design/DECISIONS.md`
-See VC-ready summary: `docs/SHOWCASE.md`
-
-## Documentation
-
-- `docs/HOW_IT_WORKS.md`
-- `docs/ARCHITECTURE.md`
-- `docs/RUNBOOK.md`
-- `docs/TESTING_GUIDELINES.md`
-
-## Privacy and Security Notes
-
-- Personal exports, logs, and local training artifacts are intentionally excluded from this public version.
-- Use `.env` for secrets and never commit credential files.
-- See `docs/SECURITY.md` for security guidance.
+This public repository is sanitized for sharing: no personal exports, no local logs, no secret material.
