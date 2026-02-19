@@ -749,7 +749,7 @@ code-review-checklist:
 	@echo "  [ ] Self-review: git diff --cached"
 	@echo "  [ ] Test coverage maintained/improved"
 	@echo "  [ ] Documentation updated (if needed)"
-	@echo "  [ ] CHANGELOG.md updated (if user-facing)"
+	@echo "  [ ] docs/CHANGELOG.md updated (if user-facing)"
 	@echo ""
 	@echo "For ML changes:"
 	@echo "  [ ] Benchmarks run and documented"

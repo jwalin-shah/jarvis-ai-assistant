@@ -309,7 +309,7 @@ log_event("model_unload", model="bge-small", reason="memory_pressure")
 
 ## References
 
-- `CLAUDE.md` - Core behavioral rules (includes N+1 section)
+- `docs/CLAUDE.md` - Core behavioral rules (includes N+1 section)
 - `tests/performance_baseline.py` - Performance tests
 - `jarvis/utils/latency_tracker.py` - Latency monitoring
 - `jarvis/socket_server.py` - Integrated performance tracking
