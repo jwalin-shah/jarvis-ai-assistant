@@ -97,6 +97,49 @@ These are representative metrics from local benchmark runs (not tied to personal
 | Retrieval hit@5 | 0.88 |
 | Hallucination gate pass | 96.2% |
 
+## Results By The Numbers
+
+System and benchmark highlights from local runs on Apple Silicon:
+
+| Area | Result | Context |
+| --- | --- | --- |
+| End-to-end reply pipeline | ~300ms | Target: <500ms |
+| Mobilization classification | 12ms p50 | Target: <50ms |
+| Vector retrieval (`sqlite-vec`) | 3ms p50 | Target: <50ms |
+| Generation latency | ~180ms/token | Target: <2s total |
+| Startup query regression fixed | 1400ms -> <100ms target | Removed correlated subqueries / N+1 patterns |
+| Batched fact extraction | 5x throughput | 5 segments per model call instead of 1 |
+| Vector insert path | ~3x faster | Transaction + batch insert strategy |
+| Compressed vector index | 3.8x smaller | With ~92% recall tradeoff |
+
+Source docs:
+- `docs/HOW_IT_WORKS.md`
+- `docs/PERFORMANCE.md`
+
+## Design Decisions And Lessons
+
+What we shipped:
+- Local-first architecture instead of cloud inference (privacy and offline reliability).
+- MLX-native model runtime instead of wrappers (better memory control on Apple Silicon).
+- Template-first + generation fallback (lower latency and less hallucination risk).
+- Unix sockets for desktop IPC instead of HTTP polling (faster local communication).
+- RAG + few-shot instead of fine-tuning (simpler updates, lower hallucination risk).
+
+What we tried that did not work:
+- Direct response retrieval from nearest match:
+  Same prompts from different contacts needed different replies; context was missing.
+- Pure embedding-only classification:
+  Quality was not stable enough for production behavior.
+- One global confidence threshold:
+  Per-class behavior differed too much, causing class-specific misrouting.
+- HTTP polling for updates:
+  Added latency and race conditions; moved to watcher + push flow.
+- Heavy personalization via fine-tuning:
+  Higher maintenance cost and weaker adaptability to evolving user style.
+
+See detailed decision log: `docs/design/DECISIONS.md`
+See VC-ready summary: `docs/SHOWCASE.md`
+
 ## Documentation
 
 - `docs/HOW_IT_WORKS.md`
