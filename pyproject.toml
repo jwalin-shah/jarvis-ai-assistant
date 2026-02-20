@@ -51,7 +51,7 @@ dependencies = [
     "typer>=0.21.1",
     "gliner>=0.2.24",
     "symspellpy>=6.9.0",
-    "pyobjc>=12.1",
+    "pyobjc>=12.1; sys_platform == 'darwin'",
     "orjson>=3.10.0",
     "opentelemetry-api>=1.25.0",
     "opentelemetry-sdk>=1.25.0",
