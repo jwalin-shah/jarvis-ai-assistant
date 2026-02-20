@@ -41,7 +41,7 @@ class MessageHandler(BaseHandler):
         action: str,
         suggestion_text: str,
         chat_id: str,
-        context_messages: list[str] = None,
+        context_messages: list[str] | None = None,
         edited_text: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, bool]:
@@ -80,7 +80,13 @@ class MessageHandler(BaseHandler):
 
         get_model_warmer().touch()
 
-        system = system_prompt or "You are a helpful assistant."
+        from jarvis.prompts.constants import SYSTEM_PREFIX
+
+        # Use Jwalin's persona by default and explicitly forbid Chinese
+        default_system = (
+            SYSTEM_PREFIX + "\nCRITICAL: Respond in English only. Never use Chinese characters."
+        )
+        system = system_prompt or default_system
         prompt_parts = ["<|im_start|>system\n", system, "<|im_end|>\n"]
 
         turns = (history or [])[-10:]
@@ -118,10 +124,17 @@ class MessageHandler(BaseHandler):
         generator = get_generator()
         response_tokens: list[str] = []
         async for token_data in generator.generate_stream(request):
-            response_tokens.append(token_data["token"])
+            token = token_data["token"]
+            response_tokens.append(token)
+
+        full_response = "".join(response_tokens).strip()
+        # Final cleanup for Chinese character leaks
+        import re
+
+        full_response = re.sub(r"[\u4e00-\u9fff]+", "", full_response).strip()
 
         return {
-            "response": "".join(response_tokens).strip(),
+            "response": full_response,
             "tokens_generated": len(response_tokens),
         }
 
@@ -136,12 +149,19 @@ class MessageHandler(BaseHandler):
 
         generator = get_generator()
         response_tokens: list[str] = []
+        is_final = False
 
         try:
             async for token_data in generator.generate_stream(request):
                 token_text = token_data["token"]
                 token_index = token_data["token_index"]
                 is_final = token_data["is_final"]
+
+                # Filter out Chinese characters from the token
+                import re
+
+                token_text = re.sub(r"[\u4e00-\u9fff]+", "", token_text)
+
                 response_tokens.append(token_text)
 
                 await self.send_stream_token(
@@ -149,7 +169,7 @@ class MessageHandler(BaseHandler):
                 )
 
             # Ensure a final token is sent if the generator didn't provide one
-            if response_tokens and not is_final:
+            if not is_final:
                 await self.send_stream_token(
                     writer, "", len(response_tokens), True, request_id=request_id
                 )
@@ -163,6 +183,7 @@ class MessageHandler(BaseHandler):
             return result
         except Exception as e:
             logger.exception("Chat streaming failed")
+            await self.server.send_stream_error(writer, request_id, INTERNAL_ERROR, str(e))
             raise JsonRpcError(INTERNAL_ERROR, f"Chat streaming failed: {e}")
 
     @rpc_handler("Draft generation failed")
@@ -170,6 +191,7 @@ class MessageHandler(BaseHandler):
         self,
         chat_id: str,
         instruction: str | None = None,
+        num_suggestions: int = 1,
         context_messages: int = 20,
         _writer: Any = None,
         _request_id: Any = None,
@@ -182,12 +204,43 @@ class MessageHandler(BaseHandler):
             return {"suggestions": [], "stale": True, "reason": "user_switched_chats"}
 
         prefetch_manager = self.server.get_prefetch_manager()
-        if not skip_cache and _writer is None and prefetch_manager:
+        cached_draft = None
+        if not skip_cache and prefetch_manager:
             cached_draft = prefetch_manager.get_draft(chat_id)
             if cached_draft and "suggestions" in cached_draft:
-                logger.debug(f"Serving prefetched draft for {chat_id}")
+                logger.debug(f"Found prefetched draft for {chat_id}")
                 cached_draft["from_cache"] = True
-                return cached_draft
+
+                # If we need more suggestions than cached, we'll continue to generation
+                if len(cached_draft["suggestions"]) >= num_suggestions:
+                    # If streaming was requested, we should still return the cached draft
+                    # but we need to send it via the stream protocol to satisfy the client
+                    if _writer is not None:
+                        # 'Stream' the cached suggestions
+                        # Note: Typewriter effect is lost but latency is near-zero
+                        # We send an empty final token to signal completion
+                        result = {
+                            "suggestions": cached_draft["suggestions"][:num_suggestions],
+                            "context_used": cached_draft.get(
+                                "context_used",
+                                {
+                                    "num_messages": 0,
+                                    "participants": [],
+                                    "last_message": "",
+                                },
+                            ),
+                            "streamed": True,
+                            "from_cache": True,
+                        }
+                        await self.send_stream_response(_writer, _request_id, result)
+                        # Close the stream with a final token
+                        await self.send_stream_token(_writer, "", 0, True, request_id=_request_id)
+                        return result
+
+                    return {
+                        **cached_draft,
+                        "suggestions": cached_draft["suggestions"][:num_suggestions],
+                    }
 
         from jarvis.model_warmer import get_model_warmer
 
@@ -225,6 +278,7 @@ class MessageHandler(BaseHandler):
         }
 
         if _writer is not None:
+            # Note: Streaming now supports sequential multiple suggestions
             return await self._generate_draft_streaming(
                 last_incoming=last_incoming,
                 context=context,
@@ -233,25 +287,68 @@ class MessageHandler(BaseHandler):
                 writer=_writer,
                 request_id=_request_id,
                 context_used=context_used,
+                num_suggestions=num_suggestions,
             )
 
         if prefetch_manager:
             self.server.pause_prefetch()
         try:
-            from jarvis.reply_service import get_reply_service
+            reply_service = self.server.get_reply_service()
 
-            reply_service = get_reply_service()
-            result: dict[str, Any] = await asyncio.to_thread(
-                reply_service.route_legacy,
-                incoming=last_incoming,
-                thread=context[-10:],
-                chat_id=chat_id,
-            )
+            suggestions: list[dict[str, Any]] = []
+            seen_texts: set[str] = set()
+
+            # If we had some cached suggestions, keep them
+            if cached_draft and "suggestions" in cached_draft:
+                for s in cached_draft["suggestions"]:
+                    suggestions.append(s)
+                    seen_texts.add(s["text"])
+
+            # Generate remaining suggestions with increasing temperature for variety
+            for i in range(len(suggestions), num_suggestions):
+                if self.server.is_generation_stale(chat_id):
+                    break
+
+                try:
+                    request, metadata = await asyncio.to_thread(
+                        reply_service.prepare_streaming_context,
+                        incoming=last_incoming,
+                        thread=context[-10:] if context else None,
+                        chat_id=chat_id,
+                        instruction=instruction,
+                    )
+                except Exception:
+                    logger.exception("Failed to prepare context for suggestion")
+                    break
+
+                # Increase temperature for each successive suggestion to get variety
+                # First suggestion: 0.5, second: 0.65, third: 0.8
+                request.temperature = 0.5 + (i * 0.15)
+
+                try:
+                    response = await asyncio.to_thread(reply_service.generator.generate, request)
+                    text = response.text.strip()
+
+                    # Deduplicate based on text
+                    if text and text not in seen_texts:
+                        suggestions.append(
+                            {
+                                "text": text,
+                                "confidence": float(metadata.get("confidence_score", 0.6)),
+                            }
+                        )
+                        seen_texts.add(text)
+                except Exception:
+                    logger.exception("Failed to generate suggestion")
+
+            return {
+                "suggestions": suggestions[:num_suggestions],
+                "context_used": context_used,
+                "from_cache": False,
+            }
         finally:
             if prefetch_manager:
                 self.server.resume_prefetch()
-
-        return result
 
     async def _generate_draft_streaming(
         self,
@@ -262,6 +359,7 @@ class MessageHandler(BaseHandler):
         writer: Any,
         request_id: Any,
         context_used: dict[str, Any],
+        num_suggestions: int = 1,
     ) -> dict[str, Any]:
         """Stream draft tokens."""
         # Check staleness before and during streaming
@@ -276,88 +374,107 @@ class MessageHandler(BaseHandler):
             self.server.pause_prefetch()
         self.server.pause_task_worker()
         try:
-            try:
-                request, metadata = await asyncio.to_thread(
-                    reply_service.prepare_streaming_context,
-                    incoming=last_incoming,
-                    thread=context[-10:] if context else None,
-                    chat_id=chat_id,
-                    instruction=instruction,
-                )
-            except Exception as e:
-                logger.exception("Failed to prepare streaming context")
-                raise JsonRpcError(INTERNAL_ERROR, f"Context preparation failed: {e}")
+            suggestions: list[dict[str, Any]] = []
+            seen_texts = set()
+            total_tokens = 0
 
-            confidence = float(metadata.get("confidence_score", 0.6))
-            response_tokens: list[str] = []
-            accumulated = ""
-            token_count = 0
+            # Perform multiple generations sequentially
+            for i in range(num_suggestions):
+                if self.server.is_generation_stale(chat_id):
+                    break
 
-            try:
-                async for token_data in reply_service.generator.generate_stream(request):
-                    # Check staleness periodically to stop early if user switched chats
-                    token_count += 1
-                    if token_count % 10 == 0 and self.server.is_generation_stale(chat_id):
-                        logger.debug(f"Stopping stale streaming for {chat_id}")
-                        break
-
-                    token_text = token_data["token"]
-                    token_index = token_data["token_index"]
-                    is_final = token_data["is_final"]
-                    accumulated += token_text
-
-                    # Stop at closing reply tag
-                    if "</reply>" in accumulated:
-                        before_tag = accumulated.split("</reply>")[0]
-                        remaining = before_tag[len("".join(response_tokens)) :]
-                        if remaining:
-                            response_tokens.append(remaining)
-                            await self.send_stream_token(
-                                writer, remaining, token_index, True, request_id=request_id
-                            )
-                        else:
-                            # If no new content but we hit the tag, send an empty final token
-                            # to ensure onComplete() is triggered in the frontend.
-                            await self.send_stream_token(
-                                writer, "", token_index, True, request_id=request_id
-                            )
-                        break
-
-                    response_tokens.append(token_text)
-                    await self.send_stream_token(
-                        writer, token_text, token_index, is_final, request_id=request_id
+                try:
+                    request, metadata = await asyncio.to_thread(
+                        reply_service.prepare_streaming_context,
+                        incoming=last_incoming,
+                        thread=context[-10:] if context else None,
+                        chat_id=chat_id,
+                        instruction=instruction,
                     )
-            except Exception:
-                logger.exception("Streaming generation failed")
-                raise JsonRpcError(INTERNAL_ERROR, "Streaming failed")
+                except Exception as e:
+                    logger.exception("Failed to prepare streaming context")
+                    if i == 0:
+                        raise JsonRpcError(INTERNAL_ERROR, f"Context preparation failed: {e}")
+                    break
+
+                # Increase temperature for each successive suggestion to get variety
+                # First suggestion: 0.5, second: 0.65, third: 0.8
+                request.temperature = 0.5 + (i * 0.15)
+
+                confidence = float(metadata.get("confidence_score", 0.6))
+                response_tokens: list[str] = []
+                accumulated = ""
+                token_count = 0
+
+                try:
+                    async for token_data in reply_service.generator.generate_stream(request):
+                        # Check staleness periodically to stop early if user switched chats
+                        token_count += 1
+                        if token_count % 10 == 0 and self.server.is_generation_stale(chat_id):
+                            logger.debug(f"Stopping stale streaming for {chat_id}")
+                            await self.send_stream_token(
+                                writer,
+                                "",
+                                total_tokens + token_count,
+                                True,
+                                request_id=request_id,
+                            )
+                            return {"suggestions": suggestions, "stale": True}
+
+                        token_text = token_data["token"]
+                        token_index = total_tokens + token_data["token_index"]
+                        accumulated += token_text
+
+                        # Stop at closing reply tag
+                        if "</reply>" in accumulated:
+                            before_tag = accumulated.split("</reply>")[0]
+                            remaining = before_tag[len("".join(response_tokens)) :]
+                            if remaining:
+                                response_tokens.append(remaining)
+                                await self.send_stream_token(
+                                    writer, remaining, token_index, False, request_id=request_id
+                                )
+                            break
+
+                        response_tokens.append(token_text)
+                        await self.send_stream_token(
+                            writer, token_text, token_index, False, request_id=request_id
+                        )
+
+                    full_response = "".join(response_tokens).strip()
+                    total_tokens += token_count
+
+                    if full_response and full_response not in seen_texts:
+                        suggestions.append({"text": full_response, "confidence": confidence})
+                        seen_texts.add(full_response)
+
+                        # Add a newline between suggestions in the stream for parsing
+                        if i < num_suggestions - 1:
+                            await self.send_stream_token(
+                                writer, "\n", total_tokens, False, request_id=request_id
+                            )
+                            total_tokens += 1
+
+                except Exception:
+                    logger.exception("Streaming generation failed")
+                    if i == 0:
+                        raise JsonRpcError(INTERNAL_ERROR, "Streaming failed")
+                    break
+
+            # Send final token to close the entire stream
+            await self.send_stream_token(writer, "", total_tokens, True, request_id=request_id)
+
         finally:
             if prefetch_manager:
                 self.server.resume_prefetch()
             self.server.resume_task_worker()
 
-        full_response = "".join(response_tokens)
         result = {
-            "suggestions": [{"text": full_response.strip(), "confidence": confidence}],
+            "suggestions": suggestions,
             "context_used": context_used,
             "streamed": True,
-            "tokens_generated": len(response_tokens),
+            "tokens_generated": total_tokens,
         }
-
-        # Log the generation for traceability
-        try:
-            final_prompt = metadata.get("final_prompt", "")
-            reply_service.log_custom_generation(
-                chat_id=chat_id,
-                incoming_text=last_incoming,
-                final_prompt=final_prompt,
-                response_text=full_response.strip(),
-                confidence=confidence,
-                category="streaming_draft",
-                metadata={"tokens_generated": len(response_tokens)},
-            )
-        except Exception as e:
-            logger.debug(f"Failed to log streaming generation: {e}")
-
         await self.send_stream_response(writer, request_id, result)
         return result
 
@@ -449,6 +566,7 @@ class MessageHandler(BaseHandler):
         request = GenerationRequest(prompt=prompt, max_tokens=300)
 
         response_tokens: list[str] = []
+        is_final = False
         try:
             async for token_data in generator.generate_stream(request):
                 token_text = token_data["token"]
@@ -459,8 +577,15 @@ class MessageHandler(BaseHandler):
                 await self.send_stream_token(
                     writer, token_text, token_index, is_final, request_id=request_id
                 )
-        except Exception:
+
+            # Ensure a final token is sent if the generator didn't provide one
+            if not is_final:
+                await self.send_stream_token(
+                    writer, "", len(response_tokens), True, request_id=request_id
+                )
+        except Exception as e:
             logger.exception("Streaming summarization failed")
+            await self.server.send_stream_error(writer, request_id, INTERNAL_ERROR, str(e))
             raise JsonRpcError(INTERNAL_ERROR, "Streaming failed")
 
         full_response = "".join(response_tokens)
@@ -512,9 +637,9 @@ class MessageHandler(BaseHandler):
                     "chat_id": c.chat_id,
                     "display_name": c.display_name,
                     "last_message": c.last_message_text,
-                    "last_message_date": c.last_message_date.isoformat()
-                    if c.last_message_date
-                    else None,
+                    "last_message_date": (
+                        c.last_message_date.isoformat() if c.last_message_date else None
+                    ),
                     "is_group": c.is_group,
                 }
                 for c in chats

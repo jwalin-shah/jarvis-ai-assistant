@@ -20,8 +20,6 @@ from typing import TYPE_CHECKING, Any
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from symspellpy import SymSpell
-
     from jarvis.nlp.ner_client import Entity
 
 # Reaction patterns - these are tapbacks in iMessage
@@ -303,53 +301,6 @@ TEMPORAL_PATTERNS = [
 ]
 TEMPORAL_REGEX = re.compile("|".join(TEMPORAL_PATTERNS), re.IGNORECASE)
 
-# Spell checker singleton (lazy loaded)
-_SPELL_CHECKER = None
-
-
-def _get_spell_checker() -> "SymSpell | None":
-    """Get or initialize the SymSpell spell checker."""
-    global _SPELL_CHECKER
-    if _SPELL_CHECKER is None:
-        try:
-            import importlib.resources
-
-            from symspellpy import SymSpell
-
-            _SPELL_CHECKER = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
-            # Load the built-in frequency dictionary
-            dict_path = importlib.resources.files("symspellpy").joinpath(
-                "frequency_dictionary_en_82_765.txt"
-            )
-            _SPELL_CHECKER.load_dictionary(str(dict_path), term_index=0, count_index=1)
-        except Exception as e:
-            logger.warning("Failed to load spell checker: %s", e)
-            return None
-    return _SPELL_CHECKER
-
-
-def _spell_correct(text: str) -> str:
-    """Correct spelling errors using SymSpell.
-
-    Note: Run AFTER slang expansion to avoid breaking abbreviations.
-    """
-    if not text:
-        return text
-
-    checker = _get_spell_checker()
-    if checker is None:
-        return text
-
-    try:
-        # Use lookup_compound for multi-word correction
-        suggestions = checker.lookup_compound(text, max_edit_distance=2)
-        if suggestions:
-            result: str = suggestions[0].term
-            return result
-        return text
-    except Exception:
-        return text
-
 
 def normalize_text(
     text: str,
@@ -365,7 +316,6 @@ def normalize_text(
     ner_enabled: bool = False,
     ner_model: str = "en_core_web_sm",
     expand_slang: bool = False,
-    spell_check: bool = False,
 ) -> str:
     """Canonical text cleaning used everywhere in the pipeline.
 
@@ -450,10 +400,6 @@ def normalize_text(
         from jarvis.nlp.slang import expand_slang as _expand_slang
 
         cleaned = _expand_slang(cleaned)
-
-    # 4d. Spelling correction (AFTER slang expansion to avoid breaking slang)
-    if spell_check:
-        cleaned = _spell_correct(cleaned)
 
     # 5. Final strip
     cleaned = cleaned.strip()
@@ -703,7 +649,6 @@ def normalize_for_task(text: str, task: str) -> str:
         ner_enabled=profile.ner_enabled,
         ner_model=profile.ner_model,
         expand_slang=profile.expand_slang,
-        spell_check=profile.spell_check,
     )
 
     if not cleaned:

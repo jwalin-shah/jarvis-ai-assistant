@@ -168,7 +168,7 @@ class ConnectionManager:
             message = {"type": message_type.value, "data": data or {}}
             await client.websocket.send_json(message)
             return True
-        except Exception as e:
+        except (ConnectionError, RuntimeError, OSError) as e:
             logger.warning("Failed to send message to %s: %s", client_id, e)
             return False
 
@@ -291,7 +291,7 @@ class ConnectionManager:
             logger.info("Removing stale WebSocket connection: %s", client_id)
             try:
                 await stale_client.websocket.close(code=1000, reason="Connection timeout")
-            except Exception as e:
+            except (ConnectionError, RuntimeError, OSError) as e:
                 logger.debug("Error closing stale connection %s: %s", client_id, e)
             await self.disconnect(client_id)
 
@@ -324,7 +324,7 @@ class ConnectionManager:
                 await self.cleanup_stale_connections()
             except asyncio.CancelledError:
                 break
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 logger.error("Error in cleanup task: %s", e)
 
     def is_at_capacity(self) -> bool:
@@ -482,7 +482,7 @@ async def _handle_generate(
         # Get generator
         try:
             generator = get_generator()
-        except Exception as e:
+        except (ImportError, RuntimeError, OSError) as e:
             logger.error("Failed to get generator: %s", e)
             await manager.send_message(
                 client.client_id,
@@ -538,7 +538,7 @@ async def _handle_generate(
                 },
             )
 
-    except Exception as e:
+    except (RuntimeError, OSError, ValueError) as e:
         # Log detailed error server-side, send generic message to client
         logger.exception("Generation failed for client %s: %s", client.client_id, e)
         await manager.send_message(
@@ -698,7 +698,7 @@ async def _stream_generation(
                 },
             )
 
-    except Exception as e:
+    except (RuntimeError, OSError, ValueError) as e:
         # Log detailed error server-side, send generic message to client
         logger.exception("Streaming generation failed for client %s: %s", client.client_id, e)
         await manager.send_message(
@@ -880,7 +880,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     except WebSocketDisconnect:
         logger.info("WebSocket client %s disconnected", client.client_id)
-    except Exception as e:
+    except (ConnectionError, RuntimeError, OSError) as e:
         logger.exception("WebSocket error for client %s: %s", client.client_id, e)
     finally:
         await manager.disconnect(client.client_id)

@@ -226,7 +226,7 @@ def parse_attributed_body(data: bytes | None, row_id: int | str | None = None) -
         cache_key = str(row_id)
     else:
         cache_key = hashlib.md5(data, usedforsecurity=False).hexdigest()
-    
+
     found, cached_result = _attributed_body_cache.get(cache_key)
     if found:
         return cached_result

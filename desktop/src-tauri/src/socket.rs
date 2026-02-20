@@ -266,7 +266,7 @@ async fn handle_message(
                     "fact.extracted",
                     "message.classified",
                     "message.updated",
-                    "prefetch.complete",
+                    "prefetch_complete",
                     "reply.ready",
                     "search.result",
                     "status.update",

@@ -15,6 +15,7 @@ let Database: any = null;
 interface SqlDatabase {
   path: string;
   select<T = unknown>(query: string, bindValues?: unknown[]): Promise<T>;
+  execute(query: string, bindValues?: unknown[]): Promise<unknown>;
   close(db?: string): Promise<boolean>;
 }
 
@@ -101,14 +102,16 @@ export async function initDatabases(): Promise<void> {
     const chatDbPath = await join(resolvedHomePath, "Library", "Messages", "chat.db");
     const uri = `sqlite:${chatDbPath}?mode=ro`;
     try {
-      chatDb = await Database.load(uri);
+      const db = await Database.load(uri);
 
       // SQLite performance optimizations
-      await chatDb.execute("PRAGMA journal_mode=WAL");
-      await chatDb.execute("PRAGMA cache_size=-64000"); // 64MB cache
-      await chatDb.execute("PRAGMA synchronous=NORMAL");
-      await chatDb.execute("PRAGMA mmap_size=134217728"); // 128MB memory-mapped I/O
-      await chatDb.execute("PRAGMA temp_store=MEMORY");
+      await db.execute("PRAGMA journal_mode=WAL");
+      await db.execute("PRAGMA cache_size=-64000"); // 64MB cache
+      await db.execute("PRAGMA synchronous=NORMAL");
+      await db.execute("PRAGMA mmap_size=134217728"); // 128MB memory-mapped I/O
+      await db.execute("PRAGMA temp_store=MEMORY");
+
+      chatDb = db;
     } catch (dbError: unknown) {
       const msg = dbError instanceof Error ? dbError.message : String(dbError);
       // SQLite error code 14 = SQLITE_CANTOPEN

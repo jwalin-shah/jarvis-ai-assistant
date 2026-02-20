@@ -266,6 +266,9 @@ class PrefetchExecutor:
         self._shutdown_event = threading.Event()
         self._lock = threading.RLock()
 
+        # Completion callback: (prediction, result) -> None
+        self.on_task_complete: Callable[[Prediction, dict[str, Any]], None] | None = None
+
         # Active tasks tracking (guarded by self._lock to avoid deadlock from
         # inconsistent lock ordering between _lock and a separate _active_lock)
         self._active_tasks: set[str] = set()
@@ -696,6 +699,13 @@ class PrefetchExecutor:
                     execution_ms=cost_ms,
                     tier=tier.value,
                 )
+
+                # Trigger completion callback
+                if self.on_task_complete:
+                    try:
+                        self.on_task_complete(prediction, result)
+                    except Exception as e:
+                        logger.debug(f"Error in prefetch completion callback: {e}")
             else:
                 self._stats.predictions_skipped += 1
 

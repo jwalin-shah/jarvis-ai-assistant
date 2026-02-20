@@ -1,6 +1,7 @@
-"""Unit tests for health-aware generation.
+"""Behavior tests for health-aware generation.
 
-Tests the generation utilities that check system health before using the LLM.
+Tests focus on public API behavior, not implementation details.
+Given input X, expect output Y - tests should pass even if internals are rewritten.
 """
 
 from unittest.mock import patch
@@ -16,10 +17,10 @@ from jarvis.generation import (
 
 
 class TestCanUseLLM:
-    """Tests for can_use_llm function."""
+    """Behavior: System reports whether LLM can be used based on health."""
 
-    def test_returns_true_in_full_mode(self):
-        """Returns True when memory mode is FULL."""
+    def test_allows_llm_when_system_in_full_mode(self):
+        """When memory mode is FULL, LLM is allowed."""
         mock_state = MemoryState(
             available_mb=10000,
             used_mb=6000,
@@ -30,13 +31,13 @@ class TestCanUseLLM:
 
         with patch("jarvis.generation.get_memory_controller") as mock_controller:
             mock_controller.return_value.get_state.return_value = mock_state
-            can_use, reason = can_use_llm()
+            allowed, reason = can_use_llm()
 
-        assert can_use is True
+        assert allowed is True
         assert reason == ""
 
-    def test_returns_true_in_lite_mode(self):
-        """Returns True when memory mode is LITE."""
+    def test_allows_llm_when_system_in_lite_mode(self):
+        """When memory mode is LITE, LLM is still allowed."""
         mock_state = MemoryState(
             available_mb=6000,
             used_mb=10000,
@@ -47,13 +48,13 @@ class TestCanUseLLM:
 
         with patch("jarvis.generation.get_memory_controller") as mock_controller:
             mock_controller.return_value.get_state.return_value = mock_state
-            can_use, reason = can_use_llm()
+            allowed, reason = can_use_llm()
 
-        assert can_use is True
+        assert allowed is True
         assert reason == ""
 
-    def test_returns_false_in_minimal_mode(self):
-        """Returns False when memory mode is MINIMAL."""
+    def test_blocks_llm_when_system_in_minimal_mode(self):
+        """When memory mode is MINIMAL, LLM is blocked with memory reason."""
         mock_state = MemoryState(
             available_mb=2000,
             used_mb=14000,
@@ -64,13 +65,13 @@ class TestCanUseLLM:
 
         with patch("jarvis.generation.get_memory_controller") as mock_controller:
             mock_controller.return_value.get_state.return_value = mock_state
-            can_use, reason = can_use_llm()
+            allowed, reason = can_use_llm()
 
-        assert can_use is False
+        assert allowed is False
         assert "memory" in reason.lower()
 
-    def test_returns_false_on_critical_pressure(self):
-        """Returns False when memory pressure is critical."""
+    def test_blocks_llm_when_pressure_is_critical(self):
+        """When pressure is critical, LLM is blocked regardless of mode."""
         mock_state = MemoryState(
             available_mb=5000,
             used_mb=11000,
@@ -81,13 +82,13 @@ class TestCanUseLLM:
 
         with patch("jarvis.generation.get_memory_controller") as mock_controller:
             mock_controller.return_value.get_state.return_value = mock_state
-            can_use, reason = can_use_llm()
+            allowed, reason = can_use_llm()
 
-        assert can_use is False
+        assert allowed is False
         assert "critical" in reason.lower()
 
-    def test_returns_true_on_red_pressure(self):
-        """Returns True when memory pressure is red (only critical blocks)."""
+    def test_allows_llm_when_pressure_is_red_but_not_critical(self):
+        """Red pressure (non-critical) should still allow LLM usage."""
         mock_state = MemoryState(
             available_mb=4000,
             used_mb=12000,
@@ -98,25 +99,25 @@ class TestCanUseLLM:
 
         with patch("jarvis.generation.get_memory_controller") as mock_controller:
             mock_controller.return_value.get_state.return_value = mock_state
-            can_use, reason = can_use_llm()
+            allowed, reason = can_use_llm()
 
-        assert can_use is True
+        assert allowed is True
 
-    def test_returns_false_on_exception(self):
-        """Returns False when memory check fails (fail-safe: don't risk OOM)."""
+    def test_blocks_llm_when_memory_check_fails(self):
+        """When memory check fails, LLM is blocked as fail-safe."""
         with patch("jarvis.generation.get_memory_controller") as mock_controller:
-            mock_controller.side_effect = RuntimeError("Failed to get controller")
-            can_use, reason = can_use_llm()
+            mock_controller.side_effect = RuntimeError("Memory controller unavailable")
+            allowed, reason = can_use_llm()
 
-        assert can_use is False
+        assert allowed is False
         assert "failed" in reason.lower()
 
 
 class TestGetGenerationStatus:
-    """Tests for get_generation_status function."""
+    """Behavior: Returns system status for health monitoring."""
 
-    def test_returns_all_fields(self):
-        """Returns dictionary with all expected fields."""
+    def test_returns_status_dictionary_with_expected_fields(self):
+        """Status contains model state, generation capability, and memory info."""
         mock_state = MemoryState(
             available_mb=8000,
             used_mb=8000,
@@ -139,14 +140,17 @@ class TestGetGenerationStatus:
         assert "can_generate" in status
         assert "reason" in status
         assert "memory_mode" in status
+        assert status["model_loaded"] is True
+        assert status["can_generate"] is True
+        assert status["memory_mode"] == "full"
 
-    def test_handles_generator_exception(self):
-        """Returns model_loaded=False on generator exception."""
+    def test_reports_model_not_loaded_when_generator_unavailable(self):
+        """When generator fails, status reports model as not loaded."""
         with (
             patch("jarvis.generation.get_generator") as mock_gen,
             patch("jarvis.generation.get_memory_controller") as mock_mem,
         ):
-            mock_gen.side_effect = RuntimeError("No generator")
+            mock_gen.side_effect = RuntimeError("Generator not available")
             mock_mem.return_value.get_mode.return_value = MemoryMode.LITE
 
             status = get_generation_status()
@@ -155,10 +159,10 @@ class TestGetGenerationStatus:
 
 
 class TestGenerateWithFallback:
-    """Tests for generate_with_fallback function."""
+    """Behavior: Generates text with automatic fallback on failure."""
 
-    def test_uses_fallback_when_cannot_use_llm(self):
-        """Returns fallback when LLM cannot be used."""
+    def test_returns_error_response_when_llm_unavailable(self):
+        """When LLM is blocked, returns error response with reason."""
         request = GenerationRequest(
             prompt="Test prompt",
             context_documents=[],
@@ -174,8 +178,8 @@ class TestGenerateWithFallback:
         assert response.model_name == "fallback"
         assert response.text == ""
 
-    def test_calls_generator_when_can_use_llm(self):
-        """Calls generator when system is healthy."""
+    def test_returns_generated_text_when_llm_available(self):
+        """When LLM is healthy, returns generated content."""
         request = GenerationRequest(
             prompt="Test prompt",
             context_documents=[],
@@ -204,9 +208,10 @@ class TestGenerateWithFallback:
 
         assert response.text == "Generated text"
         assert response.finish_reason == "stop"
+        assert response.tokens_used == 10
 
-    def test_returns_fallback_on_generation_error(self):
-        """Returns fallback when generation fails."""
+    def test_returns_error_response_when_generation_fails(self):
+        """When generation throws exception, returns error response."""
         request = GenerationRequest(
             prompt="Test prompt",
             context_documents=[],
@@ -225,31 +230,34 @@ class TestGenerateWithFallback:
 
         assert response.finish_reason == "error"
         assert "Generation failed" in response.error
+        assert response.model_name == "fallback"
 
 
 class TestGenerateSummary:
-    """Tests for generate_summary function."""
+    """Behavior: Returns conversation summary with fallback when needed."""
 
-    def test_returns_fallback_when_cannot_use_llm(self):
-        """Returns fallback summary when LLM unavailable."""
+    def test_returns_fallback_when_llm_blocked(self):
+        """When LLM unavailable, returns fallback summary mentioning participant."""
         with patch("jarvis.generation.can_use_llm") as mock_check:
             mock_check.return_value = (False, "Memory low")
             summary, used_fallback = generate_summary(["msg1", "msg2"], "John")
 
         assert used_fallback is True
         assert "John" in summary
+        assert "Unable to generate summary" in summary
 
     def test_returns_fallback_for_empty_messages(self):
-        """Returns fallback for empty message list."""
+        """Empty message list returns simple fallback without calling LLM."""
         with patch("jarvis.generation.can_use_llm") as mock_check:
             mock_check.return_value = (True, "")
             summary, used_fallback = generate_summary([], "Jane")
 
         assert used_fallback is True
         assert "Jane" in summary
+        assert "No messages" in summary
 
-    def test_generates_summary_when_healthy(self):
-        """Generates summary when system is healthy."""
+    def test_returns_llm_summary_when_healthy(self):
+        """When healthy, returns LLM-generated summary."""
         mock_response = GenerationResponse(
             text="This is a summary of the conversation.",
             tokens_used=20,
@@ -272,15 +280,15 @@ class TestGenerateSummary:
         assert used_fallback is False
         assert summary == "This is a summary of the conversation."
 
-    def test_returns_fallback_on_error_response(self):
-        """Returns fallback when generation returns error."""
+    def test_returns_fallback_when_llm_returns_error(self):
+        """When LLM returns error response, falls back to default summary."""
         mock_response = GenerationResponse(
-            text="Fallback text",
+            text="",
             tokens_used=0,
             generation_time_ms=0,
             model_name="fallback",
-            used_template=True,
-            template_name="fallback",
+            used_template=False,
+            template_name=None,
             finish_reason="error",
             error="Generation failed",
         )
@@ -295,3 +303,4 @@ class TestGenerateSummary:
             summary, used_fallback = generate_summary(["msg"], "Alice")
 
         assert used_fallback is True
+        assert "Alice" in summary

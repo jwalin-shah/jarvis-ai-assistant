@@ -6,8 +6,8 @@
 
 import type { StreamTokenEvent } from "./client";
 
-/** Idle timeout before auto-cleaning a stale streaming request (90s for slow Apple Silicon) */
-const STREAM_IDLE_TIMEOUT = 90000;
+/** Idle timeout before auto-cleaning a stale streaming request (15s) */
+const STREAM_IDLE_TIMEOUT = 15000;
 
 /** Internal state for an active streaming request */
 export interface StreamingRequest {

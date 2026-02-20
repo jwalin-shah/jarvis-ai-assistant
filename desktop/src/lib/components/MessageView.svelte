@@ -34,6 +34,11 @@
   import { formatDate, getMessageDateString } from '../utils/date';
   import { getNavAction, isTypingInInput } from '../utils/keyboard-nav';
   import { formatParticipant } from '../db';
+  import {
+    recordSendAttempt,
+    recordSendFailure,
+    recordSendSuccess,
+  } from '../stores/reliability';
 
   // Panel visibility state
   let showDraftPanel = $state(false);
@@ -73,7 +78,7 @@
 
   // Compose state
   let sendingMessage = $state(false);
-  let composeAreaRef = $state<InstanceType<typeof ComposeArea> | null>(null);
+  let composeAreaRef = $state<{ focus: () => void; setValue: (text: string) => void } | null>(null);
 
   // Virtual scrolling configuration
   const ESTIMATED_MESSAGE_HEIGHT = 80;
@@ -274,6 +279,7 @@
   async function handleSendMessage(text: string, retryId?: string) {
     if (!conversationsStore.selectedConversation) return;
     sendingMessage = true;
+    recordSendAttempt();
 
     let optimisticId: string;
     if (retryId) {
@@ -318,6 +324,7 @@
 
       if (!response.ok) {
         await response.text();
+        recordSendFailure(`HTTP send failed: ${response.status}`);
         updateOptimisticMessage(optimisticId, {
           status: 'failed',
           error: `Send failed: ${response.status}`,
@@ -328,19 +335,29 @@
       const result = await response.json();
 
       if (result.success) {
+        recordSendSuccess();
         updateOptimisticMessage(optimisticId, { status: 'sent' });
         updateConversationAfterLocalSend(chatId, text);
 
         // Record feedback if this was derived from a draft
         if (lastDraftUsed && Date.now() - lastDraftUsed.timestamp < 300000) {
           const action = text.trim() === lastDraftUsed.text.trim() ? 'sent' : 'edited';
-          void jarvis.recordFeedback({
+          const feedbackPayload: {
+            action: 'sent' | 'edited';
+            suggestion_text: string;
+            chat_id: string;
+            context_messages: string[];
+            edited_text?: string;
+          } = {
             action,
             suggestion_text: lastDraftUsed.text,
             chat_id: chatId,
-            edited_text: action === 'edited' ? text : undefined,
             context_messages: conversationsStore.messages.slice(-5).map(m => m.text || '')
-          }).catch(() => {});
+          };
+          if (action === 'edited') {
+            feedbackPayload.edited_text = text;
+          }
+          void jarvis.recordFeedback(feedbackPayload).catch(() => {});
           lastDraftUsed = null;
         }
 
@@ -350,12 +367,14 @@
         // Safety timeout: auto-clear if watcher push doesn't arrive within 10s.
         setTimeout(() => removeOptimisticMessage(optimisticId), 10000);
       } else {
+        recordSendFailure(result.error || 'Send returned success=false');
         updateOptimisticMessage(optimisticId, {
           status: 'failed',
           error: result.error || 'Failed to send message',
         });
       }
     } catch (err) {
+      recordSendFailure(err instanceof Error ? err.message : 'Send threw unknown error');
       updateOptimisticMessage(optimisticId, {
         status: 'failed',
         error: 'Failed to send. Check Messages app permissions.',
@@ -564,9 +583,9 @@
       visibleEndIndex = MIN_VISIBLE_MESSAGES;
       virtualTopPadding = 0;
       virtualBottomPadding = 0;
-      // Auto-open AI drafts on chat focus so generation starts immediately.
-      prefetchedSuggestions = undefined;
-      showDraftPanel = true;
+      // Keep draft panel state or allow it to be driven by prefetchedSuggestions.
+      // We no longer explicitly force showDraftPanel = false here to allow 
+      // automatic generation to stay visible across switches if desired.
       if (oldChatId) {
         clearOptimisticMessages(oldChatId);
       }

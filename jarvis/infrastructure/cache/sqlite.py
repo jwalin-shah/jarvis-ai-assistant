@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import orjson
 import sqlite3
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar, cast
+
+import orjson
 
 from jarvis.infrastructure.cache.base import CacheBackend
 
@@ -50,7 +51,7 @@ class SQLiteBackend(CacheBackend):
             if row:
                 try:
                     return orjson.loads(row[0])
-                except json.JSONDecodeError:
+                except orjson.JSONDecodeError:
                     return None
             return None
 
@@ -60,10 +61,10 @@ class SQLiteBackend(CacheBackend):
         ttl = ttl if ttl is not None else self.default_ttl
         expires_at = time.time() + ttl
         created_at = time.time()
-        tags_json = orjson.dumps(tags or []).decode('utf-8')
+        tags_json = orjson.dumps(tags or []).decode("utf-8")
 
         try:
-            value_json = orjson.dumps(value).decode('utf-8')
+            value_json = orjson.dumps(value).decode("utf-8")
         except (TypeError, ValueError):
             return
 
@@ -91,10 +92,10 @@ class SQLiteBackend(CacheBackend):
             to_delete = []
             for key, tags_json in rows:
                 try:
-                    tags = json.loads(tags_json)
+                    tags = orjson.loads(tags_json)
                     if tag in tags:
                         to_delete.append(key)
-                except json.JSONDecodeError:
+                except orjson.JSONDecodeError:
                     continue
 
             if to_delete:

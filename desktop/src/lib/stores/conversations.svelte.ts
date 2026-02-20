@@ -101,6 +101,7 @@ class ConversationsState {
   pinnedChats = $state(new Set<string>());
   archivedChats = $state(new Set<string>());
   lastKnownMessageDates = $state(new Map<string, string>());
+  lastConversationMaxDate = $state<string | null>(null);
   isWindowFocused = $state(true);
   optimisticMessages = $state<OptimisticMessage[]>([]);
   prefetchedDraft = $state<{ chatId: string; suggestions: DraftSuggestion[] } | null>(null);
@@ -373,17 +374,22 @@ export async function fetchConversations(isPolling = false) {
     conversationsStore.loading = true;
     conversationsStore.error = null;
   }
-  // Track initial load vs polling for UI distinction (UX-04)
   conversationsStore.isPolling = isPolling;
   conversationsStore.connectionStatus = "connecting";
 
   try {
     let conversations: Conversation[] = [];
+    const existing = conversationsStore.conversations;
+    const sinceDate = isPolling && existing.length > 0 
+      ? conversationsStore.lastConversationMaxDate 
+      : null;
     
     if (isTauri) {
       if (isDirectAccessAvailable()) {
-        // Direct SQLite is ~50ms vs 1-3s through socket RPC
-        conversations = await getConversationsDirect(CONVERSATIONS_PAGE_SIZE);
+        conversations = await getConversationsDirect(
+          CONVERSATIONS_PAGE_SIZE,
+          sinceDate ? new Date(sinceDate) : undefined
+        );
       } else {
         try {
           const result = await jarvis.call<{ conversations: Conversation[] }>("list_conversations", {
@@ -398,14 +404,28 @@ export async function fetchConversations(isPolling = false) {
       conversations = await api.getConversations();
     }
 
-    // Detect new messages
+    if (isPolling && existing.length > 0 && conversations.length > 0) {
+      const existingMap = new Map(existing.map(c => [c.chat_id, c]));
+      for (const conv of conversations) {
+        existingMap.set(conv.chat_id, conv);
+      }
+      const merged = Array.from(existingMap.values());
+      merged.sort((a, b) => b.last_message_date.localeCompare(a.last_message_date));
+      conversations = merged.slice(0, CONVERSATIONS_PAGE_SIZE);
+    }
+
+    let maxDate = conversationsStore.lastConversationMaxDate;
     for (const conv of conversations) {
       const lastKnown = conversationsStore.lastKnownMessageDates.get(conv.chat_id);
       if (lastKnown && conv.last_message_date > lastKnown && conv.chat_id !== conversationsStore.selectedChatId) {
         markConversationAsNew(conv.chat_id);
       }
       conversationsStore.lastKnownMessageDates.set(conv.chat_id, conv.last_message_date);
+      if (!maxDate || conv.last_message_date > maxDate) {
+        maxDate = conv.last_message_date;
+      }
     }
+    conversationsStore.lastConversationMaxDate = maxDate;
 
     conversationsStore.conversations = conversations;
     conversationsStore.loading = false;
@@ -454,17 +474,14 @@ export async function selectConversation(chatId: string) {
   // Track which chat the prefetch is for so we can discard stale results (FE-04)
   pendingPrefetchChatId = chatId;
 
-  // Update focused chat synchronously BEFORE triggering any generation
-  // This ensures stale generation gets cancelled immediately
-  jarvis.call("prefetch_focus", { chat_id: chatId }).catch(() => {});
-
   // Background prefetch - fire and forget, but guard against stale results
+  // Request 3 suggestions for variety
   void jarvis.call<{
     status: string;
     prefetched?: boolean;
     draft?: { suggestions: DraftSuggestion[] };
     error?: string;
-  }>("prefetch_focus", { chat_id: chatId }).then((result) => {
+  }>("prefetch_focus", { chat_id: chatId, num_suggestions: 3 }).then((result) => {
     // Only apply if the user is still on the same chat AND this is still the
     // active prefetch (not superseded by a newer selectConversation call) (FE-04)
     if (
@@ -746,12 +763,31 @@ export async function initializePolling(): Promise<() => void> {
 
   const unlistenNewMsg = jarvis.on<NewMessageEvent>("new_message", handleNewMessagePush);
 
+  // Listen for prefetch completion to show automatic suggestions (FE-04)
+  const unlistenPrefetch = jarvis.on<{
+    type: string;
+    chat_id: string;
+    result: { suggestions: DraftSuggestion[] };
+  }>("prefetch_complete", (data) => {
+    if (
+      data.type === "draft_reply" &&
+      data.chat_id === conversationsStore.selectedChatId &&
+      data.result?.suggestions?.length
+    ) {
+      conversationsStore.prefetchedDraft = {
+        chatId: data.chat_id,
+        suggestions: data.result.suggestions,
+      };
+    }
+  });
+
   return () => {
     stopConversationPolling();
     stopMessagePolling();
     window.removeEventListener("focus", handleFocus);
     window.removeEventListener("blur", handleBlur);
     unlistenNewMsg();
+    unlistenPrefetch();
   };
 }
 

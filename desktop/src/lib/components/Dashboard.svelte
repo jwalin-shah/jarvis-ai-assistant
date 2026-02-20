@@ -8,6 +8,7 @@
     stopMetricsPolling,
     type MetricsRequest,
   } from "../stores/metrics";
+  import { reliabilityStore } from "../stores/reliability";
 
   type View = "messages" | "dashboard" | "health" | "settings" | "templates" | "network";
   let { onNavigate = (_view: View) => {} }: { onNavigate?: (view: View) => void } = $props();
@@ -70,8 +71,20 @@
       context_search: "search",
       generation: "generate",
     };
-    const key = map[phase] || phase;
-    return phaseColors[key] || phaseColors.overhead;
+    const key = map[phase] ?? phase;
+    return phaseColors[key] ?? phaseColors.overhead ?? "#8e8e93";
+  }
+
+  function formatRate(successes: number, attempts: number): string {
+    if (attempts <= 0) return "N/A";
+    return `${((successes / attempts) * 100).toFixed(1)}%`;
+  }
+
+  function percentile(values: number[], p: number): number {
+    if (values.length === 0) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const index = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+    return sorted[index] ?? 0;
   }
 </script>
 
@@ -146,6 +159,36 @@
             Grant access in System Settings
           {/if}
         </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="reliability-section">
+    <h2>Reliability</h2>
+    <div class="metric-cards">
+      <div class="metric-card">
+        <span class="metric-label">Send Success</span>
+        <span class="metric-value">
+          {formatRate($reliabilityStore.send_successes, $reliabilityStore.send_attempts)}
+        </span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Draft Success</span>
+        <span class="metric-value">
+          {formatRate($reliabilityStore.draft_successes, $reliabilityStore.draft_attempts)}
+        </span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Draft P95</span>
+        <span class="metric-value">
+          {formatLatency(percentile($reliabilityStore.draft_latencies_ms, 95))}
+        </span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Last Failure</span>
+        <span class="metric-value reliability-failure">
+          {$reliabilityStore.last_failure_reason || "None"}
+        </span>
       </div>
     </div>
   </div>
@@ -388,6 +431,30 @@
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 20px;
+  }
+
+  .reliability-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .reliability-section h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+
+  .reliability-failure {
+    display: block;
+    font-size: 12px;
+    line-height: 1.3;
+    text-align: left;
+    white-space: normal;
+    max-height: 3.4em;
+    overflow: hidden;
   }
 
   .metrics-section h2 {

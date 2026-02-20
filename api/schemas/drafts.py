@@ -9,6 +9,28 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# Allowed tones for reply instructions
+ALLOWED_REPLY_TONES = {
+    "accept",
+    "accept enthusiastically",
+    "decline",
+    "politely decline",
+    "ask",
+    "ask for more details",
+    "brief",
+    "be brief",
+    "short",
+    "concise",
+    "formal",
+    "be formal",
+    "professional",
+    "casual",
+    "be casual",
+    "friendly",
+    "enthusiastic",
+    "be enthusiastic",
+}
+
 
 class SendMessageRequest(BaseModel):
     """Request to send an iMessage.
@@ -259,14 +281,30 @@ class DraftReplyRequest(BaseModel):
 
     chat_id: str = Field(
         ...,
+        min_length=1,
+        max_length=255,
         description="Conversation ID to generate replies for",
         examples=["chat123456789"],
     )
     instruction: str | None = Field(
         default=None,
-        description="Optional instruction for reply tone/content",
+        max_length=200,
+        description="Optional instruction for reply tone/content (max 200 chars)",
         examples=["accept enthusiastically", "politely decline", "ask for more details"],
     )
+
+    @field_validator("instruction")
+    @classmethod
+    def validate_instruction(cls, v: str | None) -> str | None:
+        """Validate instruction length and content."""
+        if v is None:
+            return v
+        # Strip and validate
+        v = v.strip()
+        if len(v) > 200:
+            raise ValueError("instruction must not exceed 200 characters")
+        return v
+
     num_suggestions: int = Field(
         default=3,
         ge=1,
@@ -353,6 +391,8 @@ class DraftSummaryRequest(BaseModel):
 
     chat_id: str = Field(
         ...,
+        min_length=1,
+        max_length=255,
         description="Conversation ID to summarize",
         examples=["chat123456789"],
     )
@@ -452,10 +492,13 @@ class RoutedReplyRequest(BaseModel):
 
     chat_id: str = Field(
         ...,
+        min_length=1,
+        max_length=255,
         description="Conversation ID to generate reply for",
     )
     last_message: str | None = Field(
         default=None,
+        max_length=10000,
         description="Override last message (uses latest from chat if not provided)",
     )
     instruction: str | None = Field(

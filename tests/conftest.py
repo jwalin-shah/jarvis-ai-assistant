@@ -6,7 +6,6 @@ to run on non-macOS platforms.
 
 import platform
 import sys
-import types
 from functools import lru_cache
 from unittest.mock import MagicMock
 
@@ -52,22 +51,21 @@ def _mock_mlx_modules():
     basic tests to run on other platforms (Linux, Intel Mac, Windows).
     Note: Tests that require sentence_transformers will be skipped.
     """
-    # Create mock for top-level mlx package (required for mlx.core to work)
-    mock_mlx = types.ModuleType("mlx")
-    mock_mlx.__path__ = []  # Make it a package
-
-    # Create mock for mlx.core
     mock_mx = MagicMock()
     mock_mx.metal = MagicMock()
     mock_mx.metal.clear_cache = MagicMock()
 
-    # Create mock for mlx.nn
     mock_nn = MagicMock()
     mock_nn.Module = MagicMock
     mock_nn.Embedding = MagicMock
     mock_nn.LayerNorm = MagicMock
     mock_nn.Linear = MagicMock
     mock_nn.gelu = MagicMock
+
+    mock_mlx = MagicMock()
+    mock_mlx.__path__ = []
+    mock_mlx.core = mock_mx
+    mock_mlx.nn = mock_nn
 
     mock_mlx_lm = MagicMock()
     mock_mlx_lm.load = MagicMock(return_value=(MagicMock(), MagicMock()))
@@ -76,8 +74,6 @@ def _mock_mlx_modules():
     mock_sample_utils = MagicMock()
     mock_sample_utils.make_sampler = MagicMock(return_value=MagicMock())
 
-    # Install mocks in sys.modules before any imports
-    # Need to mock 'mlx' top-level for 'mlx.core' to be importable
     sys.modules["mlx"] = mock_mlx
     sys.modules["mlx.core"] = mock_mx
     sys.modules["mlx.nn"] = mock_nn

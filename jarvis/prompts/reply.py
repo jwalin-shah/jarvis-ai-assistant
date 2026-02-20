@@ -234,13 +234,17 @@ def build_threaded_reply_prompt(
     tone: Literal["casual", "professional", "mixed"] = "casual",
 ) -> str:
     """Build a prompt for thread-aware reply generation."""
+    from jarvis.prompts.utils import format_examples
+
     c = _build_threaded_components(thread_context, config, instruction)
+    examples_str = format_examples(c.examples)
 
     prompt = THREADED_REPLY_PROMPT.template.format(
         thread_topic=c.topic_name.replace("_", " ").title(),
         thread_state=c.state_name.replace("_", " ").title(),
         user_role=c.user_role.replace("_", " ").title(),
         participants_info=c.participants_info,
+        examples=examples_str,
         context=c.context,
         response_style=config.response_style,
         length_guidance=c.length_guidance,

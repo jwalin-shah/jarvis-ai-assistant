@@ -95,13 +95,18 @@ class ContextService:
             ]
             if any(k in cname_lower for k in bot_keywords):
                 return True
-        
+
         # Check if the chat ID or identifier contains bot markers
         if identifier and any(k in identifier.lower() for k in ["info", "united", "reply"]):
             return True
 
         # 4. Check for alphanumeric sender IDs (Business handles like "INFO", "UNITED")
-        if identifier and not identifier.isdigit() and "+" not in identifier and "@" not in identifier:
+        if (
+            identifier
+            and not identifier.isdigit()
+            and "+" not in identifier
+            and "@" not in identifier
+        ):
             # If it's a short alphanumeric string without typical phone/email markers
             if len(identifier) < 15:
                 return True
@@ -153,12 +158,12 @@ class ContextService:
             if not recent_chronological and chronological:
                 # If nothing in last 24h, just take the last 3 messages anyway
                 recent_chronological = chronological[-3:]
-            
+
             # Respect limit: only take the most recent messages up to 'limit'
             if len(recent_chronological) > limit:
                 recent_chronological = recent_chronological[-limit:]
 
-            last_date: date | None = None
+            last_msg_date: Any = None
 
             for msg in recent_chronological:
                 sender = "You" if msg.is_from_me else (msg.sender_name or msg.sender or "Contact")
@@ -169,15 +174,21 @@ class ContextService:
 
                 # Add date header if date changed
                 msg_date = msg.date.date()
-                if msg_date != last_date:
+                if msg_date != last_msg_date:
                     if current_sender is not None:
                         context_turns.append(f"{current_sender}: {' '.join(current_text_parts)}")
                         current_sender = None
                         current_text_parts = []
-                    
-                    date_label = "Today" if msg_date == now.date() else "Yesterday" if msg_date == (now.date() - timedelta(days=1)) else msg_date.strftime("%A, %b %d")
+
+                    date_label = (
+                        "Today"
+                        if msg_date == now.date()
+                        else "Yesterday"
+                        if msg_date == (now.date() - timedelta(days=1))
+                        else msg_date.strftime("%A, %b %d")
+                    )
                     context_turns.append(f"--- {date_label} ---")
-                    last_date = msg_date
+                    last_msg_date = msg_date
 
                 # Add time gap marker if > 6 hours
                 if last_msg_time and (msg.date - last_msg_time).total_seconds() > 21600:
@@ -186,8 +197,17 @@ class ContextService:
                         current_sender = None
                         current_text_parts = []
 
-                    gap_hours = int((msg.date - last_msg_time).total_seconds() / 3600)
-                    context_turns.append(f"({gap_hours} hours later)")
+                    gap_seconds = (msg.date - last_msg_time).total_seconds()
+                    if gap_seconds > 86400:
+                        gap_days = int(gap_seconds / 86400)
+                        gap_hours = int((gap_seconds % 86400) / 3600)
+                        if gap_hours > 0:
+                            context_turns.append(f"({gap_days} days, {gap_hours} hours later)")
+                        else:
+                            context_turns.append(f"({gap_days} days later)")
+                    else:
+                        gap_hours = int(gap_seconds / 3600)
+                        context_turns.append(f"({gap_hours} hours later)")
 
                 timestamp_str = msg.date.strftime("%H:%M")
 
@@ -206,7 +226,7 @@ class ContextService:
 
             return context_turns, participants
 
-        except Exception as e:
+        except (OSError, ValueError, AttributeError) as e:
             logger.warning("Failed to fetch conversation context: %s", e)
             return [], set()
 
@@ -217,7 +237,7 @@ class ContextService:
                 from jarvis.search.vec_search import get_vec_searcher
 
                 self._vec_searcher = get_vec_searcher(self._db)
-            except Exception:  # nosec B110
+            except (ImportError, OSError, ValueError):  # nosec B110
                 pass
         return self._vec_searcher
 
@@ -276,7 +296,7 @@ class ContextService:
                                 top_k=3,
                             )
                         return exchanges
-            except Exception:  # nosec B110
+            except (ImportError, OSError, ValueError):  # nosec B110
                 pass  # Fall through to standard search
 
             # Standard search path (no segment data)
@@ -317,7 +337,7 @@ class ContextService:
                 )
 
             return exchanges
-        except Exception as e:
+        except (OSError, ValueError, AttributeError) as e:
             logger.warning("Chunk search failed: %s", e)
             return []
 

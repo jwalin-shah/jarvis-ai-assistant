@@ -37,6 +37,7 @@ from jarvis.interfaces.desktop.constants import (
 )
 from jarvis.interfaces.desktop.protocol import (
     error_response,
+    send_stream_error,
     send_stream_response,
     send_stream_token,
     success_response,
@@ -119,6 +120,7 @@ class JarvisSocketServer:
         self._rate_limiter = RateLimiter(max_requests=100, window_seconds=1.0)
         self._focused_chat_id: str | None = None
         self._current_generation_request_id: int = 0
+        self._loop: asyncio.AbstractEventLoop | None = None
 
         self._register_methods()
 
@@ -157,13 +159,17 @@ class JarvisSocketServer:
 
     def set_focused_chat(self, chat_id: str | None) -> None:
         """Track the currently focused chat for generation prioritization."""
-        self._focused_chat_id = chat_id
+        if self._focused_chat_id != chat_id:
+            logger.debug(f"Focus changed: {self._focused_chat_id} -> {chat_id}")
+            self._focused_chat_id = chat_id
+            # Increment global generation ID to invalidate all in-flight
+            # generations for the OLD chat
+            self._current_generation_request_id += 1
 
     def start_generation(self, chat_id: str) -> bool:
         """Start generation for a chat. Returns False if stale (user switched chats)."""
         if self._focused_chat_id != chat_id:
             return False
-        self._current_generation_request_id += 1
         return True
 
     def is_generation_stale(self, chat_id: str) -> bool:
@@ -261,8 +267,19 @@ class JarvisSocketServer:
     ) -> None:
         await send_stream_response(writer, request_id, result)
 
+    async def send_stream_error(
+        self,
+        writer: asyncio.StreamWriter | WebSocketWriter,
+        request_id: Any,
+        code: int,
+        message: str,
+        data: Any = None,
+    ) -> None:
+        await send_stream_error(writer, request_id, code, message, data)
+
     async def start(self) -> None:
         """Start the socket server without blocking."""
+        self._loop = asyncio.get_running_loop()
         SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if SOCKET_PATH.exists():
             SOCKET_PATH.unlink()
@@ -322,11 +339,39 @@ class JarvisSocketServer:
         if self._enable_prefetch:
             try:
                 from jarvis.prefetch import get_prefetch_manager
+                from jarvis.prefetch.executor import get_executor
 
                 self._prefetch_manager = get_prefetch_manager()
                 if self._preload_models:
                     self._prefetch_manager._warmup_on_start = False
                 self._prefetch_manager.start()
+
+                # Register completion callback to broadcast results
+                executor = get_executor()
+
+                def _on_prefetch_complete(prediction: Any, result: dict[str, Any]) -> None:
+                    if not self._running:
+                        return
+
+                    # Broadcast completion event
+                    chat_id = prediction.params.get("chat_id")
+                    if not chat_id:
+                        return
+
+                    payload = {
+                        "type": prediction.type.value,
+                        "key": prediction.key,
+                        "chat_id": chat_id,
+                        "result": result,
+                    }
+                    if self._loop and self._loop.is_running():
+                        asyncio.run_coroutine_threadsafe(
+                            self.broadcast("prefetch_complete", payload),
+                            self._loop,
+                        )
+
+                executor.on_task_complete = _on_prefetch_complete
+
             except Exception as e:
                 logger.warning(f"Prefetch manager failed to start: {e}")
 
@@ -335,8 +380,10 @@ class JarvisSocketServer:
         if self._server is None:
             await self.start()
 
-        async with self._server:
-            await self._server.serve_forever()
+        server = self._server
+        assert server is not None
+        async with server:
+            await server.serve_forever()
 
     async def _preload_models_async(self) -> None:
         try:
@@ -346,7 +393,6 @@ class JarvisSocketServer:
                 self._preload_embeddings,
                 self._preload_cross_encoder,
                 self._preload_vec_index,
-                self._preload_category_classifier,
             ]:
                 try:
                     with timed_operation(logger, f"model.preload.{loader.__name__}"):
@@ -670,10 +716,17 @@ class JarvisSocketServer:
         start_time = time.perf_counter()
         try:
             if stream_requested and supports_streaming and writer:
-                if isinstance(params, dict):
-                    await handler(_writer=writer, _request_id=request_id, **params)
-                else:
-                    await handler(_writer=writer, _request_id=request_id)
+                try:
+                    if isinstance(params, dict):
+                        await handler(_writer=writer, _request_id=request_id, **params)
+                    else:
+                        await handler(_writer=writer, _request_id=request_id)
+                except JsonRpcError as e:
+                    await self.send_stream_error(writer, request_id, e.code, e.message, e.data)
+                except Exception as e:
+                    logger.exception(f"Error in streaming handler {method}")
+                    await self.send_stream_error(writer, request_id, INTERNAL_ERROR, str(e))
+
                 _record_rpc_latency(method, (time.perf_counter() - start_time) * 1000)
                 return None
             else:

@@ -172,8 +172,6 @@ class RoutingConfig(BaseModel):
     ab_test_group: str = Field(default="control")
     ab_test_thresholds: dict[str, dict[str, float]] = Field(default_factory=dict)
     adaptive: AdaptiveThresholdConfig = Field(default_factory=AdaptiveThresholdConfig)
-    # DEPRECATED: Use quick_reply_threshold instead (renamed for clarity)
-    template_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class RateLimitConfig(BaseModel):
@@ -423,7 +421,6 @@ class NormalizationProfile(BaseModel):
     ner_enabled: bool = True
     ner_model: str = "en_core_web_trf"
     expand_slang: bool = False
-    spell_check: bool = False
     filter_non_english: bool = False
     min_length: int = Field(default=3, ge=0, le=1000)
     max_length: int = Field(default=500, ge=1, le=5000)
@@ -433,7 +430,6 @@ def _normalization_profile(
     *,
     normalize_emojis: bool = False,
     ner_enabled: bool = False,
-    spell_check: bool = False,
     min_length: int = 1,
     max_length: int = 1000,
     **kwargs: Any,
@@ -450,7 +446,6 @@ def _normalization_profile(
         filter_non_english=False,
         normalize_emojis=normalize_emojis,
         ner_enabled=ner_enabled,
-        spell_check=spell_check,
         min_length=min_length,
         max_length=max_length,
         **kwargs,
@@ -757,7 +752,6 @@ class NormalizationConfig(BaseModel):
         default_factory=lambda: _normalization_profile(
             normalize_emojis=False,  # Keep original emojis (LLM understands them)
             ner_enabled=False,
-            spell_check=False,  # Disabled: mangles entity names (mom→mon, Xbox→box)
             min_length=1,
             max_length=2000,
         )
@@ -766,7 +760,6 @@ class NormalizationConfig(BaseModel):
         default_factory=lambda: _normalization_profile(
             normalize_emojis=True,
             ner_enabled=True,
-            spell_check=True,
             min_length=1,
             max_length=1000,
         )
@@ -775,7 +768,6 @@ class NormalizationConfig(BaseModel):
         default_factory=lambda: _normalization_profile(
             normalize_emojis=True,
             ner_enabled=False,
-            spell_check=True,
             min_length=1,
             max_length=2000,
         )
@@ -784,7 +776,6 @@ class NormalizationConfig(BaseModel):
         default_factory=lambda: _normalization_profile(
             normalize_emojis=True,
             ner_enabled=True,
-            spell_check=False,
             min_length=3,
             max_length=1000,
         )
@@ -834,7 +825,7 @@ class JarvisConfig(BaseModel):
 
     Attributes:
         config_version: Schema version for migration tracking.
-        model_path: HuggingFace model path for MLX inference (deprecated, use model.model_id).
+        model_path: HuggingFace model path (synced with model.model_id on save/load).
         memory_thresholds: Memory thresholds for mode selection.
         imessage_default_limit: Default limit for iMessage search (deprecated).
         ui: UI preferences for the Tauri frontend.
@@ -993,10 +984,10 @@ def _migrate_v7_to_v8(data: dict[str, Any]) -> dict[str, Any]:
     if "template_similarity_threshold" in data:
         del data["template_similarity_threshold"]
 
-    # Also migrate template_threshold to quick_reply_threshold
-    if "template_threshold" in routing and "quick_reply_threshold" not in routing:
-        logger.info("Migrating routing.template_threshold to routing.quick_reply_threshold")
-        routing["quick_reply_threshold"] = routing["template_threshold"]
+    # Also remove deprecated template_threshold if present (migrated to quick_reply_threshold)
+    if "template_threshold" in routing:
+        if "quick_reply_threshold" not in routing:
+            routing["quick_reply_threshold"] = routing["template_threshold"]
         del routing["template_threshold"]
 
     return data

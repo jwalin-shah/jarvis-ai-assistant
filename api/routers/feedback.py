@@ -566,7 +566,7 @@ def record_feedback(request: RecordFeedbackRequest) -> RecordFeedbackResponse:
                 context_messages=request.context_messages,
                 user_messages=None,  # Could be added to request if needed
             )
-        except Exception:
+        except (ImportError, AttributeError, ValueError, RuntimeError):
             logger.exception("Error computing evaluation")
 
     # Record feedback

@@ -10,9 +10,8 @@ All endpoints require Full Disk Access permission to read the iMessage database.
 
 import asyncio
 from datetime import datetime
-from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from starlette.concurrency import run_in_threadpool
 
 from api.dependencies import get_imessage_reader
@@ -219,6 +218,10 @@ async def list_conversations(
                 }
             },
         },
+        400: {
+            "description": "Invalid chat_id parameter",
+            "model": ErrorResponse,
+        },
         403: {
             "description": "Full Disk Access not granted",
             "model": ErrorResponse,
@@ -235,8 +238,14 @@ async def list_conversations(
 )
 @limiter.limit(RATE_LIMIT_READ)
 async def get_messages(
-    chat_id: str,
     request: Request,
+    chat_id: str = Path(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="The unique conversation identifier",
+        examples=["chat123456789"],
+    ),
     limit: int = Query(
         default=100,
         ge=1,
@@ -492,7 +501,7 @@ async def search_messages(
             "content": {"application/json": {"example": {"success": True, "error": None}}},
         },
         400: {
-            "description": "Invalid request (missing recipient for individual chat)",
+            "description": "Invalid request (missing recipient or invalid chat_id)",
             "model": ErrorResponse,
         },
         408: {
@@ -507,9 +516,15 @@ async def search_messages(
 )
 @limiter.limit(RATE_LIMIT_WRITE)
 async def send_message(
-    chat_id: str,
-    message_request: SendMessageRequest,
     request: Request,
+    message_request: SendMessageRequest,
+    chat_id: str = Path(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="The unique conversation identifier",
+        examples=["chat123456789"],
+    ),
 ) -> SendMessageResponse:
     """Send a text message to a conversation.
 
@@ -616,7 +631,7 @@ async def send_message(
             "content": {"application/json": {"example": {"success": True, "error": None}}},
         },
         400: {
-            "description": "Invalid request (missing recipient for individual chat)",
+            "description": "Invalid request (missing recipient or invalid chat_id)",
             "model": ErrorResponse,
         },
         408: {
@@ -631,9 +646,15 @@ async def send_message(
 )
 @limiter.limit(RATE_LIMIT_WRITE)
 async def send_attachment(
-    chat_id: str,
-    attachment_request: SendAttachmentRequest,
     request: Request,
+    attachment_request: SendAttachmentRequest,
+    chat_id: str = Path(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="The unique conversation identifier",
+        examples=["chat123456789"],
+    ),
 ) -> SendMessageResponse:
     """Send a file attachment to a conversation.
 

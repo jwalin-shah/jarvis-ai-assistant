@@ -7,6 +7,7 @@ Uses the all-MiniLM-L6-v2 model for encoding messages and queries,
 then finds matches by cosine similarity rather than keyword matching.
 """
 
+import sqlite3
 import threading
 from datetime import datetime
 from typing import Any
@@ -401,7 +402,7 @@ async def get_cache_stats() -> CacheStatsResponse:
             try:
                 row = conn.execute("SELECT COUNT(*) as cnt FROM vec_messages").fetchone()
                 count = row["cnt"] if row else 0
-            except Exception:
+            except (OSError, sqlite3.Error):
                 count = 0
             # Estimate: each int8 embedding is 384 bytes + metadata
             size_bytes = count * 400
@@ -454,7 +455,7 @@ async def clear_cache() -> dict[str, str]:
                     "embedding_count": count,
                     "size_mb": round(size_bytes / (1024 * 1024), 2),
                 }
-            except Exception:
+            except (OSError, sqlite3.Error):
                 return {"embedding_count": 0, "size_mb": 0.0}
 
     stats_before = await run_in_threadpool(_clear_cache)

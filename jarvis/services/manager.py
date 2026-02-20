@@ -127,7 +127,10 @@ class ServiceManager:
                             f"Service {service_name} failed to become healthy within {timeout}s"
                         )
 
-                except Exception as e:
+                except ServiceError:
+                    # Re-raise service errors as-is
+                    raise
+                except (OSError, RuntimeError, TimeoutError) as e:
                     if service.config.optional:
                         logger.warning(f"Optional service {service_name} failed to start: {e}")
                         continue
@@ -135,7 +138,10 @@ class ServiceManager:
                     logger.error(f"Failed to start service {service_name}: {e}")
                     # Stop any services we started
                     self._stop_started_services(start_order[: start_order.index(service_name) + 1])
-                    raise
+                    raise ServiceError(
+                        f"Failed to start service {service_name}",
+                        cause=e,
+                    ) from e
 
             logger.info("All services started successfully")
 
@@ -154,7 +160,7 @@ class ServiceManager:
                 if service_name in self.services:
                     try:
                         self.services[service_name].stop()
-                    except Exception as e:
+                    except (OSError, RuntimeError) as e:
                         logger.error(f"Error stopping service {service_name}: {e}")
 
             logger.info("All services stopped")
@@ -230,7 +236,7 @@ class ServiceManager:
             if name in self.services:
                 try:
                     self.services[name].stop()
-                except Exception as e:
+                except (OSError, RuntimeError) as e:
                     logger.error(f"Error stopping {name} during cleanup: {e}")
 
     def __enter__(self) -> ServiceManager:

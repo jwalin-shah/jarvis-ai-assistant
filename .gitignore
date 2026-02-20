@@ -335,3 +335,6 @@ models/template_defaults_backup.py
 models/template_defaults_v2.py
 evals/optimized_reply.json
 jarvis_auto_context/
+
+# Training cache files (large, generated)
+data/category_training/samsum_cache/

@@ -93,3 +93,39 @@ async def send_stream_response(
     else:
         writer.write(response.encode() + b"\n")
         await writer.drain()
+
+
+async def send_stream_error(
+    writer: asyncio.StreamWriter | WebSocketWriter,
+    request_id: Any,
+    code: int,
+    message: str,
+    data: Any = None,
+) -> None:
+    """Send an error notification during streaming.
+
+    Args:
+        writer: Client stream writer
+        request_id: Original request ID
+        code: Error code
+        message: Error message
+        data: Optional error data
+    """
+    notification = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "method": "stream.error",
+            "params": {
+                "request_id": request_id,
+                "code": code,
+                "message": message,
+                "data": data,
+            },
+        }
+    )
+    if isinstance(writer, WebSocketWriter):
+        writer.write(notification.encode())
+        await writer.drain()
+    else:
+        writer.write(notification.encode() + b"\n")
+        await writer.drain()

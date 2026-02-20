@@ -126,10 +126,8 @@ def _check_model_loaded(model_id: str) -> bool:
             return False
         # Check if loaded model matches the requested model_id
         config = get_config()
-        return config.model_path == model_id
-    except (ImportError, AttributeError):
-        return False
-    except Exception:
+        return config.model.model_id == model_id
+    except (ImportError, AttributeError, RuntimeError):
         return False
 
 
@@ -140,9 +138,7 @@ def _check_imessage_access() -> bool:
         reader = ChatDBReader()
         result = reader.check_access()
         return result
-    except (sqlite3.Error, PermissionError, FileNotFoundError):
-        return False
-    except Exception:
+    except (sqlite3.Error, PermissionError, FileNotFoundError, OSError):
         return False
     finally:
         if reader is not None:
@@ -151,9 +147,34 @@ def _check_imessage_access() -> bool:
 
 def _get_system_info() -> SystemInfo:
     """Get current system information."""
-    memory = psutil.virtual_memory()
-    system_ram_gb = memory.total / (1024**3)
-    current_usage_gb = memory.used / (1024**3)
+    import platform
+    import subprocess
+
+    system_ram_gb = 0.0
+
+    # Try sysctl for macOS first (most reliable for total physical memory)
+    if platform.system() == "Darwin":
+        try:
+            cmd = ["sysctl", "-n", "hw.memsize"]
+            mem_bytes = int(subprocess.check_output(cmd).strip())
+            system_ram_gb = mem_bytes / (1024**3)
+        except (subprocess.SubprocessError, OSError, ValueError) as e:
+            logger.debug(f"sysctl memory check failed: {e}")
+
+    # Fallback to psutil if sysctl failed or not on macOS
+    if system_ram_gb == 0.0:
+        try:
+            memory = psutil.virtual_memory()
+            system_ram_gb = memory.total / (1024**3)
+        except (OSError, AttributeError) as e:
+            logger.warning(f"psutil memory check failed: {e}")
+
+    # Get current usage
+    try:
+        memory = psutil.virtual_memory()
+        current_usage_gb = memory.used / (1024**3)
+    except (OSError, AttributeError):
+        current_usage_gb = 0.0
 
     # Check model status
     model_loaded = False
@@ -165,7 +186,7 @@ def _get_system_info() -> SystemInfo:
         if generator._model is not None:  # type: ignore[attr-defined]
             model_loaded = True
             model_memory_gb = generator.config.estimated_memory_mb / 1024
-    except Exception as e:
+    except (ImportError, AttributeError, RuntimeError) as e:
         logger.debug(f"Model memory check failed: {e}")
 
     return SystemInfo(
@@ -361,7 +382,6 @@ async def update_settings(
                 status_code=400, detail=f"Unknown model: {settings_request.model_id}"
             )
         config.model.model_id = spec.id
-        config.model_path = spec.path
         config_changed = True
 
     # Update generation settings in main runtime config (source of truth)
@@ -619,7 +639,7 @@ async def download_model(model_id: str, request: Request) -> DownloadStatus:
             status="completed",
             progress=100.0,
         )
-    except Exception as e:
+    except (OSError, RuntimeError, ImportError) as e:
         logger.exception(f"Failed to download model {model_id}")
         return DownloadStatus(
             model_id=model_id,
@@ -731,9 +751,9 @@ async def activate_model(model_id: str, request: Request) -> ActivateResponse:
         )
 
     try:
-        # Update config with the HuggingFace path
+        # Update config with the model ID
         config = get_config()
-        config.model_path = spec.path
+        config.model.model_id = spec.id
         save_config(config)
 
         # Reset generator to force reload with new model
@@ -745,7 +765,7 @@ async def activate_model(model_id: str, request: Request) -> ActivateResponse:
             success=True,
             model_id=spec.id,
         )
-    except Exception as e:
+    except (OSError, RuntimeError, ImportError, ValueError) as e:
         logger.exception(f"Failed to activate model {model_id}")
         return ActivateResponse(
             success=False,
