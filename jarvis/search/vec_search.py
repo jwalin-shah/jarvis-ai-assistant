@@ -22,7 +22,6 @@ Usage:
 
 from __future__ import annotations
 
-import orjson
 import logging
 import threading
 from dataclasses import dataclass
@@ -30,6 +29,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import orjson
 
 from jarvis.db import JarvisDB, get_db
 from jarvis.embedding_adapter import get_embedder
@@ -220,14 +220,17 @@ class VecSearcher:
             # Use cached embedder which handles batching internally
             embeddings = self._embedder.encode(texts, normalize=True, dtype=dtype)
 
+            # Vectorized quantization for performance (avoids loop overhead)
+            quantized_embeddings = (embeddings * 127).astype(np.int8)
+
             with self.db.connection() as conn:
                 # Prepare batch data
                 batch_data = []
-                for msg, emb in zip(to_index, embeddings):
+                for msg, q_emb in zip(to_index, quantized_embeddings):
                     batch_data.append(
                         (
                             msg.id,
-                            self._quantize_embedding(emb),
+                            q_emb.tobytes(),
                             msg.chat_id,
                             msg.text[:200],
                             msg.sender,
@@ -491,7 +494,7 @@ class VecSearcher:
                              AND vc.message_count = ir.message_count
                             ORDER BY vc.rowid DESC
                             """,
-                            (orjson.dumps(rows_payload).decode('utf-8'),),
+                            (orjson.dumps(rows_payload).decode("utf-8"),),
                         )
 
                         for row in cursor:
@@ -842,7 +845,7 @@ class VecSearcher:
                     FROM vec_chunks
                     WHERE rowid IN (SELECT value FROM json_each(?))
                     """,
-                    (orjson.dumps(chunk_rowids).decode('utf-8'),),
+                    (orjson.dumps(chunk_rowids).decode("utf-8"),),
                 ).fetchall()
 
                 results = []
@@ -1038,7 +1041,7 @@ class VecSearcher:
                     FROM conversation_segments cs
                     WHERE cs.vec_chunk_rowid IN (SELECT value FROM json_each(?))
                     """,
-                    (json.dumps(chunk_rowids),),
+                    (orjson.dumps(chunk_rowids).decode("utf-8"),),
                 ).fetchall()
 
                 if not seg_rows:
@@ -1053,7 +1056,7 @@ class VecSearcher:
                     WHERE segment_id IN (SELECT value FROM json_each(?))
                     ORDER BY segment_id, position
                     """,
-                    (orjson.dumps(seg_ids).decode('utf-8'),),
+                    (orjson.dumps(seg_ids).decode("utf-8"),),
                 ).fetchall()
 
             # Group messages by segment
