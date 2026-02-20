@@ -79,3 +79,4 @@ jarvis serve
 ## Privacy Note
 
 This public repository is sanitized for sharing: no personal exports, no local logs, no secret material.
+
