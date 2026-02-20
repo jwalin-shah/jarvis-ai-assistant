@@ -9,11 +9,12 @@ Uses basic_segmenter for clean boundaries without low-quality topic metadata.
 
 from __future__ import annotations
 
-import orjson
 import logging
 import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+
+import orjson
 
 from jarvis.db.models import Contact
 
@@ -104,7 +105,7 @@ def ingest_and_extract_segments(
         with jarvis_db.connection() as conn:
             cursor = conn.execute(
                 "SELECT * FROM contacts WHERE chat_id IN (SELECT value FROM json_each(?))",
-                (orjson.dumps(chat_ids).decode('utf-8'),),
+                (orjson.dumps(chat_ids).decode("utf-8"),),
             )
             for row in cursor.fetchall():
                 row_contact = jarvis_db._row_to_contact(row)
@@ -122,7 +123,7 @@ def ingest_and_extract_segments(
                 WHERE chat_id IN (SELECT value FROM json_each(?))
                 GROUP BY chat_id
                 """,
-                (orjson.dumps(chat_ids).decode('utf-8'),),
+                (orjson.dumps(chat_ids).decode("utf-8"),),
             )
             for row in cursor.fetchall():
                 # Row supports column name access (sqlite3.Row)

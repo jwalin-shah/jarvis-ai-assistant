@@ -214,10 +214,11 @@ def to_model_generation_request(service: Any, request: GenerationRequest) -> Mod
     """Convert pipeline request into model-native request."""
     prompt = build_prompt_from_request(request)
     config = get_config()
-    
+
     # Debug: Log the full prompt to a separate file
     try:
         from pathlib import Path
+
         debug_log = Path("logs/last_prompt.txt")
         debug_log.parent.mkdir(parents=True, exist_ok=True)
         debug_log.write_text(prompt)
@@ -226,13 +227,13 @@ def to_model_generation_request(service: Any, request: GenerationRequest) -> Mod
 
     return ModelGenerationRequest(
         prompt=prompt,
-        max_tokens=min(config.model.max_tokens_reply, 40),
+        max_tokens=config.model.max_tokens_reply,
         stop_sequences=[
-            "<|im_end|>", 
-            "<|im_start|>", 
-            "</reply>", 
-            "<system>", 
-            "<conversation>", 
+            "<|im_end|>",
+            "<|im_start|>",
+            "</reply>",
+            "<system>",
+            "<conversation>",
             "<examples>",
             "Context:",
             "Last Message:",
@@ -242,7 +243,7 @@ def to_model_generation_request(service: Any, request: GenerationRequest) -> Mod
             "Me:",
             "Them:",
             "Assistant:",
-            "System:"
+            "System:",
         ],
     )
 
@@ -389,7 +390,7 @@ def generate_llm_reply(
 
         jitter = random.uniform(-0.01, 0.01)
         model_request.temperature = max(0.0, config.model.temperature + jitter)
-        
+
         # High repetition penalty to prevent "AI loops" and encourage variety
         model_request.repetition_penalty = 1.25
 
@@ -398,48 +399,72 @@ def generate_llm_reply(
 
         # Advanced cleanup for 700M model leaks
         import re
-        
+
         # 1. Strip ChatML and system tags
-        text = re.sub(r'<\|im_.*?\|>', '', text)
-        
+        text = re.sub(r"<\|im_.*?\|>", "", text)
+
         # 2. Aggressively strip transcript prefixes (e.g., "You: [10:00]", "Mihir Shah:", "Them:")
         # Matches common patterns at the start of the string or after a newline
         prefixes_to_strip = [
-            r'^(?:[A-Z][a-z]+(?:\s[A-Z][a-z]+)*|You|Me|Them|Assistant|System):\s*(?:\[\d{2}:\d{2}\])?\s*',
-            r'^Jwalin Shah:\s*',
-            r'^Mihir Shah:\s*',
-            r'^Sangati Shah:\s*',
-            r'^Friend:\s*'
+            r"^(?:[A-Z][a-z]+(?:\s[A-Z][a-z]+)*|You|Me|Them|Assistant|System):\s*(?:\[\d{2}:\d{2}\])?\s*",
+            r"^Jwalin Shah:\s*",
+            r"^Mihir Shah:\s*",
+            r"^Sangati Shah:\s*",
+            r"^Friend:\s*",
+            r"^vibe check,\s*",
+            r"^vibe check\s*",
+            r"^vibe:\s*",
+            r"^vp,\s*",
+            r"^vb,\s*",
+            r"^vb\s*",
+            r"^ugh,\s*",
+            r"^vibe\s*",
+            r"^vbc\s*",
         ]
         for p_regex in prefixes_to_strip:
-            text = re.sub(p_regex, '', text, flags=re.MULTILINE)
-        
+            text = re.sub(p_regex, "", text, flags=re.IGNORECASE | re.MULTILINE)
+
         # 3. Strip trailing AI notes or explanations
-        for tag in ["(Note:", "Note:", "<system>", "<style", "[lowercase]", "tone", "Energy:", "Energy"]:
+        for tag in [
+            "(Note:",
+            "Note:",
+            "<system>",
+            "<style",
+            "[lowercase]",
+            "tone",
+            "Energy:",
+            "Energy",
+        ]:
             if tag in text:
                 text = text.split(tag)[0].strip()
-        
+
         # 4. Strip any leading/trailing quotes often added by small models
-        text = text.strip('"\' ')
+        text = text.strip("\"' ")
 
         # 5. Persona Normalization: Force lowercase and strip periods/formal punctuation
         text = text.lower().strip()
         # Remove trailing periods/exclamations
-        text = text.rstrip('.!')
-        
+        text = text.rstrip(".!")
+
+        # 6. Strict Language Filter: Strip any non-ASCII or non-English characters
+        # This catches Chinese, robotic symbols, and junk
+        text = re.sub(r"[^\x00-\x7F]+", "", text)
+        # Also strip specific robotic markers often left by small models
+        text = text.replace("  ", " ").strip()
+
         # Limit to 10 words max (Persona mandatory)
         words = text.split()
         if len(words) > 10:
             text = " ".join(words[:10])
-        
-        # 6. Final Persona Cleanup:
-        # Keep it strictly under 10 words. 
+
+        # 7. Final Persona Cleanup:
+        # Keep it strictly under 10 words.
         words = text.split()
         if len(words) > 10:
             text = " ".join(words[:10])
-        
-        if not text or text == "...":
-            logger.warning("[reply] LLM generated empty/ellipsis text, using fallback.")
+
+        if not text or text == "..." or len(text) < 2:
+            logger.warning("[reply] LLM generated empty/junk text, using fallback.")
             text = "copy"
 
         logger.info("[reply] Generated response: %r", text)

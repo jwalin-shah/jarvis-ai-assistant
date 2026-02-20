@@ -441,6 +441,46 @@ class TestThumbnailEndpoint:
             assert response.status_code == 200
             assert response.headers["content-type"] == "image/jpeg"
 
+    def test_get_thumbnail_fallback_to_original_large_image(self, client, mock_reader, tmp_path):
+        """Falls back to original image even when file is larger than 2MB."""
+        mock_reader.get_attachment_thumbnail_path.return_value = None
+
+        attachments_dir = tmp_path / "Library" / "Messages" / "Attachments"
+        attachments_dir.mkdir(parents=True)
+        img_path = attachments_dir / "large.jpg"
+        img_path.write_bytes(b"\xff\xd8\xff" + b"\x00" * (3 * 1024 * 1024))
+
+        with patch("api.routers.attachments.Path.home", return_value=tmp_path):
+            with patch("api.routers.attachments._generate_thumbnail_with_sips", return_value=None):
+                response = client.get(f"/attachments/thumbnail?file_path={img_path}")
+
+            assert response.status_code == 200
+            assert response.headers["content-type"] == "image/jpeg"
+
+    def test_get_thumbnail_uses_generated_thumbnail_when_available(
+        self, client, mock_reader, tmp_path
+    ):
+        """Uses generated JPEG thumbnail when sidecar thumbnail is missing."""
+        mock_reader.get_attachment_thumbnail_path.return_value = None
+
+        attachments_dir = tmp_path / "Library" / "Messages" / "Attachments"
+        attachments_dir.mkdir(parents=True)
+        img_path = attachments_dir / "test.heic"
+        img_path.write_bytes(b"\x00" * 128)
+
+        generated_thumb = tmp_path / "generated-thumb.jpg"
+        generated_thumb.write_bytes(b"\xff\xd8\xff" + b"\x00" * 128)
+
+        with patch("api.routers.attachments.Path.home", return_value=tmp_path):
+            with patch(
+                "api.routers.attachments._generate_thumbnail_with_sips",
+                return_value=generated_thumb,
+            ):
+                response = client.get(f"/attachments/thumbnail?file_path={img_path}")
+
+            assert response.status_code == 200
+            assert response.headers["content-type"] == "image/jpeg"
+
 
 # =============================================================================
 # Download Endpoint Tests

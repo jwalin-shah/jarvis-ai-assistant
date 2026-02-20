@@ -170,14 +170,6 @@ def build_rag_reply_prompt(
         formatted_exchanges = _format_similar_exchanges(similar_exchanges)
         extra_parts.append(f"<examples>\n{formatted_exchanges}\n</examples>")
 
-    # 1. Temporal Context
-    from datetime import datetime
-
-    now = datetime.now()
-    # Include full date to help model distinguish "today" from "yesterday" messages
-    time_context = f"Today is {now.strftime('%A, %B %d, %Y')}. Current time: {now.strftime('%I:%M %p')}."
-    extra_parts.append(time_context)
-
     extra_context = "\n".join(extra_parts) + "\n" if extra_parts else ""
 
     # Format custom instruction
@@ -223,8 +215,6 @@ def build_simple_reply_prompt(
 
     Like texting directly - no examples, no facts, no relationship graph.
     """
-    from datetime import datetime
-
     from jarvis.prompts.constants import SIMPLE_REPLY_PROMPT
 
     # Truncate context if needed
@@ -236,23 +226,20 @@ def build_simple_reply_prompt(
     else:
         conversation = ""
 
-    now = datetime.now()
-    time_str = f"Today is {now.strftime('%A, %B %d, %Y')}. Current time: {now.strftime('%I:%M %p')}.\n"
-
     # Frame the last message clearly
     label = "My last message" if last_is_from_me else "Their last message"
     prefixed_last = f"{label}: {last_message}"
-    
+
     # If I spoke last, the goal is to follow up
     if last_is_from_me:
-        goal = "Goal: Continue the conversation or add more detail.\n"
+        goal = "Goal: Continue the conversation or follow up.\n"
     else:
-        goal = "Goal: Text back a reply.\n"
+        goal = "Goal: Send a short text reply.\n"
 
     # Simple prompt - just conversation + last message
     prompt = SIMPLE_REPLY_PROMPT.template.format(
         instruction=f"{goal}{instruction}",
-        current_time=time_str,
+        current_time="",  # Removed to avoid robotic time references
         context=conversation,
         last_message=prefixed_last,
     )
@@ -290,14 +277,14 @@ def build_prompt_from_request(req: Any) -> str:
     # Inject style and contact info to help zero-shot reasoning
     cname = req.context.metadata.get("contact_name")
     style = req.context.metadata.get("relationship_profile")
-    
+
     meta_parts = []
     if cname and cname != "them":
         meta_parts.append(f"You are talking to {cname}.")
     if style and isinstance(style, dict):
         tone = style.get("tone", "casual")
         meta_parts.append(f"Use a {tone} tone.")
-    
+
     if meta_parts:
         meta_instruction = " ".join(meta_parts)
         instruction = f"{meta_instruction}\n{instruction}" if instruction else meta_instruction

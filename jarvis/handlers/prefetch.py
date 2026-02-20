@@ -39,17 +39,29 @@ class PrefetchHandler(BaseHandler):
         return {"success": True}
 
     @rpc_handler("Failed to record focus")
-    async def _prefetch_focus(self, chat_id: str) -> dict[str, bool]:
-        """Record UI focus event for prefetching."""
+    async def _prefetch_focus(
+        self, chat_id: str, num_suggestions: int = 1, **kwargs: Any
+    ) -> dict[str, Any]:
+        """Record UI focus event for prefetching and return cached draft if available."""
         self.server.set_focused_chat(chat_id)
         manager = self.server.get_prefetch_manager()
         if manager is None:
             return {"success": False}
+
+        # Start prefetch (async)
+        # Note: we don't pass num_suggestions to on_focus yet as predictor handles it,
+        # but we accept it to avoid RPC signature errors.
         manager.on_focus(chat_id)
-        return {"success": True}
+
+        # Check if we already have a draft (e.g. from hover or previous focus)
+        draft = manager.get_draft(chat_id)
+        if draft:
+            return {"success": True, "prefetched": True, "draft": draft}
+
+        return {"success": True, "prefetched": False}
 
     @rpc_handler("Failed to record hover")
-    async def _prefetch_hover(self, chat_id: str) -> dict[str, bool]:
+    async def _prefetch_hover(self, chat_id: str, **kwargs: Any) -> dict[str, bool]:
         """Record UI hover event for prefetching."""
         manager = self.server.get_prefetch_manager()
         if manager is None:

@@ -86,6 +86,10 @@ def _sanitize_instruction(instruction: str | None) -> str | None:
                 }
             },
         },
+        400: {
+            "description": "Invalid request parameters",
+            "model": ErrorResponse,
+        },
         403: {
             "description": "Full Disk Access not granted",
             "model": ErrorResponse,
@@ -239,6 +243,10 @@ async def generate_draft_reply(
                 }
             },
         },
+        400: {
+            "description": "Invalid request parameters",
+            "model": ErrorResponse,
+        },
         403: {
             "description": "Full Disk Access not granted",
             "model": ErrorResponse,
@@ -372,6 +380,10 @@ async def summarize_conversation(
                     }
                 }
             },
+        },
+        400: {
+            "description": "Invalid request parameters",
+            "model": ErrorResponse,
         },
         403: {
             "description": "Full Disk Access not granted",

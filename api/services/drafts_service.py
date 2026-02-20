@@ -104,13 +104,9 @@ async def build_draft_suggestions(
     base_instruction = sanitize_instruction(instruction)
     variant_instructions: list[str | None] = [base_instruction]
     if num_suggestions > 1:
-        variant_instructions.append(
-            (base_instruction + " (casual)") if base_instruction else None
-        )
+        variant_instructions.append((base_instruction + " (casual)") if base_instruction else None)
     if num_suggestions > 2:
-        variant_instructions.append(
-            (base_instruction + " (concise)") if base_instruction else None
-        )
+        variant_instructions.append((base_instruction + " (concise)") if base_instruction else None)
 
     suggestions: list[DraftSuggestion] = []
     seen_texts: set[str] = set()

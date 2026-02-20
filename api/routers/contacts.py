@@ -355,7 +355,7 @@ def _fetch_contact_avatar(normalized: str) -> ContactAvatarData | None:
             return future.result(timeout=5.0)
     except TimeoutError:
         logger.warning(f"Avatar fetch timed out after 5s for {normalized}")
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError) as e:
         logger.warning(f"Error fetching contact avatar for {normalized}: {e}")
     return None
 
@@ -515,7 +515,7 @@ def get_avatar(
             image_bytes, content_type = _process_contact_image(avatar_data.image_data, size)
             cache.set(cache_key, image_bytes)
             return _avatar_response(image_bytes, content_type, "contacts")
-        except Exception as e:
+        except (OSError, ValueError, TypeError) as e:
             logger.warning(f"Error processing contact image: {e}")
             # Fall through to generate default
 
@@ -578,7 +578,7 @@ def get_contact_info(identifier: str) -> dict[str, Any]:
     avatar_data: ContactAvatarData | None = None
     try:
         avatar_data = get_contact_avatar(normalized)
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError) as e:
         logger.warning(f"Error fetching contact info for {normalized}: {e}")
 
     display_name = None

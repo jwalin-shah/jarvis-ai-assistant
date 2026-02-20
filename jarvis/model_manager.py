@@ -63,10 +63,10 @@ class ModelManager:
 
         logger.info(f"Preparing system for model type: {model_type}")
 
-        # OPTIMIZATION: On 8GB systems, bge-small (embedder) and LFM-700M (LLM) 
-        # can actually coexist comfortably (~1GB total). 
+        # OPTIMIZATION: On 8GB systems, bge-small (embedder) and LFM-700M (LLM)
+        # can actually coexist comfortably (~1GB total).
         # We only unload if memory pressure is actually high.
-        
+
         # Unload based on requested type
         if model_type == "llm":
             # LLM needs most memory, but can coexist with embedder if pressure is green/yellow

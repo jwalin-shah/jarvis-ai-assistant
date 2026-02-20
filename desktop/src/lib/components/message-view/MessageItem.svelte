@@ -1,3 +1,8 @@
+<script module lang="ts">
+  // Avoid repeated 404 thumbnail fetches for known-missing files.
+  const failedThumbnailUrls = new Set<string>();
+</script>
+
 <script lang="ts">
   import type { Message } from '../../types';
   import { isOptimisticMessage, getOptimisticStatus, getOptimisticId } from '../../types';
@@ -68,6 +73,12 @@
   });
 
   function lazyImage(node: HTMLImageElement, src: string) {
+    if (failedThumbnailUrls.has(src)) {
+      return {
+        destroy() {},
+      };
+    }
+
     // Store actual src in data-src and use a tiny placeholder
     node.dataset.src = src;
     node.style.opacity = '0';
@@ -94,6 +105,16 @@
         imageObserver?.unobserve(node);
       },
     };
+  }
+
+  function handleThumbnailError(event: Event) {
+    const img = event.currentTarget as HTMLImageElement;
+    const failedSrc = img.currentSrc || img.src || img.dataset.src;
+    if (failedSrc) {
+      failedThumbnailUrls.add(failedSrc);
+    }
+    img.style.display = 'none';
+    img.nextElementSibling?.classList.remove('hidden');
   }
 
   $effect(() => {
@@ -209,7 +230,7 @@
                 class="attachment-thumbnail"
                 use:lazyImage={`${WS_HTTP_BASE}/attachments/thumbnail?file_path=${encodeURIComponent(attachment.file_path)}`}
                 alt={attachment.filename}
-                onerror={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }}
+                onerror={handleThumbnailError}
               />
               <div class="attachment hidden">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

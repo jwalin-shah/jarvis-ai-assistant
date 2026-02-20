@@ -48,6 +48,14 @@ logger = logging.getLogger(__name__)
 BYTES_PER_MB = 1024 * 1024
 
 
+def _preview_text(text: str, limit: int = 240) -> str:
+    """Compact preview for debug logs."""
+    collapsed = re.sub(r"\s+", " ", text).strip()
+    if len(collapsed) <= limit:
+        return collapsed
+    return collapsed[:limit] + "...(truncated)"
+
+
 def _get_default_generation_timeout() -> float:
     """Get default generation timeout from config.
 
@@ -98,6 +106,7 @@ class ModelConfig:
         if not self.model_id and not self.model_path:
             try:
                 from jarvis.config import get_config
+
                 cfg = get_config()
                 if cfg.model.model_id:
                     self.model_id = cfg.model.model_id
@@ -317,10 +326,16 @@ class MLXModelLoader:
         # Speculative decoding draft model
         self._draft_model: Any = None  # MLX model
         self._draft_config: ModelConfig | None = None
+        # Track which model_id is currently loaded to prevent unnecessary reloads
+        self._loaded_model_id: str | None = None
 
     def is_loaded(self) -> bool:
         """Check if model is currently loaded in memory."""
         return self._model is not None and self._tokenizer is not None
+
+    def get_loaded_model_id(self) -> str | None:
+        """Return the model_id of the currently loaded model, if any."""
+        return self._loaded_model_id
 
     def is_preloading(self) -> bool:
         """Check if model is currently being preloaded in background."""
@@ -509,6 +524,7 @@ class MLXModelLoader:
                 self._model = result[0]
                 self._tokenizer = result[1]
                 self._loaded_at = time.perf_counter()
+                self._loaded_model_id = self.config.model_id
 
                 load_time = (self._loaded_at - start_time) * 1000
                 self.last_load_time_ms = load_time
@@ -548,23 +564,33 @@ class MLXModelLoader:
     def unload(self) -> None:
         """Unload model and free all memory including GPU cache.
 
-        Call order: Set references to None -> Clear Metal cache -> Force GC
+        Call order: Delete model objects -> Clear Metal cache -> Force GC
+        This is critical for 8GB RAM systems to prevent OOM when switching models.
         """
-        logger.info("Unloading model")
+        if not self.is_loaded():
+            return
 
-        # Clear references
+        logger.info("Unloading model %s", self.config.display_name)
+
+        # Explicitly delete model objects before setting to None
+        # This forces immediate reference count decrement for MLX C++ objects
+        if self._model is not None:
+            del self._model
+        if self._tokenizer is not None:
+            del self._tokenizer
+        if self._prompt_cache is not None:
+            del self._prompt_cache
+        if self._draft_model is not None:
+            del self._draft_model
+
+        # Clear all references
         self._model = None
         self._tokenizer = None
         self._loaded_at = None
-        # Explicitly delete prompt cache before setting to None
-        if self._prompt_cache is not None:
-            del self._prompt_cache
+        self._loaded_model_id = None
         self._prompt_cache = None
         self._cache_prefix_len = 0
         self._cache_prefix_tokens = None
-        # Explicitly delete draft model before setting to None
-        if self._draft_model is not None:
-            del self._draft_model
         self._draft_model = None
         self._draft_config = None
 
@@ -582,8 +608,16 @@ class MLXModelLoader:
         except Exception:
             logger.debug("Cache clear not available")
 
-        # Force garbage collection
+        # Force garbage collection to release memory immediately
         gc.collect()
+
+        # Second cache clear after GC to ensure any newly freed arrays are cleared
+        try:
+            if hasattr(mx, "clear_cache"):
+                mx.clear_cache()
+        except Exception:
+            pass
+
         logger.info("Model unloaded")
 
     @property
@@ -880,6 +914,7 @@ class MLXModelLoader:
         """Post-process generation output into a GenerationResult."""
         generation_time = (time.perf_counter() - start_time) * 1000
         original_raw = response
+        debug_postprocess = os.getenv("JARVIS_DEBUG_POSTPROCESS", "0") == "1"
 
         # Strip the prompt ONLY if MLX returned it (some versions/wrappers do)
         if response.startswith(formatted_prompt):
@@ -889,9 +924,14 @@ class MLXModelLoader:
         # 1. Strip timestamps like [11:05] or [11:05 AM]
         response = re.sub(r"\[\d{1,2}:\d{2}(?:\s?[APM]{2})?\]", "", response)
 
-        # 2. Strip sender names like "College Friend:" or "You:"
-        # Matches patterns at start of line or after a newline
-        response = re.sub(r"(?:^|\n)(?:[A-Z][a-z]+(?:\s[A-Z][a-z]+)*|You):\s?", "", response)
+        # 2. Strip only known dialogue labels (avoid removing valid content).
+        # Prior generic title-case stripping could erase normal replies like "Sure: ..."
+        # and trigger empty-output fallbacks.
+        response = re.sub(
+            r"(?:^|\n)(?:You|Me|User|Assistant|JARVIS|Jarvis|AI)\s*:\s?",
+            "",
+            response,
+        )
 
         # 3. Strip dialogue turns if model generates multiple
         if "\n" in response:
@@ -907,8 +947,12 @@ class MLXModelLoader:
                     continue
                 if stop_seq in response:
                     response = response[: response.index(stop_seq)]
-                elif stop_seq.strip() in response:
+                else:
                     trimmed_seq = stop_seq.strip()
+                    if not trimmed_seq:
+                        continue
+                    if trimmed_seq not in response:
+                        continue
                     response = response[: response.index(trimmed_seq)]
 
         # Extra safety: strip any common trailing tags if they leak through
@@ -919,9 +963,22 @@ class MLXModelLoader:
 
         response = response.strip()
 
+        if debug_postprocess and original_raw.strip() != response:
+            logger.info(
+                "Post-process changed output. raw='%s' -> processed='%s'",
+                _preview_text(original_raw),
+                _preview_text(response),
+            )
+
         # If post-processing killed a non-empty response, fall back to original
         if not response and original_raw.strip():
             logger.warning("Post-processing emptied a non-empty response, using raw output")
+            if debug_postprocess:
+                logger.warning(
+                    "Post-process emptied details. raw='%s' processed='%s'",
+                    _preview_text(original_raw),
+                    _preview_text(response),
+                )
             response = original_raw.strip()
 
         # Handle common prefixes
@@ -978,6 +1035,7 @@ class MLXModelLoader:
         pre_formatted: bool = False,
         negative_constraints: list[str] | None = None,
         system_prompt: str | None = None,
+        extra_logits_processors: list[Any] | None = None,
     ) -> GenerationResult:
         if not self.is_loaded():
             raise ModelLoadError("Model not loaded")
@@ -1003,15 +1061,19 @@ class MLXModelLoader:
 
             start_time = time.perf_counter()
             response_text = ""
-            
+
             # Add stylistic biasing via custom logits processor
             from models.memory_config import PersonaLogitsProcessor
-            
+
             persona_processor = PersonaLogitsProcessor(self._tokenizer)
             if logits_processors:
                 logits_processors.append(persona_processor)
             else:
                 logits_processors = [persona_processor]
+
+            # Add extra logits processors (e.g., JSON grammar)
+            if extra_logits_processors:
+                logits_processors.extend(extra_logits_processors)
 
             # Use non-blocking lock with timeout to prevent deadlocks
             # Lock for 60s max per generation
@@ -1019,10 +1081,10 @@ class MLXModelLoader:
             if not lock_acquired:
                 logger.error("Failed to acquire MLX model lock after 60s")
                 raise ModelGenerationError("Model is busy (lock timeout)", code=ErrorCode.MDL_BUSY)
-                
+
             try:
                 apply_llm_limits()
-                
+
                 # Use stream_generate to implement manual stop sequences
                 # which is the most compatible way across mlx_lm versions.
                 for t_resp in stream_generate(
@@ -1034,18 +1096,18 @@ class MLXModelLoader:
                     logits_processors=logits_processors,
                 ):
                     response_text += t_resp.text
-                    
+
                     # Check for stop sequences
                     if stop_sequences:
                         should_stop = False
                         for stop_seq in stop_sequences:
                             if stop_seq in response_text:
-                                response_text = response_text[:response_text.index(stop_seq)]
+                                response_text = response_text[: response_text.index(stop_seq)]
                                 should_stop = True
                                 break
                         if should_stop:
                             break
-                    
+
                     if t_resp.finish_reason is not None:
                         break
             finally:
@@ -1134,7 +1196,7 @@ class MLXModelLoader:
 
             # Add stylistic biasing via custom logits processor
             from models.memory_config import PersonaLogitsProcessor
-            
+
             persona_processor = PersonaLogitsProcessor(self._tokenizer)
             if logits_processors:
                 logits_processors.append(persona_processor)
@@ -1237,13 +1299,20 @@ class MLXModelLoader:
 
         Returns:
             True if configuration was updated successfully, False if model_id unknown.
+            Returns True immediately if requested model is already loaded.
         """
+        # Fast path: requested model is already loaded
+        if self._loaded_model_id == model_id and self.is_loaded():
+            logger.debug("Model %s is already loaded, skipping switch", model_id)
+            return True
+
         spec = get_model_spec(model_id)
         if spec is None:
             logger.error("Unknown model_id: %s", model_id)
             return False
 
-        # Unload current model if loaded
+        # Unload current model if loaded - critical for 8GB RAM systems
+        # to prevent OOM when switching between extraction and generation models
         if self.is_loaded():
             logger.info("Switching from %s to %s", self.config.display_name, spec.display_name)
             self.unload()

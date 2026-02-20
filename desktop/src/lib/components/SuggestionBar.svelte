@@ -2,6 +2,7 @@
   import { apiClient, APIError } from "../api/client";
   import type { DraftReplyResponse } from "../api/types";
   import { jarvis } from "../socket/client";
+  import { recordDraftAttempt, recordDraftFailure, recordDraftSuccess } from "../stores/reliability";
   import Icon from "./Icon.svelte";
 
   interface Props {
@@ -25,6 +26,8 @@
   // Allow more time for model loading + generation on Apple Silicon
   const STREAM_TIMEOUT_MS = 45000;
   const FALLBACK_TIMEOUT_MS = 30000;
+  const QUICK_REPLY_TIMEOUT_MS = 8000;
+  const DRAFT_CONTEXT_MESSAGES = 12;
 
   function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
     return new Promise<T>((resolve, reject) => {
@@ -46,6 +49,8 @@
     const currentRun = ++runId;
     abortController?.abort();
     abortController = new AbortController();
+    const attemptStart = performance.now();
+    recordDraftAttempt();
 
     barState = "streaming";
     streamingText = "";
@@ -55,7 +60,7 @@
       // Stream tokens via socket for typewriter effect
       const result = await withTimeout(
         jarvis.generateDraftStream(
-          { chat_id: chatId },
+          { chat_id: chatId, context_messages: DRAFT_CONTEXT_MESSAGES },
           (token: string) => {
             if (currentRun !== runId) return;
             streamingText += token;
@@ -69,6 +74,7 @@
         throw new Error("No draft suggestions returned from stream");
       }
       suggestions = result.suggestions;
+      recordDraftSuccess(performance.now() - attemptStart);
       barState = "results";
     } catch {
       if (currentRun !== runId) return;
@@ -81,28 +87,71 @@
             undefined,
             3,
             abortController!.signal,
-            { preferSocket: false }
+            { preferSocket: false, contextMessages: DRAFT_CONTEXT_MESSAGES }
           ),
           FALLBACK_TIMEOUT_MS,
           "AI draft fallback"
         );
         if (currentRun !== runId) return;
         if (safeResponse.gated || safeResponse.suggestions.length === 0) {
-          handleClose();
+          barState = "error";
+          errorMessage = safeResponse.gated
+            ? "Draft generation was gated due to low confidence. Try manual compose or regenerate."
+            : "No draft suggestions were generated. Try again.";
+          recordDraftFailure(errorMessage);
           return;
         }
         suggestions = safeResponse.suggestions;
+        recordDraftSuccess(performance.now() - attemptStart);
         barState = "results";
       } catch (e2) {
         if (currentRun !== runId) return;
         if (e2 instanceof Error && e2.name === "AbortError") return;
-        barState = "error";
-        if (e2 instanceof APIError) {
-          errorMessage = e2.detail || e2.message;
-        } else if (e2 instanceof Error) {
-          errorMessage = e2.message;
-        } else {
-          errorMessage = "Failed to generate suggestions";
+        try {
+          // Final fallback: template-based quick replies from /suggestions.
+          barState = "loading";
+          const recentMessages = await withTimeout(
+            apiClient.getMessages(chatId, 20),
+            4000,
+            "Load recent messages"
+          );
+          const lastIncoming = recentMessages.find(
+            (m) => !m.is_from_me && m.text && m.text.trim().length > 0
+          )?.text
+            ?? recentMessages.find((m) => m.text && m.text.trim().length > 0)?.text;
+          if (!lastIncoming) {
+            throw new Error("No recent message available for quick replies");
+          }
+          const quickReplies = await withTimeout(
+            apiClient.getSmartReplySuggestions(lastIncoming, 3),
+            QUICK_REPLY_TIMEOUT_MS,
+            "Quick reply fallback"
+          );
+          if (currentRun !== runId) return;
+          if (!quickReplies.suggestions || quickReplies.suggestions.length === 0) {
+            throw new Error("Quick reply fallback returned no suggestions");
+          }
+          suggestions = quickReplies.suggestions.map((s, i) => ({
+            text: s.text,
+            confidence: Math.max(0.55, Math.min(0.85, s.score || 0.7 - i * 0.05)),
+          }));
+          recordDraftSuccess(performance.now() - attemptStart);
+          barState = "results";
+        } catch (e3) {
+          if (currentRun !== runId) return;
+          barState = "error";
+          if (e3 instanceof APIError) {
+            errorMessage = e3.detail || e3.message;
+          } else if (e3 instanceof Error) {
+            errorMessage = e3.message;
+          } else if (e2 instanceof APIError) {
+            errorMessage = e2.detail || e2.message;
+          } else if (e2 instanceof Error) {
+            errorMessage = e2.message;
+          } else {
+            errorMessage = "Failed to generate suggestions";
+          }
+          recordDraftFailure(errorMessage);
         }
       }
     }

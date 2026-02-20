@@ -555,9 +555,6 @@ class ThreadAwareGenerator:
                 return template_response
 
         # Build generation request
-        # Include thread-specific examples as few-shot
-        self._get_thread_examples(thread_context.topic)
-
         request = GenerationRequest(
             prompt=prompt,
             context_documents=[],  # Context is already in the prompt
@@ -656,34 +653,6 @@ class ThreadAwareGenerator:
             )
 
         return None
-
-    def _get_thread_examples(self, topic: ThreadTopic) -> list[tuple[str, str]]:
-        """Get few-shot examples for thread topic.
-
-        Args:
-            topic: The thread topic
-
-        Returns:
-            List of (input, output) example tuples
-        """
-        from jarvis.prompts import THREAD_EXAMPLES
-
-        topic_to_key = {
-            "logistics": "logistics",
-            "planning": "planning",
-            "catching_up": "catching_up",
-            "emotional_support": "emotional_support",
-            "quick_exchange": "quick_exchange",
-            "information": "catching_up",
-            "decision_making": "planning",
-            "celebration": "catching_up",
-            "unknown": "catching_up",
-        }
-
-        key = topic_to_key.get(topic.value, "catching_up")
-        examples = THREAD_EXAMPLES.get(key, [])
-
-        return [(ex.context, ex.output) for ex in examples[:2]]
 
     def _post_process_response(
         self,

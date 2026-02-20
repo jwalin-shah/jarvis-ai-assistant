@@ -509,7 +509,7 @@ def test_template(request: CustomTemplateTestRequest) -> CustomTemplateTestRespo
             threshold=TemplateMatcher.SIMILARITY_THRESHOLD,
         )
 
-    except Exception as e:
+    except (ImportError, AttributeError, ValueError, RuntimeError) as e:
         logger.exception("Template test failed")
         raise HTTPException(
             status_code=503,

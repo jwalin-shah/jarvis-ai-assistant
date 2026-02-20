@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from contracts.models import GenerationRequest as ModelGenerationRequest
-from jarvis.classifiers.cascade import classify_with_cascade
 from jarvis.classifiers.classification_result import build_classification_result
 from jarvis.classifiers.response_mobilization import (
     MobilizationResult,
@@ -37,7 +36,7 @@ from jarvis.core.generation.metrics import (
 from jarvis.db import Contact, JarvisDB, get_db
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
 from jarvis.observability.logging import log_event
-from jarvis.observability.tracing import SpanContext, add_span_attribute, traced
+from jarvis.observability.tracing import SpanContext, add_span_attribute
 from jarvis.prompts import (
     ACKNOWLEDGE_TEMPLATES,
     CLOSING_TEMPLATES,
@@ -75,7 +74,6 @@ from jarvis.reply_service_utils import (
     safe_float,
     to_legacy_response,
 )
-from jarvis.search.hybrid_search import get_hybrid_searcher
 from jarvis.services.context_service import ContextService
 from models.templates import TemplateMatcher
 
@@ -185,7 +183,7 @@ class ReplyService:
                             "Semantic template matcher initialized with %d templates",
                             len(self._template_matcher.templates),
                         )
-                    except Exception as e:
+                    except (ImportError, OSError, ValueError) as e:
                         logger.warning("Could not initialize template matcher: %s", e)
                         return None
         return self._template_matcher
@@ -387,21 +385,32 @@ class ReplyService:
             if not incoming or not incoming.strip():
                 return self._empty_message_response()
 
-            chat_id = context.chat_id or None
             thread_messages = self._resolve_thread(thread, context)
 
             if classification is None:
-                with SpanContext("reply.classify") as classify_span:
-                    mobilization = classify_with_cascade(incoming)
-                    classification = self._build_classification_result(
-                        incoming, thread_messages, mobilization
-                    )
-                    classify_span.set_attribute("category", str(getattr(classification.category, "value", classification.category)))
+                from jarvis.contracts.pipeline import (
+                    CategoryType,
+                    ClassificationResult,
+                    IntentType,
+                    UrgencyLevel,
+                )
 
-            category_name = classification.metadata.get("category_name")
-            if category_name is None:
-                category_name = getattr(classification.category, "value", classification.category)
-            category_name = str(category_name)
+                classification = ClassificationResult(
+                    category=CategoryType.FULL_RESPONSE,
+                    intent=IntentType.STATEMENT,
+                    urgency=UrgencyLevel.LOW,
+                    requires_knowledge=False,
+                    confidence=0.5,
+                    metadata={"category_name": "statement"},
+                )
+                category_name = "statement"
+
+            category_name_val: str = classification.metadata.get("category_name", "")
+            if not category_name_val:
+                category_name_val = getattr(
+                    classification.category, "value", classification.category
+                )
+            category_name = str(category_name_val)
             add_span_attribute("category", category_name)
             category_config = get_category_config(category_name)
 
@@ -430,21 +439,9 @@ class ReplyService:
                 self._persist_reply_log(context, classification, None, result, latency_ms)
                 return result
 
-            # Search phase
-            with SpanContext("reply.search") as search_span:
-                logger.debug("   [debug] Starting RAG search...")
-                search_results, latency_ms = self._search_context(
-                    search_results,
-                    incoming,
-                    chat_id,
-                    contact,
-                    cached_embedder,
-                    latency_ms,
-                )
-                logger.debug("   [debug] RAG search complete (%d candidates)", len(search_results))
-                search_span.set_attribute("candidates", len(search_results))
-                add_span_attribute("search_candidates", len(search_results))
-                logger.debug("   [debug] RAG search complete (%d candidates)", len(search_results))
+            # Skip RAG search - results were discarded in build_generation_request
+            # Direct-to-LLM approach: no retrieval, just conversation context
+            search_results: list[dict[str, Any]] = []
 
             can_generate, health_reason = self.can_use_llm()
             if not can_generate:
@@ -458,7 +455,7 @@ class ReplyService:
                         "type": "fallback",
                         "reason": health_reason,
                         "similarity_score": 0.0,
-                        "vec_candidates": len(search_results),
+                        "vec_candidates": 0,
                     },
                 )
                 latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
@@ -485,7 +482,7 @@ class ReplyService:
 
             latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
             add_span_attribute("total_latency_ms", round(latency_ms["total"], 2))
-            
+
             self._log_and_record_metrics(
                 result,
                 category_name,
@@ -564,7 +561,7 @@ class ReplyService:
                         "reason": f"template_match:{match.template.name}",
                     },
                 )
-        except Exception as e:
+        except (AttributeError, ValueError, TypeError) as e:
             logger.debug("Semantic template matching failed: %s", e)
 
         return None
@@ -597,24 +594,6 @@ class ReplyService:
                 "vec_candidates": 0,
             },
         )
-
-    def _search_context(
-        self,
-        search_results: list[dict[str, Any]] | None,
-        incoming: str,
-        chat_id: str | None,
-        contact: Contact | None,
-        cached_embedder: CachedEmbedder,
-        latency_ms: dict[str, float],
-    ) -> tuple[list[dict[str, Any]], dict[str, float]]:
-        """Run hybrid context search if results not already provided."""
-        if search_results is None:
-            search_start = time.perf_counter()
-            hybrid_searcher = get_hybrid_searcher()
-            # Hybrid search already uses vec_searcher internally
-            search_results = hybrid_searcher.search(query=incoming, limit=5, rerank=True)
-            latency_ms["context_search"] = (time.perf_counter() - search_start) * 1000
-        return search_results, latency_ms
 
     def _generate_response(
         self,
@@ -689,7 +668,7 @@ class ReplyService:
             incoming_text = context.message_text or ""
             facts = search_relevant_facts(incoming_text, chat_id, limit=5)
             context.metadata["contact_facts"] = format_facts_for_prompt(facts)
-        except Exception as e:
+        except (ImportError, AttributeError, ValueError) as e:
             logger.debug(f"Optional fact fetch failed: {e}")
 
     def _fetch_graph_context(self, context: MessageContext, chat_id: str) -> None:
@@ -699,7 +678,7 @@ class ReplyService:
             graph_ctx = get_graph_context(contact_id=chat_id, chat_id=chat_id)
             if graph_ctx:
                 context.metadata["relationship_graph"] = graph_ctx
-        except Exception as e:
+        except (ImportError, AttributeError, ValueError) as e:
             logger.debug(f"Optional graph context fetch failed: {e}")
 
     def _resolve_instruction(

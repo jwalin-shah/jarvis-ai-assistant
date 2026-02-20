@@ -428,9 +428,10 @@ class ApiClient {
     instruction?: string,
     numSuggestions: number = 3,
     signal?: AbortSignal,
-    options?: { preferSocket?: boolean }
+    options?: { preferSocket?: boolean; contextMessages?: number }
   ): Promise<DraftReplyResponse> {
     const preferSocket = options?.preferSocket ?? true;
+    const contextMessages = options?.contextMessages ?? 20;
 
     // Try socket first in Tauri context (unless explicitly disabled)
     const socketReady = preferSocket ? await ensureSocketConnected() : false;
@@ -438,7 +439,7 @@ class ApiClient {
       try {
         const params: { chat_id: string; context_messages: number; instruction?: string } = {
           chat_id: chatId,
-          context_messages: 20,
+          context_messages: contextMessages,
         };
         if (instruction) {
           params.instruction = instruction;
@@ -460,7 +461,7 @@ class ApiClient {
       chat_id: chatId,
       instruction: instruction || null,
       num_suggestions: numSuggestions,
-      context_messages: 20,
+      context_messages: contextMessages,
     };
 
     return this.request<DraftReplyResponse>("/drafts/reply", {

@@ -45,6 +45,7 @@ class KnowledgeNode:
     color: str = "#8E8E93"
     size: float = 12.0
     metadata: dict[str, Any] = field(default_factory=dict)
+    edges: list[KnowledgeEdge] = field(default_factory=list)
 
 
 @dataclass
@@ -87,6 +88,112 @@ class KnowledgeGraph:
             self._nx = nx
             self.graph = nx.MultiDiGraph()
         return self._nx
+
+    def _get_edges_batch(self, conn: Any, node_ids: list[str]) -> dict[str, list[KnowledgeEdge]]:
+        """Fetch edges for multiple nodes in a single query.
+
+        Args:
+            conn: Database connection
+            node_ids: List of node IDs to fetch edges for
+
+        Returns:
+            Dict mapping node_id -> list of KnowledgeEdge
+        """
+        if not node_ids:
+            return {}
+
+        # Build placeholders for IN clause: (?, ?, ?, ...)
+        placeholders = ",".join(["?"] * len(node_ids))
+
+        # Single query to fetch all edges for all nodes
+        cursor = conn.execute(
+            f"""
+            SELECT contact_id, subject, predicate, value, confidence
+            FROM contact_facts
+            WHERE contact_id IN ({placeholders})
+            ORDER BY contact_id, confidence DESC
+            """,
+            tuple(node_ids),
+        )
+
+        # Map edges by node_id for O(1) lookup
+        edges_by_node: dict[str, list[KnowledgeEdge]] = {nid: [] for nid in node_ids}
+
+        for row in cursor.fetchall():
+            contact_id = row["contact_id"]
+            subject = row["subject"]
+            predicate = row["predicate"]
+            value = row["value"]
+            confidence = row["confidence"]
+
+            # Create edge from contact to entity
+            edge = KnowledgeEdge(
+                source=contact_id,
+                target=f"entity:{subject.lower().strip()}",
+                edge_type=predicate,
+                label=f"{predicate.replace('_', ' ')} ({value})"
+                if value
+                else predicate.replace("_", " "),
+                weight=confidence,
+            )
+            edges_by_node[contact_id].append(edge)
+
+        return edges_by_node
+
+    def build_nodes_with_edges_batch(self, conn: Any) -> list[KnowledgeNode]:
+        """Build nodes with edges using batch fetching (N+1 fix).
+
+        Before (N+1 pattern):
+            for node in nodes:  # N iterations
+                edges = self._get_edges(node.id)  # N queries!
+                node.edges = edges
+
+        After (batch pattern):
+            nodes = [...]  # 1 query for nodes
+            edges_by_node = self._get_edges_batch(conn, node_ids)  # 1 query for edges
+            for node in nodes:
+                node.edges = edges_by_node.get(node.id, [])  # O(1) lookup
+
+        Returns:
+            List of KnowledgeNode with edges populated
+        """
+        # 1. Fetch all nodes (1 query)
+        cursor = conn.execute(
+            """
+            SELECT chat_id AS contact_id, display_name AS contact_name,
+                   relationship, 0 AS message_count
+            FROM contacts
+            WHERE chat_id IS NOT NULL
+            """
+        )
+
+        nodes: list[KnowledgeNode] = []
+        node_ids: list[str] = []
+
+        for row in cursor.fetchall():
+            cid = row["contact_id"]
+            name = row["contact_name"] or cid[:12]
+            rel = row["relationship"] or "unknown"
+
+            node = KnowledgeNode(
+                id=cid,
+                label=name,
+                node_type="contact",
+                category=rel,
+                color="#4ECDC4",
+                size=max(12, min(40, 12 + row["message_count"] * 0.02)),
+            )
+            nodes.append(node)
+            node_ids.append(cid)
+
+        # 2. Batch fetch all edges in ONE query (not N queries!)
+        edges_by_node = self._get_edges_batch(conn, node_ids)
+
+        # 3. Assign edges to nodes in a single pass (O(1) lookup)
+        for node in nodes:
+            node.edges = edges_by_node.get(node.id, [])
+
+        return nodes
 
     def build_from_db(self) -> None:
         """Load contact_profiles + contact_facts into the graph."""

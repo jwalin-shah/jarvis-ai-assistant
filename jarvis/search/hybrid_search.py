@@ -14,7 +14,6 @@ import pickle  # nosec B403
 import sqlite3
 import threading
 import time
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +36,7 @@ class HybridSearcher:
 
     BM25 index is cached to disk to avoid rebuilding on every instantiation.
     Cache is invalidated when chunk count or max timestamp changes.
-    
+
     Search results are also cached in memory for 60 seconds to avoid
     redundant work on repeated queries.
     """
@@ -87,12 +86,10 @@ class HybridSearcher:
             # Evict oldest entries if at capacity
             if len(cls._SEARCH_CACHE) >= cls._SEARCH_CACHE_MAX_SIZE:
                 # Remove 10% oldest entries
-                sorted_items = sorted(
-                    cls._SEARCH_CACHE.items(), key=lambda x: x[1][1]
-                )
+                sorted_items = sorted(cls._SEARCH_CACHE.items(), key=lambda x: x[1][1])
                 for old_key, _ in sorted_items[: cls._SEARCH_CACHE_MAX_SIZE // 10]:
                     del cls._SEARCH_CACHE[old_key]
-            
+
             cls._SEARCH_CACHE[key] = (results, time.time())
 
     @classmethod
@@ -253,7 +250,9 @@ class HybridSearcher:
         Returns:
             Ranked list of chunk dictionaries.
         """
-        with SpanContext("search.hybrid", {"query_length": len(query), "limit": limit or 0, "rerank": rerank}) as span:
+        with SpanContext(
+            "search.hybrid", {"query_length": len(query), "limit": limit or 0, "rerank": rerank}
+        ) as span:
             if limit is None:
                 limit = get_config().retrieval.hybrid_search_limit
 
@@ -263,7 +262,7 @@ class HybridSearcher:
                 span.set_attribute("cache_hit", True)
                 add_span_attribute("search_cache_hit", True)
                 return cached
-            
+
             span.set_attribute("cache_hit", False)
             add_span_attribute("search_cache_hit", False)
 
@@ -298,7 +297,9 @@ class HybridSearcher:
 
             # Keyword ranks
             for rank, bm25_res in enumerate(bm25_results, 1):
-                rrf_scores[bm25_res.rowid] = rrf_scores.get(bm25_res.rowid, 0.0) + (1.0 / (k + rank))
+                rrf_scores[bm25_res.rowid] = rrf_scores.get(bm25_res.rowid, 0.0) + (
+                    1.0 / (k + rank)
+                )
 
             # 4. Sort by fused score
             sorted_rowids = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[:limit]
@@ -351,7 +352,7 @@ class HybridSearcher:
                         FROM vec_chunks
                         WHERE rowid IN (SELECT value FROM json_each(?))
                         """,
-                        (orjson.dumps(batch).decode('utf-8'),),
+                        (orjson.dumps(batch).decode("utf-8"),),
                     ).fetchall()
                     all_rows.extend(rows)
 

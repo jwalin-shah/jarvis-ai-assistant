@@ -617,14 +617,14 @@ class UIFocusStrategy(PredictionStrategy):
         # Check focused chat
         if context.active_chat_id:
             focus_time = self._focus_times.get(context.active_chat_id)
-            if focus_time and (now - focus_time) >= self._focus_threshold:
+            if focus_time:
                 predictions.append(
                     Prediction(
                         type=PredictionType.DRAFT_REPLY,
                         priority=PredictionPriority.CRITICAL,  # User is actively looking
                         confidence=0.95,
                         key=f"draft:focus:{context.active_chat_id}",
-                        params={"chat_id": context.active_chat_id},
+                        params={"chat_id": context.active_chat_id, "num_suggestions": 3},
                         reason="User focused on chat",
                         ttl_seconds=120,  # 2 minutes
                         tags=[f"chat:{context.active_chat_id}", "draft", "focus"],

@@ -17,6 +17,7 @@ class DraftReplyHandler(PrefetchHandler):
 
     def execute(self, params: dict[str, Any]) -> dict[str, Any] | None:
         chat_id = params["chat_id"]
+        num_suggestions = params.get("num_suggestions", 3)
 
         # Import router lazily to avoid circular imports
         from jarvis.prefetch.executor import get_executor
@@ -42,21 +43,49 @@ class DraftReplyHandler(PrefetchHandler):
         if not last_incoming:
             return None
 
-        result = reply_service.route_legacy(
-            incoming=last_incoming,
-            chat_id=chat_id,
-            conversation_messages=messages,
-        )
+        suggestions: list[dict[str, Any]] = []
+        seen_texts = set()
 
-        confidence = float(result.get("confidence_score", 0.6))
+        # Generate suggestions with increasing temperature for variety
+        for i in range(num_suggestions):
+            try:
+                request, metadata = reply_service.prepare_streaming_context(
+                    incoming=last_incoming,
+                    chat_id=chat_id,
+                    thread=messages,
+                )
+
+                # Increase temperature for each successive suggestion
+                # First: 0.5, second: 0.65, third: 0.8
+                request.temperature = 0.5 + (i * 0.15)
+
+                response = reply_service.generator.generate(request)
+                text = response.text.strip()
+
+                if text and text not in seen_texts:
+                    confidence = float(metadata.get("confidence_score", 0.6))
+                    suggestions.append(
+                        {
+                            "text": text,
+                            "confidence": confidence,
+                        }
+                    )
+                    seen_texts.add(text)
+            except Exception:
+                logger.exception("Failed to generate suggestion %d", i)
+
+        if not suggestions:
+            return None
+
+        participants = [msg.sender_name or msg.sender for msg in messages if not msg.is_from_me]
 
         return {
-            "suggestions": [
-                {
-                    "text": result.get("response", ""),
-                    "confidence": confidence,
-                }
-            ],
+            "suggestions": suggestions,
+            "context_used": {
+                "num_messages": len(messages),
+                "participants": participants[:3],
+                "last_message": last_incoming,
+            },
             "prefetched": True,
         }
 

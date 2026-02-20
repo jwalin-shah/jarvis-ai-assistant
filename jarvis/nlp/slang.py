@@ -206,6 +206,12 @@ SLANG_MAP: dict[str, str] = {
     "jomo": "joy of missing out",
     "oof": "expression of discomfort",
     "yikes": "expression of concern",
+    # Common texting abbreviations
+    "wyd": "what are you doing",
+    "wru": "where are you",
+    "wsg": "what is good",
+    "eta": "estimated arrival",
+    "bruh": "bro",
 }
 
 # Pre-compile regex for word boundary matching

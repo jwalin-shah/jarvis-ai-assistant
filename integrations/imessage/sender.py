@@ -195,10 +195,16 @@ end tell
             escaped_recipient = self._escape_for_applescript(recipient)
             applescript = f"""
 tell application "Messages"
-    set targetService to 1st account whose service type = iMessage
-    set targetBuddy to participant "{escaped_recipient}" of targetService
     set theFile to POSIX file "{escaped_path}"
-    send theFile to targetBuddy
+    try
+        set targetService to 1st account whose service type = iMessage
+        set targetBuddy to participant "{escaped_recipient}" of targetService
+        send theFile to targetBuddy
+    on error
+        set targetService to 1st account whose service type = SMS
+        set targetBuddy to participant "{escaped_recipient}" of targetService
+        send theFile to targetBuddy
+    end try
 end tell
 """
         return self._run_applescript(applescript, f"attachment to {chat_id or recipient}")
@@ -222,6 +228,12 @@ end tell
         # Check for email format (basic validation)
         email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
         if re.match(email_pattern, recipient):
+            return True
+
+        # Allow SMS short codes (common for banks, carriers, and OTP services).
+        # Accepts: 5 digits, 88683, etc.
+        short_code_pattern = r"^\d{3,8}$"
+        if re.match(short_code_pattern, recipient):
             return True
 
         # Check for phone number format (various formats)
@@ -276,9 +288,15 @@ end tell
 
         applescript = f"""
 tell application "Messages"
-    set targetService to 1st account whose service type = iMessage
-    set targetBuddy to participant "{escaped_recipient}" of targetService
-    send "{escaped_text}" to targetBuddy
+    try
+        set targetService to 1st account whose service type = iMessage
+        set targetBuddy to participant "{escaped_recipient}" of targetService
+        send "{escaped_text}" to targetBuddy
+    on error
+        set targetService to 1st account whose service type = SMS
+        set targetBuddy to participant "{escaped_recipient}" of targetService
+        send "{escaped_text}" to targetBuddy
+    end try
 end tell
 """
         return self._run_applescript(applescript, f"individual: {recipient}")
@@ -302,8 +320,18 @@ end tell
         # For group chats, we find the chat by its full GUID and send directly to it
         applescript = f"""
 tell application "Messages"
-    set targetChat to chat id "{escaped_chat_id}"
-    send "{escaped_text}" to targetChat
+    try
+        send "{escaped_text}" to chat id "{escaped_chat_id}"
+    on error
+        -- Fallback: iterate chats to find match (slow but reliable)
+        repeat with c in chats
+            if id of c is "{escaped_chat_id}" then
+                send "{escaped_text}" to c
+                return
+            end if
+        end repeat
+        error "Chat not found: {escaped_chat_id}"
+    end try
 end tell
 """
         return self._run_applescript(applescript, f"group: {chat_id}")

@@ -36,8 +36,8 @@ def _get_memory_fast() -> tuple[float, float, float]:
             raise RuntimeError("vm_stat failed")
 
         lines = result.stdout.strip().split("\n")
-        
-        # Parse page size from first line: "Mach Virtual Memory Statistics: (page size of 16384 bytes)"
+
+        # Parse page size: "Mach Virtual Memory Statistics: (page size of 16384 bytes)"
         page_size = 4096
         if len(lines) > 0 and "page size of" in lines[0]:
             match = re.search(r"page size of (\d+) bytes", lines[0])
@@ -58,18 +58,18 @@ def _get_memory_fast() -> tuple[float, float, float]:
         free = stats.get("Pages free:", 0) * page_size
         inactive = stats.get("Pages inactive:", 0) * page_size
         speculative = stats.get("Pages speculative:", 0) * page_size
-        
+
         # Used = Active + Wired
         active = stats.get("Pages active:", 0) * page_size
         wired = (stats.get("Pages wired down:", 0) or stats.get("Pages wired:", 0)) * page_size
         compressed = stats.get("Pages occupied by compressor:", 0) * page_size
-        
+
         total = free + inactive + speculative + active + wired + compressed
         available = free + inactive + speculative
         used = active + wired + compressed
 
         return available / BYTES_PER_GB, used / BYTES_PER_GB, total / BYTES_PER_GB
-    except Exception as e:
+    except (subprocess.SubprocessError, OSError, ValueError) as e:
         logger.warning(f"vm_stat failed, falling back to psutil: {e}")
         memory = psutil.virtual_memory()
         return (
@@ -84,7 +84,7 @@ def _get_process_memory() -> tuple[float, float]:
         process = psutil.Process(os.getpid())
         mem_info = process.memory_info()
         return mem_info.rss / BYTES_PER_MB, mem_info.vms / BYTES_PER_MB
-    except Exception as e:
+    except (OSError, AttributeError) as e:
         logger.error(f"Failed to fetch process memory: {e}")
         return 0.0, 0.0
 
@@ -97,7 +97,7 @@ def _check_imessage_access() -> bool:
         result = reader.check_access()
         reader.close()
         return result
-    except Exception as e:
+    except (OSError, PermissionError) as e:
         logger.error(f"iMessage access check failed: {e}")
         return False
 
@@ -150,9 +150,7 @@ def _get_model_info() -> ModelInfo | None:
         )
         cache.set("model_info", result)
         return result
-    except (ImportError, AttributeError, KeyError, TypeError):
-        return None
-    except Exception:
+    except (ImportError, AttributeError, KeyError, TypeError, RuntimeError):
         return None
 
 
@@ -238,7 +236,7 @@ async def get_diagnostic(request: Request) -> dict[str, Any]:
 
         gen = get_generator()
         checks["model"] = {"status": "ok", "loaded": gen.is_loaded()}
-    except Exception as e:
+    except (ImportError, AttributeError, RuntimeError) as e:
         checks["model"] = {"status": "error", "message": str(e)}
         issues.append(f"Model check failed: {e}")
 
@@ -249,7 +247,7 @@ async def get_diagnostic(request: Request) -> dict[str, Any]:
         _ = len(reader.get_conversations(limit=1))
         reader.close()
         checks["database"] = {"status": "ok", "accessible": True}
-    except Exception as e:
+    except (OSError, PermissionError, RuntimeError) as e:
         checks["database"] = {"status": "error", "message": str(e)}
         issues.append(f"Database access failed: {e}")
 

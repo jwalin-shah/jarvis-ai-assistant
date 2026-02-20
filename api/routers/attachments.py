@@ -11,7 +11,10 @@ Features:
 
 import asyncio
 import functools
+import hashlib
 import logging
+import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -34,6 +37,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/attachments", tags=["attachments"])
 
+IMAGE_MEDIA_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".PNG": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".heic": "image/heic",
+    ".heif": "image/heif",
+}
+
 
 def format_bytes(size_bytes: int) -> str:
     """Format bytes as human-readable string.
@@ -52,6 +66,48 @@ def format_bytes(size_bytes: int) -> str:
         return f"{size_bytes / (1024 * 1024):.1f} MB"
     else:
         return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+
+
+def _generate_thumbnail_with_sips(source_path: Path, max_pixels: int = 1024) -> Path | None:
+    """Generate a JPEG thumbnail using macOS sips and cache it in temp dir."""
+    try:
+        stat = source_path.stat()
+        cache_key = hashlib.sha256(
+            f"{source_path}:{stat.st_mtime_ns}:{stat.st_size}".encode()
+        ).hexdigest()[:20]
+        cache_dir = Path(tempfile.gettempdir()) / "jarvis-attachment-thumbnails"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        thumb_path = cache_dir / f"{cache_key}.jpg"
+
+        if thumb_path.exists() and thumb_path.stat().st_size > 0:
+            return thumb_path
+
+        result = subprocess.run(
+            [
+                "sips",
+                "-s",
+                "format",
+                "jpeg",
+                "-Z",
+                str(max_pixels),
+                str(source_path),
+                "--out",
+                str(thumb_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if result.returncode == 0 and thumb_path.exists() and thumb_path.stat().st_size > 0:
+            return thumb_path
+    except FileNotFoundError:
+        # sips is only available on macOS; fallback to original image.
+        return None
+    except (subprocess.SubprocessError, OSError, ValueError) as e:
+        logger.debug(f"sips thumbnail generation failed: {e}")
+
+    return None
 
 
 @router.get(
@@ -364,15 +420,15 @@ def get_thumbnail(
             status_code=403,
             detail="Access denied: path outside attachments directory",
         ) from e
-    except Exception as e:
+    except (OSError, RuntimeError) as e:
         logger.warning(f"Path resolution error: {e}")
         raise HTTPException(
             status_code=400,
             detail="Invalid file path",
         ) from e
 
-    # Check for thumbnail
-    thumb_path = reader.get_attachment_thumbnail_path(file_path)
+    # Check for existing thumbnail sidecar
+    thumb_path = reader.get_attachment_thumbnail_path(str(resolved_path))
 
     if thumb_path:
         return FileResponse(
@@ -381,31 +437,28 @@ def get_thumbnail(
             filename=Path(thumb_path).name,
         )
 
-    # If no thumbnail exists, try to return the original file (for small images)
-    original_path = Path(file_path)
+    # If no sidecar thumbnail exists, try to generate one on-demand for images.
+    original_path = resolved_path
     if original_path.exists():
-        # Only serve original if it's an image and reasonably sized
+        # Only image attachments are expected in thumbnail endpoint fallback.
         suffix = original_path.suffix.lower()
-        if suffix in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"):
-            try:
-                size = original_path.stat().st_size
-                # Only serve if under 2MB
-                if size < 2 * 1024 * 1024:
-                    media_type = "image/jpeg"
-                    if suffix == ".png":
-                        media_type = "image/png"
-                    elif suffix == ".gif":
-                        media_type = "image/gif"
-                    elif suffix == ".webp":
-                        media_type = "image/webp"
+        if suffix in IMAGE_MEDIA_TYPES:
+            generated_thumb = _generate_thumbnail_with_sips(original_path)
+            if generated_thumb:
+                return FileResponse(
+                    str(generated_thumb),
+                    media_type="image/jpeg",
+                    filename=generated_thumb.name,
+                )
 
-                    return FileResponse(
-                        str(original_path),
-                        media_type=media_type,
-                        filename=original_path.name,
-                    )
-            except Exception as e:
-                logger.debug(f"Error checking file size: {e}")
+            # Fallback to original image when thumbnail generation is unavailable.
+            return FileResponse(
+                str(original_path),
+                media_type=IMAGE_MEDIA_TYPES[suffix],
+                filename=original_path.name,
+            )
+    else:
+        logger.debug(f"Attachment file not found on disk: {original_path}")
 
     raise HTTPException(
         status_code=404,
@@ -461,7 +514,7 @@ def download_attachment(
             status_code=403,
             detail="Access denied: path outside attachments directory",
         ) from e
-    except Exception as e:
+    except (OSError, RuntimeError) as e:
         logger.warning(f"Path resolution error: {e}")
         raise HTTPException(
             status_code=400,
@@ -469,6 +522,7 @@ def download_attachment(
         ) from e
 
     if not resolved_path.exists():
+        logger.debug(f"Attachment file not found on disk: {resolved_path}")
         raise HTTPException(
             status_code=404,
             detail="Attachment file not found",

@@ -52,7 +52,12 @@ class ExportConversationRequest(BaseModel):
 class ExportSearchRequest(BaseModel):
     """Request to export search results."""
 
-    query: str = Field(..., min_length=1, description="Search query")
+    query: str = Field(
+        ...,
+        min_length=1,
+        max_length=1000,
+        description="Search query (max 1000 characters)",
+    )
     format: ExportFormatEnum = Field(
         default=ExportFormatEnum.JSON,
         description="Export format (json, csv, txt)",

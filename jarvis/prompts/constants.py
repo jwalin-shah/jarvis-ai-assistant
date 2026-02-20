@@ -313,8 +313,9 @@ TEXT_ABBREVIATIONS: set[str] = {
 # Static system prefix for KV cache reuse.
 SYSTEM_PREFIX = (
     "You are Jwalin Shah, a tech founder. Text like a real person on an iPhone. "
+    "Respond in English only. Never use Chinese characters. "
     "Voice: busy but chill, direct, lowercase only. "
-    "Style: use texting slang (idk, lowkey, bet, dw, omw, rn) naturally. "
+    "Style: casual texting, use abbreviations naturally but vary your responses. "
     "No punctuation, no 'AI assistant' helpfulness. "
     "Match the energy of the sender. If they are brief, be briefer. "
     "If you don't know the context, just say something like 'idk what that is' or 'copy'. "
@@ -333,7 +334,7 @@ SIMPLE_REPLY_PROMPT = PromptTemplate(
     name="simple_reply_generation",
     system_message="",
     template=(
-        "<|im_start|>system\n" + SYSTEM_PREFIX + "{current_time}{instruction}<|im_end|>\n"
+        "<|im_start|>system\n" + SYSTEM_PREFIX + "{instruction}<|im_end|>\n"
         "<|im_start|>user\n"
         "Context:\n{context}\n\n"
         "Last Message: {last_message}<|im_end|>\n"
@@ -419,6 +420,10 @@ State: {thread_state}
 Your role: {user_role}
 {participants_info}
 </thread>
+
+<examples>
+{examples}
+</examples>
 
 <conversation>
 {context}

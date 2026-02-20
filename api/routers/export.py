@@ -8,7 +8,7 @@ import base64
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
@@ -92,9 +92,15 @@ def _to_export_format(format_enum: ExportFormatEnum) -> ExportFormat:
 @router.post("/conversation/{chat_id}", response_model=ExportResponse)
 @limiter.limit(RATE_LIMIT_READ)
 async def export_conversation(
-    chat_id: str,
-    export_request: ExportConversationRequest,
     request: Request,
+    export_request: ExportConversationRequest,
+    chat_id: str = Path(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="The unique conversation identifier",
+        examples=["chat123456789"],
+    ),
     reader: ChatDBReader = Depends(get_imessage_reader),
 ) -> ExportResponse:
     """Export a single conversation.
@@ -382,8 +388,14 @@ async def export_full_backup(
 
 @router.post("/pdf/{chat_id}", response_model=PDFExportResponse)
 async def export_conversation_pdf(
-    chat_id: str,
-    request: PDFExportRequest,
+    pdf_request: PDFExportRequest,
+    chat_id: str = Path(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="The unique conversation identifier",
+        examples=["chat123456789"],
+    ),
     reader: ChatDBReader = Depends(get_imessage_reader),
 ) -> PDFExportResponse:
     """Export a conversation to PDF format.
@@ -415,13 +427,12 @@ async def export_conversation_pdf(
                 detail=f"Conversation not found: {chat_id}",
             )
 
-        # Get messages with optional date filtering
-        before = request.date_range.end if request.date_range else None
-        after = request.date_range.start if request.date_range else None
+        before = pdf_request.date_range.end if pdf_request.date_range else None
+        after = pdf_request.date_range.start if pdf_request.date_range else None
         messages = await run_in_threadpool(
             reader.get_messages,
             chat_id=chat_id,
-            limit=request.limit,
+            limit=pdf_request.limit,
             before=before,
             after=after,
         )
@@ -432,12 +443,11 @@ async def export_conversation_pdf(
                 detail="No messages found in the specified range",
             )
 
-        # Create export options
         options = PDFExportOptions(
-            include_attachments=request.include_attachments,
-            include_reactions=request.include_reactions,
-            start_date=request.date_range.start if request.date_range else None,
-            end_date=request.date_range.end if request.date_range else None,
+            include_attachments=pdf_request.include_attachments,
+            include_reactions=pdf_request.include_reactions,
+            start_date=pdf_request.date_range.start if pdf_request.date_range else None,
+            end_date=pdf_request.date_range.end if pdf_request.date_range else None,
         )
 
         # Generate PDF
@@ -469,8 +479,14 @@ async def export_conversation_pdf(
 
 @router.post("/pdf/{chat_id}/download")
 async def download_conversation_pdf(
-    chat_id: str,
-    request: PDFExportRequest,
+    pdf_request: PDFExportRequest,
+    chat_id: str = Path(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="The unique conversation identifier",
+        examples=["chat123456789"],
+    ),
     reader: ChatDBReader = Depends(get_imessage_reader),
 ) -> Response:
     """Download a conversation as a PDF file.
@@ -479,7 +495,7 @@ async def download_conversation_pdf(
 
     Args:
         chat_id: The conversation ID to export.
-        request: Export options.
+        pdf_request: Export options.
 
     Returns:
         PDF file response for direct download.
@@ -495,12 +511,12 @@ async def download_conversation_pdf(
             )
 
         # Get messages with optional date filtering
-        before = request.date_range.end if request.date_range else None
-        after = request.date_range.start if request.date_range else None
+        before = pdf_request.date_range.end if pdf_request.date_range else None
+        after = pdf_request.date_range.start if pdf_request.date_range else None
         messages = await run_in_threadpool(
             reader.get_messages,
             chat_id=chat_id,
-            limit=request.limit,
+            limit=pdf_request.limit,
             before=before,
             after=after,
         )
@@ -513,10 +529,10 @@ async def download_conversation_pdf(
 
         # Create export options
         options = PDFExportOptions(
-            include_attachments=request.include_attachments,
-            include_reactions=request.include_reactions,
-            start_date=request.date_range.start if request.date_range else None,
-            end_date=request.date_range.end if request.date_range else None,
+            include_attachments=pdf_request.include_attachments,
+            include_reactions=pdf_request.include_reactions,
+            start_date=pdf_request.date_range.start if pdf_request.date_range else None,
+            end_date=pdf_request.date_range.end if pdf_request.date_range else None,
         )
 
         # Generate PDF

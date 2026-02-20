@@ -195,7 +195,7 @@ class Service(abc.ABC):
             except ServiceStartError:
                 # Re-raise service errors as-is
                 raise
-            except Exception as e:
+            except (OSError, subprocess.SubprocessError, PermissionError) as e:
                 self._status = ServiceStatus.FAILED
                 logger.error("Failed to start service %s: %s", self.name, e, exc_info=True)
                 raise ServiceStartError(
@@ -226,7 +226,7 @@ class Service(abc.ABC):
             except ServiceStopError:
                 # Re-raise service errors as-is
                 raise
-            except Exception as e:
+            except (OSError, subprocess.SubprocessError, PermissionError) as e:
                 logger.error("Error stopping service %s: %s", self.name, e, exc_info=True)
                 raise ServiceStopError(
                     f"Failed to stop {self.name}",
@@ -252,7 +252,7 @@ class Service(abc.ABC):
         """
         try:
             return self._perform_health_check()
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError, ConnectionError) as e:
             logger.debug("Health check failed for %s: %s", self.name, e, exc_info=True)
             return False
 
@@ -394,7 +394,7 @@ class Service(abc.ABC):
                                 new_status.value,
                             )
 
-            except Exception as e:
+            except (OSError, subprocess.SubprocessError, ConnectionError, RuntimeError) as e:
                 logger.error("Health monitor error for %s: %s", self.name, e, exc_info=True)
 
             # Wait before next check
