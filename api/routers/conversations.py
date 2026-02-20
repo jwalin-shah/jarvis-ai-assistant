@@ -10,8 +10,10 @@ All endpoints require Full Disk Access permission to read the iMessage database.
 
 import asyncio
 from datetime import datetime
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import Path as FastPath
 from starlette.concurrency import run_in_threadpool
 
 from api.dependencies import get_imessage_reader
@@ -239,7 +241,7 @@ async def list_conversations(
 @limiter.limit(RATE_LIMIT_READ)
 async def get_messages(
     request: Request,
-    chat_id: str = Path(
+    chat_id: str = FastPath(
         ...,
         min_length=1,
         max_length=255,
@@ -518,7 +520,7 @@ async def search_messages(
 async def send_message(
     request: Request,
     message_request: SendMessageRequest,
-    chat_id: str = Path(
+    chat_id: str = FastPath(
         ...,
         min_length=1,
         max_length=255,
@@ -648,7 +650,7 @@ async def send_message(
 async def send_attachment(
     request: Request,
     attachment_request: SendAttachmentRequest,
-    chat_id: str = Path(
+    chat_id: str = FastPath(
         ...,
         min_length=1,
         max_length=255,

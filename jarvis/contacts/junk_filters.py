@@ -27,6 +27,7 @@ _BOT_HIGH_CONF = [
         r"reminder:",
         r"reply with (?:no|stop|quit) to",
         r"text (?:no|stop|quit) if you",
+        r"check out this job at",
     ]
 ]
 _BOT_SHORT_CODE_RE = re.compile(r"SMS;-;\d{5,6}$")

@@ -24,6 +24,18 @@
   Group chat with 2 participants
   </thread>
   
+  <examples>
+  Example 1:
+  Sarah: What time works for pickup?
+  Me: How about 5pm?
+  Your reply: 5pm works! See you then.
+  
+  Example 2:
+  John: Running late, stuck in traffic
+  John: Be there in 15
+  Your reply: No worries, take your time!
+  </examples>
+  
   <conversation>
   [] Alice: Where are we meeting?
   </conversation>

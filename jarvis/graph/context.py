@@ -37,8 +37,8 @@ def get_graph_context(contact_id: str, chat_id: str) -> str:
         Compact context string, or empty string if unavailable.
     """
     cache_key = f"{contact_id}:{chat_id}"
-    cached = _context_cache.get(cache_key)
-    if cached is not None:
+    exists, cached = _context_cache.get(cache_key)
+    if exists:
         return str(cached)
 
     parts: list[str] = []

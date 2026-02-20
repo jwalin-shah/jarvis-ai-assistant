@@ -377,6 +377,7 @@ class ReplyService:
                 cached_embedder = precomputed.cached_embedder or cached_embedder
             routing_start = time.perf_counter()
             latency_ms: dict[str, float] = {}
+            local_search_results: list[dict[str, Any]] = search_results or []
 
             if cached_embedder is None:
                 cached_embedder = get_embedder()
@@ -441,7 +442,7 @@ class ReplyService:
 
             # Skip RAG search - results were discarded in build_generation_request
             # Direct-to-LLM approach: no retrieval, just conversation context
-            search_results: list[dict[str, Any]] = []
+            local_search_results = []
 
             can_generate, health_reason = self.can_use_llm()
             if not can_generate:
@@ -459,7 +460,9 @@ class ReplyService:
                     },
                 )
                 latency_ms["total"] = (time.perf_counter() - routing_start) * 1000
-                self._persist_reply_log(context, classification, search_results, result, latency_ms)
+                self._persist_reply_log(
+                    context, classification, local_search_results, result, latency_ms
+                )
                 return result
 
             # LLM generation phase
@@ -468,7 +471,7 @@ class ReplyService:
                 result, latency_ms = self._generate_response(
                     context,
                     classification,
-                    search_results,
+                    local_search_results,
                     contact,
                     thread_messages,
                     cached_embedder,
@@ -487,13 +490,15 @@ class ReplyService:
                 result,
                 category_name,
                 incoming,
-                search_results,
+                local_search_results,
                 latency_ms,
                 cached_embedder,
             )
 
             # Persist full generation log for traceability
-            persist_reply_log(self.db, context, classification, search_results, result, latency_ms)
+            persist_reply_log(
+                self.db, context, classification, local_search_results, result, latency_ms
+            )
 
             return result
 

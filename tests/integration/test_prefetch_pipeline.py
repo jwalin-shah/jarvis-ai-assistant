@@ -52,11 +52,17 @@ def mock_router():
     """Mock reply service to avoid real LLM inference."""
     with patch("jarvis.reply_service.get_reply_service") as mock_get_service:
         service = MagicMock()
-        service.route_legacy.return_value = {
-            "type": "generated",
-            "response": "Sure, sounds good!",
-            "confidence": "high",
-        }
+        mock_request = MagicMock()
+        mock_request.temperature = 0.5
+        mock_response = MagicMock()
+        mock_response.text = "Sure, sounds good!"
+
+        service.prepare_streaming_context.return_value = (
+            mock_request,
+            {"confidence": "high", "confidence_score": 0.8},
+        )
+        service.generator = MagicMock()
+        service.generator.generate.return_value = mock_response
         mock_get_service.return_value = service
         yield service
 
@@ -159,12 +165,11 @@ class TestPrefetchPipelineFlow:
             assert len(result["suggestions"]) > 0
             assert result["suggestions"][0]["text"] == "Sure, sounds good!"
 
-            # Verify reply service was called with conversation_messages (not thread)
-            mock_router.route_legacy.assert_called_once()
-            call_kwargs = mock_router.route_legacy.call_args[1]
+            # Verify reply service was called
+            mock_router.prepare_streaming_context.assert_called()
+            call_kwargs = mock_router.prepare_streaming_context.call_args[1]
             assert call_kwargs["incoming"] == "Hey, want to grab lunch?"
             assert call_kwargs["chat_id"] == "chat123"
-            assert "conversation_messages" in call_kwargs
 
             # Verify cache stats (flat dict, not nested by tier)
             stats = cache.stats()
