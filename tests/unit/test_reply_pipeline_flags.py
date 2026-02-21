@@ -10,6 +10,7 @@ from jarvis.contracts.pipeline import (
     GenerationRequest,
     IntentType,
     MessageContext,
+    RAGDocument,
     UrgencyLevel,
 )
 from jarvis.reply_service_generation import (
@@ -142,7 +143,7 @@ def test_build_generation_request_honors_rag_and_few_shot_flags(monkeypatch) -> 
     monkeypatch.setattr(rsg, "get_config", lambda: _config(rag=True, few_shot=True))
 
     context = _context()
-    search_results = [{"text": "doc", "similarity": 0.9}]
+    search_results = [{"content": "doc", "score": 0.9, "source": "search"}]
     request = build_generation_request(
         _StubService(),
         context=context,
@@ -152,7 +153,13 @@ def test_build_generation_request_honors_rag_and_few_shot_flags(monkeypatch) -> 
         thread=["Them: hi", "Me: yo"],
     )
 
-    assert request.retrieved_docs == search_results
+    expected_doc = RAGDocument(
+        content="doc",
+        source="search",
+        score=0.9,
+        metadata=search_results[0],
+    )
+    assert request.retrieved_docs == [expected_doc]
     assert isinstance(request.few_shot_examples, list)
 
 
