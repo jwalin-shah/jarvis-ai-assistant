@@ -6,12 +6,12 @@ Contains schemas for extended attachment information and storage statistics.
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class AttachmentTypeEnum(str, Enum):
+class AttachmentTypeEnum(StrEnum):
     """Attachment type categories for filtering."""
 
     IMAGES = "images"

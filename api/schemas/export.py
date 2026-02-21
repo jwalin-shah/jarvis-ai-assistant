@@ -6,12 +6,12 @@ Contains schemas for data export and daily/weekly digest functionality.
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class ExportFormatEnum(str, Enum):
+class ExportFormatEnum(StrEnum):
     """Supported export formats."""
 
     JSON = "json"
@@ -115,14 +115,14 @@ class ExportResponse(BaseModel):
     )
 
 
-class DigestPeriodEnum(str, Enum):
+class DigestPeriodEnum(StrEnum):
     """Time period for digest generation."""
 
     DAILY = "daily"
     WEEKLY = "weekly"
 
 
-class DigestFormatEnum(str, Enum):
+class DigestFormatEnum(StrEnum):
     """Supported digest export formats."""
 
     MARKDOWN = "markdown"

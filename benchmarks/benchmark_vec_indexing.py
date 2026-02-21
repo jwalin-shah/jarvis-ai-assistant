@@ -10,19 +10,19 @@ sys.modules["jarvis.embedding_adapter"] = mock_adapter
 
 sys.modules["models.bert_embedder"] = MagicMock()
 
-import time
+import time  # noqa: E402
 
-import numpy as np
+import numpy as np  # noqa: E402
 
 try:
-    from jarvis.search.vec_search import VecSearcher
+    from jarvis.search.vec_search import VecSearcher  # noqa: E402
 except ImportError:
     sys.modules["jarvis.db"] = MagicMock()
-    from jarvis.search.vec_search import VecSearcher
+    from jarvis.search.vec_search import VecSearcher  # noqa: E402
 
-from datetime import datetime
+from datetime import datetime  # noqa: E402
 
-from contracts.imessage import Message
+from contracts.imessage import Message  # noqa: E402
 
 
 def benchmark():

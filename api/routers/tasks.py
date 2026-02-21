@@ -5,7 +5,7 @@ Supports creating, listing, cancelling, and monitoring tasks.
 """
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 # =============================================================================
 
 
-class TaskStatusEnum(str, Enum):
+class TaskStatusEnum(StrEnum):
     """Task status enumeration for API."""
 
     PENDING = "pending"
@@ -38,7 +38,7 @@ class TaskStatusEnum(str, Enum):
     CANCELLED = "cancelled"
 
 
-class TaskTypeEnum(str, Enum):
+class TaskTypeEnum(StrEnum):
     """Task type enumeration for API."""
 
     BATCH_EXPORT = "batch_export"

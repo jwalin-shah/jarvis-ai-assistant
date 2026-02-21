@@ -6,12 +6,12 @@ Contains schemas for conversation statistics and analytics.
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class TimeRangeEnum(str, Enum):
+class TimeRangeEnum(StrEnum):
     """Time range options for statistics calculation."""
 
     WEEK = "week"
