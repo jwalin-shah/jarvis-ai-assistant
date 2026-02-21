@@ -25,7 +25,7 @@ import mlx.nn as nn
 # ---------------------------------------------------------------------------
 
 
-class DebertaEmbeddings(nn.Module):
+class DebertaEmbeddings(nn.Module):  # type: ignore[misc]
     """Word embeddings + LayerNorm. No position embeddings (uses relative)."""
 
     def __init__(self, config: dict[str, Any]) -> None:
@@ -42,7 +42,7 @@ class DebertaEmbeddings(nn.Module):
 # ---------------------------------------------------------------------------
 
 
-class DisentangledAttention(nn.Module):
+class DisentangledAttention(nn.Module):  # type: ignore[misc]
     """DeBERTa disentangled self-attention with log-bucketed relative positions."""
 
     def __init__(self, config: dict[str, Any]) -> None:
@@ -141,7 +141,7 @@ class DisentangledAttention(nn.Module):
 # ---------------------------------------------------------------------------
 
 
-class DebertaLayer(nn.Module):
+class DebertaLayer(nn.Module):  # type: ignore[misc]
     """Single DeBERTa transformer layer."""
 
     def __init__(self, config: dict[str, Any]) -> None:
@@ -169,7 +169,7 @@ class DebertaLayer(nn.Module):
         return cast(mx.array, self.ff_norm(x + ff))
 
 
-class DebertaEncoder(nn.Module):
+class DebertaEncoder(nn.Module):  # type: ignore[misc]
     """DeBERTa encoder with shared relative position embeddings."""
 
     def __init__(self, config: dict[str, Any]) -> None:
@@ -194,7 +194,7 @@ class DebertaEncoder(nn.Module):
 # ---------------------------------------------------------------------------
 
 
-class DebertaModel(nn.Module):
+class DebertaModel(nn.Module):  # type: ignore[misc]
     """DeBERTa-v3 base model (embeddings + encoder)."""
 
     def __init__(self, config: dict[str, Any]) -> None:
@@ -215,7 +215,7 @@ class DebertaModel(nn.Module):
         return self.encoder(x, mask)
 
 
-class DebertaForSequenceClassification(nn.Module):
+class DebertaForSequenceClassification(nn.Module):  # type: ignore[misc]
     """DeBERTa-v3 with [CLS] pooler + classification head.
 
     For NLI: num_labels=3 (contradiction, entailment, neutral).

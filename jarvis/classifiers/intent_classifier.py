@@ -266,7 +266,7 @@ class MLXPromptIntentClassifier:
         )
 
 
-class _MLXDistilEmbeddings(nn.Module):
+class _MLXDistilEmbeddings(nn.Module):  # type: ignore[misc]
     def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
         self.word_embeddings = nn.Embedding(cfg["vocab_size"], cfg["dim"])
@@ -280,7 +280,7 @@ class _MLXDistilEmbeddings(nn.Module):
         return cast(mx.array, self.LayerNorm(out))
 
 
-class _MLXDistilAttention(nn.Module):
+class _MLXDistilAttention(nn.Module):  # type: ignore[misc]
     def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
         dim = cfg["dim"]
@@ -306,7 +306,7 @@ class _MLXDistilAttention(nn.Module):
         return cast(mx.array, self.out_lin(out))
 
 
-class _MLXDistilLayer(nn.Module):
+class _MLXDistilLayer(nn.Module):  # type: ignore[misc]
     def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
         dim = cfg["dim"]
@@ -324,7 +324,7 @@ class _MLXDistilLayer(nn.Module):
         return cast(mx.array, self.output_layer_norm(x + ff))
 
 
-class _MLXDistilTransformer(nn.Module):
+class _MLXDistilTransformer(nn.Module):  # type: ignore[misc]
     def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
         self.layer = [_MLXDistilLayer(cfg) for _ in range(cfg["n_layers"])]
@@ -335,7 +335,7 @@ class _MLXDistilTransformer(nn.Module):
         return x
 
 
-class _MLXDistilBertModel(nn.Module):
+class _MLXDistilBertModel(nn.Module):  # type: ignore[misc]
     def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
         self.embeddings = _MLXDistilEmbeddings(cfg)
@@ -345,7 +345,7 @@ class _MLXDistilBertModel(nn.Module):
         return self.transformer(self.embeddings(input_ids), attention_mask)
 
 
-class _MLXDistilBertForSequenceClassification(nn.Module):
+class _MLXDistilBertForSequenceClassification(nn.Module):  # type: ignore[misc]
     def __init__(self, cfg: dict[str, Any], num_labels: int) -> None:
         super().__init__()
         self.distilbert = _MLXDistilBertModel(cfg)
