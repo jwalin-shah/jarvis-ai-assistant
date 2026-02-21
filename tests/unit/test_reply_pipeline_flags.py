@@ -152,7 +152,9 @@ def test_build_generation_request_honors_rag_and_few_shot_flags(monkeypatch) -> 
         thread=["Them: hi", "Me: yo"],
     )
 
-    assert request.retrieved_docs == search_results
+    assert len(request.retrieved_docs) == 1
+    assert request.retrieved_docs[0].content == "doc"
+    assert request.retrieved_docs[0].score == 0.9
     assert isinstance(request.few_shot_examples, list)
 
 
