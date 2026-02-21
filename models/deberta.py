@@ -25,13 +25,13 @@ import mlx.nn as nn
 # ---------------------------------------------------------------------------
 
 
-class DebertaEmbeddings(nn.Module):  # type: ignore
+class DebertaEmbeddings(nn.Module):  # type: ignore[misc]
     """Word embeddings + LayerNorm. No position embeddings (uses relative)."""
 
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__()
-        self.word_embeddings = nn.Embedding(config["vocab_size"], config["hidden_size"])  # type: ignore[attr-defined]
-        self.LayerNorm = nn.LayerNorm(config["hidden_size"], eps=config.get("layer_norm_eps", 1e-7))  # type: ignore[attr-defined]
+        self.word_embeddings = nn.Embedding(config["vocab_size"], config["hidden_size"])
+        self.LayerNorm = nn.LayerNorm(config["hidden_size"], eps=config.get("layer_norm_eps", 1e-7))
 
     def __call__(self, input_ids: mx.array) -> mx.array:
         return cast(mx.array, self.LayerNorm(self.word_embeddings(input_ids)))
@@ -42,7 +42,7 @@ class DebertaEmbeddings(nn.Module):  # type: ignore
 # ---------------------------------------------------------------------------
 
 
-class DisentangledAttention(nn.Module):  # type: ignore
+class DisentangledAttention(nn.Module):  # type: ignore[misc]
     """DeBERTa disentangled self-attention with log-bucketed relative positions."""
 
     def __init__(self, config: dict[str, Any]) -> None:
@@ -50,9 +50,9 @@ class DisentangledAttention(nn.Module):  # type: ignore
         self.num_heads = config["num_attention_heads"]
         self.head_dim = config["hidden_size"] // self.num_heads
 
-        self.query_proj = nn.Linear(config["hidden_size"], config["hidden_size"])  # type: ignore[attr-defined]
-        self.key_proj = nn.Linear(config["hidden_size"], config["hidden_size"])  # type: ignore[attr-defined]
-        self.value_proj = nn.Linear(config["hidden_size"], config["hidden_size"])  # type: ignore[attr-defined]
+        self.query_proj = nn.Linear(config["hidden_size"], config["hidden_size"])
+        self.key_proj = nn.Linear(config["hidden_size"], config["hidden_size"])
+        self.value_proj = nn.Linear(config["hidden_size"], config["hidden_size"])
 
         self.position_buckets = config.get("position_buckets", 256)
         self.max_relative = config.get("max_position_embeddings", 512)
@@ -64,8 +64,8 @@ class DisentangledAttention(nn.Module):  # type: ignore
 
         self.share_att_key: bool = config.get("share_att_key", True)
         if not self.share_att_key:
-            self.pos_key_proj = nn.Linear(config["hidden_size"], config["hidden_size"])  # type: ignore[attr-defined]
-            self.pos_query_proj = nn.Linear(config["hidden_size"], config["hidden_size"])  # type: ignore[attr-defined]
+            self.pos_key_proj = nn.Linear(config["hidden_size"], config["hidden_size"])
+            self.pos_query_proj = nn.Linear(config["hidden_size"], config["hidden_size"])
 
         n_components = 1 + ("c2p" in self.pos_att_type) + ("p2c" in self.pos_att_type)
         self._scale = 1.0 / math.sqrt(self.head_dim * n_components)
@@ -141,7 +141,7 @@ class DisentangledAttention(nn.Module):  # type: ignore
 # ---------------------------------------------------------------------------
 
 
-class DebertaLayer(nn.Module):  # type: ignore
+class DebertaLayer(nn.Module):  # type: ignore[misc]
     """Single DeBERTa transformer layer."""
 
     def __init__(self, config: dict[str, Any]) -> None:
@@ -151,11 +151,11 @@ class DebertaLayer(nn.Module):  # type: ignore
         intermediate = config["intermediate_size"]
 
         self.attention = DisentangledAttention(config)
-        self.output_proj = nn.Linear(hidden, hidden)  # type: ignore[attr-defined]
-        self.attn_norm = nn.LayerNorm(hidden, eps=eps)  # type: ignore[attr-defined]
-        self.intermediate = nn.Linear(hidden, intermediate)  # type: ignore[attr-defined]
-        self.output = nn.Linear(intermediate, hidden)  # type: ignore[attr-defined]
-        self.ff_norm = nn.LayerNorm(hidden, eps=eps)  # type: ignore[attr-defined]
+        self.output_proj = nn.Linear(hidden, hidden)
+        self.attn_norm = nn.LayerNorm(hidden, eps=eps)
+        self.intermediate = nn.Linear(hidden, intermediate)
+        self.output = nn.Linear(intermediate, hidden)
+        self.ff_norm = nn.LayerNorm(hidden, eps=eps)
 
     def __call__(
         self,
@@ -165,19 +165,19 @@ class DebertaLayer(nn.Module):  # type: ignore
     ) -> mx.array:
         attn = self.output_proj(self.attention(x, mask, rel_emb))
         x = self.attn_norm(x + attn)
-        ff = self.output(nn.gelu(self.intermediate(x)))  # type: ignore[attr-defined]
+        ff = self.output(nn.gelu(self.intermediate(x)))
         return cast(mx.array, self.ff_norm(x + ff))
 
 
-class DebertaEncoder(nn.Module):  # type: ignore
+class DebertaEncoder(nn.Module):  # type: ignore[misc]
     """DeBERTa encoder with shared relative position embeddings."""
 
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__()
         buckets = config.get("position_buckets", 256)
-        self.rel_embeddings = nn.Embedding(2 * buckets, config["hidden_size"])  # type: ignore[attr-defined]
+        self.rel_embeddings = nn.Embedding(2 * buckets, config["hidden_size"])
         if config.get("norm_rel_ebd", "") == "layer_norm":
-            self.norm = nn.LayerNorm(config["hidden_size"], eps=config.get("layer_norm_eps", 1e-7))  # type: ignore[attr-defined]
+            self.norm = nn.LayerNorm(config["hidden_size"], eps=config.get("layer_norm_eps", 1e-7))
         self.layers = [DebertaLayer(config) for _ in range(config["num_hidden_layers"])]
 
     def __call__(self, hidden_states: mx.array, attention_mask: mx.array | None) -> mx.array:
@@ -194,7 +194,7 @@ class DebertaEncoder(nn.Module):  # type: ignore
 # ---------------------------------------------------------------------------
 
 
-class DebertaModel(nn.Module):  # type: ignore
+class DebertaModel(nn.Module):  # type: ignore[misc]
     """DeBERTa-v3 base model (embeddings + encoder)."""
 
     def __init__(self, config: dict[str, Any]) -> None:
@@ -215,7 +215,7 @@ class DebertaModel(nn.Module):  # type: ignore
         return self.encoder(x, mask)
 
 
-class DebertaForSequenceClassification(nn.Module):  # type: ignore
+class DebertaForSequenceClassification(nn.Module):  # type: ignore[misc]
     """DeBERTa-v3 with [CLS] pooler + classification head.
 
     For NLI: num_labels=3 (contradiction, entailment, neutral).
@@ -225,8 +225,8 @@ class DebertaForSequenceClassification(nn.Module):  # type: ignore
         super().__init__()
         self.deberta = DebertaModel(config)
         hidden = config.get("pooler_hidden_size", config["hidden_size"])
-        self.pooler = nn.Linear(config["hidden_size"], hidden)  # type: ignore[attr-defined]
-        self.classifier = nn.Linear(hidden, num_labels)  # type: ignore[attr-defined]
+        self.pooler = nn.Linear(config["hidden_size"], hidden)
+        self.classifier = nn.Linear(hidden, num_labels)
 
     def __call__(
         self,
@@ -235,7 +235,7 @@ class DebertaForSequenceClassification(nn.Module):  # type: ignore
     ) -> mx.array:
         """Forward pass returning raw logits of shape (batch, num_labels)."""
         hidden = self.deberta(input_ids, attention_mask)
-        pooled = nn.gelu(self.pooler(hidden[:, 0]))  # type: ignore[attr-defined]
+        pooled = nn.gelu(self.pooler(hidden[:, 0]))
         return cast(mx.array, self.classifier(pooled))
 
 

@@ -99,20 +99,23 @@ class TestGetCachedEmbeddings:
         """Cache should evict oldest entries when reaching 1000 limit."""
         service = ReplyService()
 
-        # Manually create cache with 999 entries
-        service._embedding_cache = {f"key_{i}": np.array([i]) for i in range(999)}
+        # Manually create cache with 999 entries (must be OrderedDict to match source)
+        from collections import OrderedDict
+
+        service._embedding_cache = OrderedDict({f"key_{i}": np.array([i]) for i in range(999)})
         service._embedding_cache_hits = 0
         service._embedding_cache_misses = 0
 
         mock_embedder = MagicMock()
         mock_embedder.encode.return_value = np.array([[0.1, 0.2, 0.3]])
 
-        # Add 2 more entries (should trigger eviction)
+        # Add 2 more entries (second triggers eviction since cache hits 1000)
         service._get_cached_embeddings(["text 1"], mock_embedder)
         service._get_cached_embeddings(["text 2"], mock_embedder)
 
-        # Cache should be cleaned up (half evicted + 2 new)
-        assert len(service._embedding_cache) <= 502  # 500 kept + 2 new
+        # Source evicts one entry per addition when at capacity (LRU, not bulk)
+        # 999 + 1 (no evict) = 1000, then +1 -1 = 1000
+        assert len(service._embedding_cache) == 1000
 
     def test_empty_texts_list(self) -> None:
         """Empty list should return empty array."""

@@ -266,12 +266,12 @@ class MLXPromptIntentClassifier:
         )
 
 
-class _MLXDistilEmbeddings(nn.Module):  # type: ignore[name-defined,misc]
+class _MLXDistilEmbeddings(nn.Module):  # type: ignore[misc]
     def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
-        self.word_embeddings = nn.Embedding(cfg["vocab_size"], cfg["dim"])  # type: ignore[attr-defined]
-        self.position_embeddings = nn.Embedding(cfg["max_position_embeddings"], cfg["dim"])  # type: ignore[attr-defined]
-        self.LayerNorm = nn.LayerNorm(cfg["dim"], eps=1e-12)  # type: ignore[attr-defined]
+        self.word_embeddings = nn.Embedding(cfg["vocab_size"], cfg["dim"])
+        self.position_embeddings = nn.Embedding(cfg["max_position_embeddings"], cfg["dim"])
+        self.LayerNorm = nn.LayerNorm(cfg["dim"], eps=1e-12)
 
     def __call__(self, input_ids: mx.array) -> mx.array:
         seq_len = input_ids.shape[1]
@@ -280,16 +280,16 @@ class _MLXDistilEmbeddings(nn.Module):  # type: ignore[name-defined,misc]
         return cast(mx.array, self.LayerNorm(out))
 
 
-class _MLXDistilAttention(nn.Module):  # type: ignore[name-defined,misc]
+class _MLXDistilAttention(nn.Module):  # type: ignore[misc]
     def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
         dim = cfg["dim"]
         self.n_heads = cfg["n_heads"]
         self.head_dim = dim // self.n_heads
-        self.q_lin = nn.Linear(dim, dim)  # type: ignore[attr-defined]
-        self.k_lin = nn.Linear(dim, dim)  # type: ignore[attr-defined]
-        self.v_lin = nn.Linear(dim, dim)  # type: ignore[attr-defined]
-        self.out_lin = nn.Linear(dim, dim)  # type: ignore[attr-defined]
+        self.q_lin = nn.Linear(dim, dim)
+        self.k_lin = nn.Linear(dim, dim)
+        self.v_lin = nn.Linear(dim, dim)
+        self.out_lin = nn.Linear(dim, dim)
 
     def __call__(self, x: mx.array, attention_mask: mx.array | None) -> mx.array:
         bsz, seq, dim = x.shape
@@ -306,25 +306,25 @@ class _MLXDistilAttention(nn.Module):  # type: ignore[name-defined,misc]
         return cast(mx.array, self.out_lin(out))
 
 
-class _MLXDistilLayer(nn.Module):  # type: ignore[name-defined,misc]
+class _MLXDistilLayer(nn.Module):  # type: ignore[misc]
     def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
         dim = cfg["dim"]
         hidden_dim = cfg["hidden_dim"]
         self.attention = _MLXDistilAttention(cfg)
-        self.sa_layer_norm = nn.LayerNorm(dim, eps=1e-12)  # type: ignore[attr-defined]
-        self.ffn = nn.Module()  # type: ignore[attr-defined]
-        self.ffn.lin1 = nn.Linear(dim, hidden_dim)  # type: ignore[attr-defined]
-        self.ffn.lin2 = nn.Linear(hidden_dim, dim)  # type: ignore[attr-defined]
-        self.output_layer_norm = nn.LayerNorm(dim, eps=1e-12)  # type: ignore[attr-defined]
+        self.sa_layer_norm = nn.LayerNorm(dim, eps=1e-12)
+        self.ffn = nn.Module()
+        self.ffn.lin1 = nn.Linear(dim, hidden_dim)
+        self.ffn.lin2 = nn.Linear(hidden_dim, dim)
+        self.output_layer_norm = nn.LayerNorm(dim, eps=1e-12)
 
     def __call__(self, x: mx.array, attention_mask: mx.array | None) -> mx.array:
         x = self.sa_layer_norm(x + self.attention(x, attention_mask))
-        ff = self.ffn.lin2(nn.gelu(self.ffn.lin1(x)))  # type: ignore[attr-defined]
+        ff = self.ffn.lin2(nn.gelu(self.ffn.lin1(x)))
         return cast(mx.array, self.output_layer_norm(x + ff))
 
 
-class _MLXDistilTransformer(nn.Module):  # type: ignore[name-defined,misc]
+class _MLXDistilTransformer(nn.Module):  # type: ignore[misc]
     def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
         self.layer = [_MLXDistilLayer(cfg) for _ in range(cfg["n_layers"])]
@@ -335,7 +335,7 @@ class _MLXDistilTransformer(nn.Module):  # type: ignore[name-defined,misc]
         return x
 
 
-class _MLXDistilBertModel(nn.Module):  # type: ignore[name-defined,misc]
+class _MLXDistilBertModel(nn.Module):  # type: ignore[misc]
     def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__()
         self.embeddings = _MLXDistilEmbeddings(cfg)
@@ -345,17 +345,17 @@ class _MLXDistilBertModel(nn.Module):  # type: ignore[name-defined,misc]
         return self.transformer(self.embeddings(input_ids), attention_mask)
 
 
-class _MLXDistilBertForSequenceClassification(nn.Module):  # type: ignore[name-defined,misc]
+class _MLXDistilBertForSequenceClassification(nn.Module):  # type: ignore[misc]
     def __init__(self, cfg: dict[str, Any], num_labels: int) -> None:
         super().__init__()
         self.distilbert = _MLXDistilBertModel(cfg)
-        self.pre_classifier = nn.Linear(cfg["dim"], cfg["dim"])  # type: ignore[attr-defined]
-        self.classifier = nn.Linear(cfg["dim"], num_labels)  # type: ignore[attr-defined]
+        self.pre_classifier = nn.Linear(cfg["dim"], cfg["dim"])
+        self.classifier = nn.Linear(cfg["dim"], num_labels)
 
     def __call__(self, input_ids: mx.array, attention_mask: mx.array | None = None) -> mx.array:
         hidden = self.distilbert(input_ids, attention_mask)
         pooled = hidden[:, 0]
-        return cast(mx.array, self.classifier(nn.relu(self.pre_classifier(pooled))))  # type: ignore[attr-defined]
+        return cast(mx.array, self.classifier(nn.relu(self.pre_classifier(pooled))))
 
 
 class MLXDistilBertIntentClassifier:

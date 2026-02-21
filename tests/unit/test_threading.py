@@ -1,7 +1,7 @@
 """Tests for conversation threading module."""
 
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from jarvis.threading import (
     Thread,
@@ -87,7 +87,13 @@ class TestThreadingConfig:
 
 
 class TestThreadAnalyzer:
-    """Tests for ThreadAnalyzer."""
+    """Tests for ThreadAnalyzer.
+
+    Note: _get_sentence_model is patched to return None in tests that create
+    threads, because _detect_topic_label -> analyze() -> _ensure_embeddings_computed()
+    tries to load BAAI/bge-small-en-v1.5 from HuggingFace cache, which isn't
+    available in CI. These are unit tests for threading logic, not embedding integration.
+    """
 
     def test_analyzer_creation(self) -> None:
         """Test analyzer creation with default config."""
@@ -107,7 +113,8 @@ class TestThreadAnalyzer:
         threads = analyzer.analyze_threads([], "chat123")
         assert threads == []
 
-    def test_analyze_single_message(self) -> None:
+    @patch.object(ThreadAnalyzer, "_get_sentence_model", return_value=None)
+    def test_analyze_single_message(self, _mock_model) -> None:
         """Test analyzing a single message."""
         analyzer = ThreadAnalyzer()
         message = self._create_mock_message(
@@ -120,7 +127,8 @@ class TestThreadAnalyzer:
         assert threads[0].message_count == 1
         assert 1 in threads[0].messages
 
-    def test_analyze_messages_within_time_gap(self) -> None:
+    @patch.object(ThreadAnalyzer, "_get_sentence_model", return_value=None)
+    def test_analyze_messages_within_time_gap(self, _mock_model) -> None:
         """Test that messages within time gap are grouped together."""
         config = ThreadingConfig(
             time_gap_threshold_minutes=30,
@@ -139,7 +147,8 @@ class TestThreadAnalyzer:
         assert len(threads) == 1
         assert threads[0].message_count == 3
 
-    def test_analyze_messages_split_by_time_gap(self) -> None:
+    @patch.object(ThreadAnalyzer, "_get_sentence_model", return_value=None)
+    def test_analyze_messages_split_by_time_gap(self, _mock_model) -> None:
         """Test that messages split by time gap form separate threads."""
         config = ThreadingConfig(
             time_gap_threshold_minutes=30,
@@ -176,7 +185,8 @@ class TestThreadAnalyzer:
         thread_id3 = analyzer._generate_thread_id("chat456", 456)
         assert thread_id != thread_id3
 
-    def test_detect_topic_label(self) -> None:
+    @patch.object(ThreadAnalyzer, "_get_sentence_model", return_value=None)
+    def test_detect_topic_label(self, _mock_model) -> None:
         """Test topic label detection."""
         analyzer = ThreadAnalyzer()
 
@@ -194,7 +204,8 @@ class TestThreadAnalyzer:
         label = analyzer._detect_topic_label([])
         assert label == "General"
 
-    def test_get_threaded_messages(self) -> None:
+    @patch.object(ThreadAnalyzer, "_get_sentence_model", return_value=None)
+    def test_get_threaded_messages(self, _mock_model) -> None:
         """Test getting messages with thread info."""
         config = ThreadingConfig(use_semantic_analysis=False)
         analyzer = ThreadAnalyzer(config)

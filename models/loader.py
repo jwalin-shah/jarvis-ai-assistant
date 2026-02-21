@@ -730,7 +730,7 @@ class MLXModelLoader:
             # Import make_prompt_cache locally to avoid issues if mlx_lm is not available
             # Some versions of mlx_lm may not have this function
             try:
-                from mlx_lm.utils import make_prompt_cache  # type: ignore[attr-defined]
+                from mlx_lm.utils import make_prompt_cache
             except ImportError:
                 logger.warning("make_prompt_cache not available in this mlx_lm version")
                 return
