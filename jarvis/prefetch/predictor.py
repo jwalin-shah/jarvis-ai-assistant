@@ -24,7 +24,7 @@ from abc import ABC, abstractmethod
 from collections import Counter, OrderedDict, defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +37,7 @@ CHAT_DB_PATH = Path.home() / "Library" / "Messages" / "chat.db"
 APPLE_EPOCH_OFFSET = 978307200
 
 
-class PredictionType(str, Enum):
+class PredictionType(StrEnum):
     """Types of predictions."""
 
     DRAFT_REPLY = "draft_reply"  # Pre-generate draft for likely conversation

@@ -22,7 +22,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from queue import PriorityQueue
 from typing import Any
 
@@ -34,7 +34,7 @@ from jarvis.utils.backoff import ConsecutiveErrorTracker
 logger = logging.getLogger(__name__)
 
 
-class ExecutorState(str, Enum):
+class ExecutorState(StrEnum):
     """Executor states."""
 
     STOPPED = "stopped"

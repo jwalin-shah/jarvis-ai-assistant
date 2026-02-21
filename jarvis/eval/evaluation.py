@@ -27,7 +27,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +40,7 @@ FEEDBACK_FILE_NAME = "feedback.jsonl"
 MAX_FEEDBACK_ENTRIES = 10000  # Maximum entries to keep in memory
 
 
-class SuggestionAction(str, Enum):
+class SuggestionAction(StrEnum):
     """Types of user feedback actions on suggestions."""
 
     SENT = "sent"  # User sent the suggestion unchanged
@@ -54,7 +54,7 @@ class SuggestionAction(str, Enum):
 FeedbackAction = SuggestionAction
 
 
-class FailureReason(str, Enum):
+class FailureReason(StrEnum):
     """Why a suggestion failed (for learning what capabilities are needed)."""
 
     # Classifier/generation issues

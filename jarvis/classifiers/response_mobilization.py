@@ -37,7 +37,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from jarvis.contracts.pipeline import (
     CategoryType,
@@ -92,7 +92,7 @@ class MobilizationConfig:
 MOBILIZATION_CONFIG = MobilizationConfig()
 
 
-class ResponsePressure(str, Enum):
+class ResponsePressure(StrEnum):
     """Response pressure level based on response-mobilizing features."""
 
     HIGH = "high"  # Response required (questions, requests, invitations)
@@ -101,7 +101,7 @@ class ResponsePressure(str, Enum):
     NONE = "none"  # No response needed (backchannels, closings)
 
 
-class ResponseType(str, Enum):
+class ResponseType(StrEnum):
     """What type of response is appropriate."""
 
     # HIGH pressure responses
@@ -825,7 +825,7 @@ def classify_to_contract(text: str) -> ClassificationResult:
 # =============================================================================
 
 
-class ResponseOptionType(str, Enum):
+class ResponseOptionType(StrEnum):
     """Types of user responses for multi-option generation.
 
     These are labels for the OPTIONS we generate, not for classifying

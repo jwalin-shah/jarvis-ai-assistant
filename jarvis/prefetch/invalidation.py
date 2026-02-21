@@ -101,10 +101,10 @@ class CacheInvalidator:
 # Backwards-compatible aliases for old imports
 # ---------------------------------------------------------------------------
 
-from enum import Enum  # noqa: E402
+from enum import StrEnum  # noqa: E402
 
 
-class InvalidationReason(str, Enum):
+class InvalidationReason(StrEnum):
     """Kept for import compatibility."""
 
     EXPIRED = "expired"

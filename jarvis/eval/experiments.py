@@ -41,7 +41,7 @@ import logging
 import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -53,7 +53,7 @@ EXPERIMENTS_PATH = Path.home() / ".jarvis" / "experiments.yaml"
 OUTCOMES_PATH = Path.home() / ".jarvis" / "experiment_outcomes.json"
 
 
-class UserAction(str, Enum):
+class UserAction(StrEnum):
     """Possible user actions for experiment outcomes."""
 
     SENT_UNCHANGED = "sent_unchanged"  # User sent the suggestion as-is

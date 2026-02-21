@@ -1,12 +1,12 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 # --- Enums ---
 
 
-class IntentType(str, Enum):
+class IntentType(StrEnum):
     QUESTION = "question"
     STATEMENT = "statement"
     REQUEST = "request"
@@ -15,7 +15,7 @@ class IntentType(str, Enum):
     UNKNOWN = "unknown"
 
 
-class CategoryType(str, Enum):
+class CategoryType(StrEnum):
     ACKNOWLEDGE = "acknowledge"  # "Got it"
     CLOSING = "closing"  # "See you later"
     DEFER = "defer"  # "I'll look into that"
@@ -23,7 +23,7 @@ class CategoryType(str, Enum):
     OFF_TOPIC = "off_topic"  # Ignore/Low priority
 
 
-class UrgencyLevel(str, Enum):
+class UrgencyLevel(StrEnum):
     LOW = "low"  # Can wait (e.g. general info)
     MEDIUM = "medium"  # Normal conversation
     HIGH = "high"  # Immediate attention needed

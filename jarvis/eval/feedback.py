@@ -48,7 +48,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, cast
 
@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 FEEDBACK_SCHEMA_VERSION = 2
 
 
-class FeedbackAction(str, Enum):
+class FeedbackAction(StrEnum):
     """User actions on AI suggestions."""
 
     ACCEPTED = "accepted"
