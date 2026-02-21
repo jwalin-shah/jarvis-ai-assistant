@@ -31,9 +31,12 @@ class TestBertForSequenceClassification:
         assert model.bert is not None
         assert model.classifier is not None
 
+    @patch("models.cross_encoder.BertModel")
     @patch("models.cross_encoder.mx")
-    def test_num_labels_stored(self, mock_mx):
+    def test_num_labels_stored(self, mock_mx, mock_bert_model):
         """Model respects num_labels parameter."""
+        import mlx.nn as nn
+
         from models.cross_encoder import BertForSequenceClassification
 
         config = {
@@ -47,10 +50,10 @@ class TestBertForSequenceClassification:
         }
 
         model = BertForSequenceClassification(config, num_labels=3)
-        # Verify model was constructed with classifier (weight shape can't be
-        # inspected when nn.Linear is mocked on non-macOS platforms)
         assert model.classifier is not None
         assert model.bert is not None
+        # Verify nn.Linear was called with (hidden_size, num_labels)
+        nn.Linear.assert_any_call(32, 3)
 
 
 class TestCrossEncoderRegistry:
