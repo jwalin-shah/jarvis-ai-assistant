@@ -31,8 +31,8 @@ class TestBertForSequenceClassification:
         assert model.bert is not None
         assert model.classifier is not None
 
-    @patch("models.cross_encoder.BertModel")
-    def test_num_labels_stored(self, mock_bert_model):
+    @patch("models.cross_encoder.mx")
+    def test_num_labels_stored(self, mock_mx):
         """Model respects num_labels parameter."""
         from models.cross_encoder import BertForSequenceClassification
 
