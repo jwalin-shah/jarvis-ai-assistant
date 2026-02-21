@@ -410,7 +410,11 @@ export async function fetchConversations(isPolling = false) {
         existingMap.set(conv.chat_id, conv);
       }
       const merged = Array.from(existingMap.values());
-      merged.sort((a, b) => b.last_message_date.localeCompare(a.last_message_date));
+      merged.sort((a, b) => {
+        if (b.last_message_date > a.last_message_date) return 1;
+        if (b.last_message_date < a.last_message_date) return -1;
+        return 0;
+      });
       conversations = merged.slice(0, CONVERSATIONS_PAGE_SIZE);
     }
 
