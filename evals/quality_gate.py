@@ -28,11 +28,7 @@ class DeltaGate:
 def _extract_metrics(payload: dict[str, Any]) -> dict[str, float]:
     if isinstance(payload.get("metrics"), dict):
         metrics = payload["metrics"]
-        return {
-            k: float(v)
-            for k, v in metrics.items()
-            if isinstance(v, int | float)
-        }
+        return {k: float(v) for k, v in metrics.items() if isinstance(v, int | float)}
 
     out: dict[str, float] = {}
     for key in ("judge_avg", "anti_ai_clean_rate", "category_accuracy", "hallucination_rate"):
