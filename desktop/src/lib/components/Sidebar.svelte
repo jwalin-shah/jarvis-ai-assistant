@@ -23,7 +23,13 @@
     {#if !collapsed}
       <span class="logo-text">JARVIS</span>
     {/if}
-    <button class="collapse-btn" onclick={toggleCollapse} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
+    <button
+      class="collapse-btn"
+      onclick={toggleCollapse}
+      title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+      aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+      aria-expanded={!collapsed}
+    >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         {#if collapsed}
           <polyline points="9 18 15 12 9 6"></polyline>
@@ -40,6 +46,8 @@
       class:active={currentView === "dashboard"}
       onclick={() => navigate("dashboard")}
       title="Dashboard"
+      aria-label="Dashboard"
+      aria-current={currentView === "dashboard" ? "page" : undefined}
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="3" width="7" height="7" />
@@ -55,6 +63,8 @@
       class:active={currentView === "messages"}
       onclick={() => navigate("messages")}
       title="Messages"
+      aria-label="Messages"
+      aria-current={currentView === "messages" ? "page" : undefined}
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path
@@ -69,6 +79,8 @@
       class:active={currentView === "chat"}
       onclick={() => navigate("chat")}
       title="Chat"
+      aria-label="Chat"
+      aria-current={currentView === "chat" ? "page" : undefined}
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -84,6 +96,8 @@
       class:active={currentView === "templates"}
       onclick={() => navigate("templates")}
       title="Template Builder"
+      aria-label="Template Builder"
+      aria-current={currentView === "templates" ? "page" : undefined}
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -100,6 +114,8 @@
       class:active={currentView === "network"}
       onclick={() => navigate("network")}
       title="Network"
+      aria-label="Network"
+      aria-current={currentView === "network" ? "page" : undefined}
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="5" r="3" />
@@ -117,6 +133,8 @@
       class:active={currentView === "health"}
       onclick={() => navigate("health")}
       title="Health Status"
+      aria-label="Health Status"
+      aria-current={currentView === "health" ? "page" : undefined}
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path
@@ -131,6 +149,8 @@
       class:active={currentView === "settings"}
       onclick={() => navigate("settings")}
       title="Settings"
+      aria-label="Settings"
+      aria-current={currentView === "settings" ? "page" : undefined}
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="3" />
