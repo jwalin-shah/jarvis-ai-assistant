@@ -36,7 +36,7 @@ class TestBertForSequenceClassification:
 
     @pytest.mark.skipif(
         not _MLX_AVAILABLE,
-        reason="BertForSequenceClassification construction requires real MLX nn.Module"
+        reason="BertForSequenceClassification construction requires real MLX nn.Module",
     )
     def test_num_labels_stored(self):
         """Model respects num_labels parameter."""
