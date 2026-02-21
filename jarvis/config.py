@@ -60,7 +60,7 @@ def validate_path(path: str | Path, description: str = "path") -> Path:
 
 
 # Current config schema version for migration tracking
-CONFIG_VERSION = 15
+CONFIG_VERSION = 16
 
 
 class MemoryThresholds(BaseModel):
@@ -745,6 +745,30 @@ class PathConfig(BaseModel):
     """Path to JARVIS database."""
 
 
+class ReplyPipelineConfig(BaseModel):
+    """Feature flags for staged reply-pipeline rollout."""
+
+    reply_enable_rag: bool = False
+    reply_enable_few_shot: bool = False
+    reply_word_cap_mode: Literal[
+        "hard_10",
+        "soft_25",
+        "soft_50",
+        "soft_prompt_only",
+        "max_tokens_only",
+        "none",
+    ] = "soft_25"
+    reply_newline_stop_enabled: bool = False
+    reply_short_msg_gate_enabled: bool = True
+    reply_category_instruction_mode: Literal[
+        "universal",
+        "hint",
+        "category_specific",
+        "per_category",
+    ] = "universal"
+    reply_confidence_mode: Literal["legacy", "scored"] = "legacy"
+
+
 class NormalizationConfig(BaseModel):
     """Normalization profiles for different tasks."""
 
@@ -889,6 +913,9 @@ class JarvisConfig(BaseModel):
 
     paths: PathConfig = Field(default_factory=PathConfig)
     """File path configuration."""
+
+    reply_pipeline: ReplyPipelineConfig = Field(default_factory=ReplyPipelineConfig)
+    """Feature flags for phased reply pipeline rollout."""
 
 
 # Module-level singleton with thread safety
@@ -1082,6 +1109,13 @@ def _migrate_v14_to_v15(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _migrate_v15_to_v16(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate from v15 to v16: Add reply_pipeline section."""
+    if "reply_pipeline" not in data:
+        data["reply_pipeline"] = {}
+    return data
+
+
 # Migration registry mapping target versions to migration functions
 _MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
     2: _migrate_v1_to_v2,
@@ -1096,6 +1130,7 @@ _MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
     13: _migrate_v12_to_v13,
     14: _migrate_v13_to_v14,
     15: _migrate_v14_to_v15,
+    16: _migrate_v15_to_v16,
 }
 
 

@@ -21,6 +21,7 @@ from jarvis.classifiers.response_mobilization import (
     ResponsePressure,
     ResponseType,
 )
+from jarvis.config import get_config
 from jarvis.contracts.pipeline import (
     ClassificationResult,
     GenerationRequest,
@@ -440,9 +441,9 @@ class ReplyService:
                 self._persist_reply_log(context, classification, None, result, latency_ms)
                 return result
 
-            # Skip RAG search - results were discarded in build_generation_request
-            # Direct-to-LLM approach: no retrieval, just conversation context
-            local_search_results = []
+            # Phase-0 flag gate: keep legacy default (RAG disabled) unless explicitly enabled.
+            if not get_config().reply_pipeline.reply_enable_rag:
+                local_search_results = []
 
             can_generate, health_reason = self.can_use_llm()
             if not can_generate:
@@ -722,6 +723,20 @@ class ReplyService:
                         method="contract_bridge",
                     )
                 )
+
+        mode = get_config().reply_pipeline.reply_category_instruction_mode
+        category_suffixes = {
+            "question": "Answer their question directly and briefly.",
+            "emotion": "Be empathetic and avoid unsolicited advice.",
+            "request": "Confirm, commit, or ask one short clarification.",
+            "statement": "Continue the conversation naturally.",
+        }
+        suffix = category_suffixes.get(category_name)
+        if suffix and mode in {"hint", "category_specific", "per_category"}:
+            if instruction:
+                instruction = f"{instruction} {suffix}"
+            else:
+                instruction = suffix
         return instruction
 
     def build_generation_request(

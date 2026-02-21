@@ -201,12 +201,16 @@ def build_generation_request(
         context.metadata.get("contact_name", "unknown"),
     )
 
+    config = get_config()
+    use_rag = config.reply_pipeline.reply_enable_rag
+    use_few_shot = config.reply_pipeline.reply_enable_few_shot
+
     return GenerationRequest(
         context=context,
         classification=classification,
         extraction=None,
-        retrieved_docs=[],
-        few_shot_examples=[],  # No examples - causes hallucinations per research
+        retrieved_docs=search_results if use_rag else [],
+        few_shot_examples=all_exchanges if use_few_shot else [],
     )
 
 
@@ -225,26 +229,37 @@ def to_model_generation_request(service: Any, request: GenerationRequest) -> Mod
     except Exception:
         pass
 
+    stop_sequences = [
+        "<|im_end|>",
+        "<|im_start|>",
+        "</reply>",
+        "<system>",
+        "<conversation>",
+        "<examples>",
+        "Context:",
+        "Last Message:",
+        "[",
+        "You:",
+        "Me:",
+        "Them:",
+        "Assistant:",
+        "System:",
+    ]
+
+    if config.reply_pipeline.reply_newline_stop_enabled:
+        stop_sequences.append("\n")
+
+    max_tokens = config.model.max_tokens_reply
+    cap_mode = config.reply_pipeline.reply_word_cap_mode
+    if cap_mode == "soft_25":
+        max_tokens = min(max_tokens, 25)
+    elif cap_mode == "soft_50":
+        max_tokens = min(max_tokens, 50)
+
     return ModelGenerationRequest(
         prompt=prompt,
-        max_tokens=config.model.max_tokens_reply,
-        stop_sequences=[
-            "<|im_end|>",
-            "<|im_start|>",
-            "</reply>",
-            "<system>",
-            "<conversation>",
-            "<examples>",
-            "Context:",
-            "Last Message:",
-            "\n",
-            "[",
-            "You:",
-            "Me:",
-            "Them:",
-            "Assistant:",
-            "System:",
-        ],
+        max_tokens=max_tokens,
+        stop_sequences=stop_sequences,
     )
 
 
@@ -366,9 +381,10 @@ def generate_llm_reply(
             },
         )
 
+    config = get_config()
     has_thin_context = not thread or len(thread) < 2
     is_short_msg = len(incoming.split()) <= 3
-    if is_short_msg and has_thin_context:
+    if config.reply_pipeline.reply_short_msg_gate_enabled and is_short_msg and has_thin_context:
         # Direct-to-LLM: let model decide on short messages with thin context
         return GenerationResponse(
             response="",
@@ -381,8 +397,6 @@ def generate_llm_reply(
 
     try:
         model_request = to_model_generation_request(service, request)
-        config = get_config()
-
         # Use negative constraints from config (generalizable)
         model_request.negative_constraints = config.model.negative_constraints
 
@@ -453,16 +467,11 @@ def generate_llm_reply(
         # Also strip specific robotic markers often left by small models
         text = text.replace("  ", " ").strip()
 
-        # Limit to 10 words max (Persona mandatory)
-        words = text.split()
-        if len(words) > 10:
-            text = " ".join(words[:10])
-
-        # 7. Final Persona Cleanup:
-        # Keep it strictly under 10 words.
-        words = text.split()
-        if len(words) > 10:
-            text = " ".join(words[:10])
+        word_cap_mode = config.reply_pipeline.reply_word_cap_mode
+        if word_cap_mode == "hard_10":
+            words = text.split()
+            if len(words) > 10:
+                text = " ".join(words[:10])
 
         if not text or text == "..." or len(text) < 2:
             logger.warning("[reply] LLM generated empty/junk text, using fallback.")
@@ -470,16 +479,41 @@ def generate_llm_reply(
 
         logger.info("[reply] Generated response: %r", text)
 
-        # Direct-to-LLM: simple confidence
-        # Coherence check only
-        base_conf = 0.65
-        if text.lower().strip() == incoming.lower().strip():
-            base_conf *= 0.5
+        if config.reply_pipeline.reply_confidence_mode == "scored":
+            from jarvis.core.generation.confidence import (
+                compute_confidence,
+                compute_example_diversity,
+            )
+            from jarvis.reply_service_utils import pressure_from_classification
 
-        confidence_score = max(0.0, min(base_conf, 1.0))
-        confidence_label = (
-            "high" if confidence_score >= 0.7 else "medium" if confidence_score >= 0.45 else "low"
-        )
+            rag_similarity = 0.0
+            if search_results:
+                rag_similarity = float(search_results[0].get("similarity", 0.0) or 0.0)
+            diversity = compute_example_diversity(search_results)
+            pressure = pressure_from_classification(request.classification)
+            confidence_score, confidence_label = compute_confidence(
+                pressure=pressure,
+                rag_similarity=rag_similarity,
+                example_diversity=diversity,
+                reply_length=len(text.split()),
+                reply_text=text,
+                incoming_text=incoming,
+            )
+        else:
+            # Direct-to-LLM: simple confidence
+            # Coherence check only
+            base_conf = 0.65
+            if text.lower().strip() == incoming.lower().strip():
+                base_conf *= 0.5
+
+            confidence_score = max(0.0, min(base_conf, 1.0))
+            confidence_label = (
+                "high"
+                if confidence_score >= 0.7
+                else "medium"
+                if confidence_score >= 0.45
+                else "low"
+            )
 
         logger.info(
             "[reply] Confidence: %.2f (%s) | direct-to-llm",

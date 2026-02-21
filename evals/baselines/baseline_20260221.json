@@ -1,0 +1,17 @@
+{
+  "schema": "jarvis_reply_phase0_baseline_v1",
+  "captured_at": "2026-02-20T18:49:31",
+  "source_file": "results/eval_pipeline_ab_candidate_nojudge.json",
+  "metrics": {
+    "anti_ai_clean_rate": 1.0,
+    "category_accuracy": 0.45,
+    "latency_p95_ms": 730.8
+  },
+  "gates": {
+    "judge_avg_min_delta": -1.0,
+    "anti_ai_clean_rate_min_delta": -0.05,
+    "category_accuracy_min_delta": -0.05,
+    "latency_p95_ms_max_relative_increase": 0.5,
+    "hallucination_rate_max_absolute": 0.08
+  }
+}

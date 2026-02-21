@@ -18,6 +18,7 @@ import os
 import sys
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 from tqdm import tqdm
@@ -70,6 +71,8 @@ class EvalResult:
     category_match: bool
     anti_ai_violations: list[str] = field(default_factory=list)
     response_length: int = 0
+    route_type: str = "unknown"
+    route_reason: str = ""
     similarity_score: float | None = None
     judge_score: float | None = None
     judge_reasoning: str = ""
@@ -100,6 +103,16 @@ def check_anti_ai(text: str) -> list[str]:
     """Check for AI-sounding phrases."""
     lower = text.lower()
     return [phrase for phrase in ANTI_AI_PHRASES if phrase in lower]
+
+
+def ensure_realistic_thread(context: list[str], last_message: str) -> list[str]:
+    """Ensure eval thread has at least two turns to avoid thin-context artifacts."""
+    clean = [c for c in context if isinstance(c, str) and c.strip()]
+    if len(clean) >= 2:
+        return clean
+    if clean:
+        return ["Me: quick follow-up", clean[0]]
+    return ["Me: quick follow-up", f"Them: {last_message}"]
 
 
 def main() -> int:
@@ -145,6 +158,7 @@ def main() -> int:
 
     # Initialize reply service for generation
     print("Loading reply service...", flush=True)
+    from jarvis.contracts.pipeline import MessageContext
     from jarvis.reply_service import ReplyService
 
     reply_service = ReplyService()
@@ -178,27 +192,40 @@ def main() -> int:
         print(f"\n[{i:2d}/{len(examples)}] [{ex.category}] {ex.last_message[:50]}...", flush=True)
 
         gen_start = time.perf_counter()
+        eval_thread = ensure_realistic_thread(ex.context, ex.last_message)
 
         # 1. Classify category
         mobilization = classify_response_pressure(ex.last_message)
         category_result = classify_category(
             ex.last_message,
-            context=ex.context,
+            context=eval_thread,
             mobilization=mobilization,
         )
         predicted_category = category_result.category
 
         # 2. Generate reply via full pipeline (empty search_results to skip RAG)
+        route_type = "unknown"
+        route_reason = ""
         try:
+            context = MessageContext(
+                chat_id="iMessage;-;+15555550123",
+                message_text=ex.last_message,
+                is_from_me=False,
+                timestamp=datetime.now(UTC),
+                metadata={"thread": eval_thread, "contact_name": "John"},
+            )
             reply_result = reply_service.generate_reply(
-                incoming=ex.last_message,
-                thread=ex.context,
-                mobilization=mobilization,
+                context=context,
+                thread=eval_thread,
                 search_results=[],
             )
-            generated = reply_result.get("response", "")
+            generated = reply_result.response
+            route_type = str(reply_result.metadata.get("type", "unknown"))
+            route_reason = str(reply_result.metadata.get("reason", ""))
         except Exception as e:
             generated = f"[ERROR: {e}]"
+            route_type = "error"
+            route_reason = str(e)
 
         latency_ms = (time.perf_counter() - gen_start) * 1000
 
@@ -266,6 +293,8 @@ def main() -> int:
             category_match=category_match,
             anti_ai_violations=anti_ai,
             response_length=len(generated),
+            route_type=route_type,
+            route_reason=route_reason,
             similarity_score=sim_score,
             judge_score=j_score,
             judge_reasoning=j_reasoning,
@@ -311,6 +340,21 @@ def main() -> int:
     print(f"Total time:         {total_ms:.0f}ms", flush=True)
     print(f"Avg latency:        {avg_lat:.0f}ms", flush=True)
     print(f"P50/P95 latency:    {p50:.0f}ms / {p95:.0f}ms", flush=True)
+
+    # Route-path summary
+    print(flush=True)
+    print("ROUTE PATHS", flush=True)
+    print("-" * 70, flush=True)
+    route_counts: dict[str, int] = {}
+    route_empty_counts: dict[str, int] = {}
+    for r in results:
+        key = f"{r.route_type}:{r.route_reason}" if r.route_reason else r.route_type
+        route_counts[key] = route_counts.get(key, 0) + 1
+        if not (r.generated_response or "").strip():
+            route_empty_counts[key] = route_empty_counts.get(key, 0) + 1
+    for key, count in sorted(route_counts.items(), key=lambda kv: kv[1], reverse=True):
+        empty = route_empty_counts.get(key, 0)
+        print(f"  {key:<35} {count:>2d} (empty={empty})", flush=True)
 
     # Similarity summary
     scored_sim = [r for r in results if r.similarity_score is not None]
@@ -420,6 +464,8 @@ def main() -> int:
                 "judge_score": r.judge_score,
                 "judge_reasoning": r.judge_reasoning,
                 "latency_ms": round(r.latency_ms, 1),
+                "route_type": r.route_type,
+                "route_reason": r.route_reason,
             }
             for r in results
         ],
