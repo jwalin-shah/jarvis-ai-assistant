@@ -15,6 +15,7 @@ from jarvis.contracts.pipeline import (
     GenerationRequest,
     GenerationResponse,
     MessageContext,
+    RAGDocument,
 )
 from jarvis.embedding_adapter import CachedEmbedder, get_embedder
 from jarvis.prompts import build_prompt_from_request, get_category_config
@@ -192,7 +193,9 @@ def build_generation_request(
 
     # Direct-to-LLM: just use category examples, no RAG (causes hallucinations)
     optimized_examples = get_optimized_examples(category_name)
-    all_exchanges = [(ex.context, ex.output) for ex in optimized_examples]
+    all_exchanges = [
+        {"role": "user", "content": ex.context, "output": ex.output} for ex in optimized_examples
+    ]
 
     logger.info(
         "[build] Context: %d messages, %d examples, contact=%s",
@@ -205,11 +208,23 @@ def build_generation_request(
     use_rag = config.reply_pipeline.reply_enable_rag
     use_few_shot = config.reply_pipeline.reply_enable_few_shot
 
+    docs = []
+    if use_rag and search_results:
+        docs = [
+            RAGDocument(
+                content=res.get("content", ""),
+                source=res.get("source", "search"),
+                score=res.get("score", 0.0),
+                metadata=res,
+            )
+            for res in search_results
+        ]
+
     return GenerationRequest(
         context=context,
         classification=classification,
         extraction=None,
-        retrieved_docs=search_results if use_rag else [],
+        retrieved_docs=docs,
         few_shot_examples=all_exchanges if use_few_shot else [],
     )
 
