@@ -10,6 +10,7 @@ from jarvis.contracts.pipeline import (
     GenerationRequest,
     IntentType,
     MessageContext,
+    RAGDocument,
     UrgencyLevel,
 )
 from jarvis.reply_service_generation import (
@@ -152,7 +153,11 @@ def test_build_generation_request_honors_rag_and_few_shot_flags(monkeypatch) -> 
         thread=["Them: hi", "Me: yo"],
     )
 
-    assert request.retrieved_docs == search_results
+    assert len(request.retrieved_docs) == 1
+    doc = request.retrieved_docs[0]
+    assert isinstance(doc, RAGDocument)
+    assert doc.content == "doc"
+    assert doc.score == 0.9
     assert isinstance(request.few_shot_examples, list)
 
 
