@@ -48,7 +48,7 @@ MODELS = [
 
 ADAPTERS = ["lora", "dora"]
 DATA_VARIANTS = [
-    {"id": "cataware", "path": "data/personal/category_aware"},
+    {"id": "variable", "path": "data/personal/raw_style_variable"},
     {"id": "rawstyle", "path": "data/personal/raw_style"},
 ]
 

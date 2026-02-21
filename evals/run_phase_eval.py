@@ -30,6 +30,23 @@ def main() -> int:
     )
     parser.add_argument("--judge", action="store_true", help="Enable LLM judge in eval pipeline")
     parser.add_argument(
+        "--judge-batch-size",
+        type=int,
+        default=1,
+        help="Judge batch size passed to eval_pipeline.py",
+    )
+    parser.add_argument(
+        "--judge-delay-seconds",
+        type=float,
+        default=2.2,
+        help="Delay between judge calls passed to eval_pipeline.py",
+    )
+    parser.add_argument(
+        "--force-model-load",
+        action="store_true",
+        help="Pass through force-model-load to eval pipeline",
+    )
+    parser.add_argument(
         "--source",
         default="results/eval_pipeline_baseline.json",
         help="Eval output path",
@@ -44,6 +61,16 @@ def main() -> int:
     eval_cmd = ["uv", "run", "python", "evals/eval_pipeline.py"]
     if args.judge:
         eval_cmd.append("--judge")
+        eval_cmd.extend(
+            [
+                "--judge-batch-size",
+                str(args.judge_batch_size),
+                "--judge-delay-seconds",
+                str(args.judge_delay_seconds),
+            ]
+        )
+    if args.force_model_load:
+        eval_cmd.append("--force-model-load")
 
     rc = _run(eval_cmd)
     if rc != 0:
@@ -73,6 +100,15 @@ def main() -> int:
             args.baseline,
             "--candidate",
             args.source,
+            *(
+                [
+                    "--require-judge",
+                    "--judge-min-absolute",
+                    "6.0",
+                ]
+                if args.judge
+                else []
+            ),
         ]
     )
 

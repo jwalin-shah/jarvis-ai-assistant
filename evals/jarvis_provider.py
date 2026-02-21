@@ -21,11 +21,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+# Ensure model-relative paths resolve regardless of promptfoo basePath/cwd.
+os.chdir(PROJECT_ROOT)
 
 from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY
 
@@ -215,8 +218,8 @@ def load_model():
     return loader
 
 
-def generate_reply(prompt: str, config: dict) -> dict:
-    """Generate a reply using the JARVIS model."""
+def generate_reply(prompt: str, config: dict) -> str:
+    """Generate a reply using the JARVIS model and return plain text."""
     try:
         loader = load_model()
         result = loader.generate_sync(
@@ -230,13 +233,10 @@ def generate_reply(prompt: str, config: dict) -> dict:
                 DEFAULT_REPETITION_PENALTY,  # From generation_config
             ),
         )
-        return {
-            "output": result.text.strip(),
-            "tokenUsage": {"completion": result.tokens_generated},
-        }
+        return result.text.strip()
     except Exception as e:
         logger.error("Generation failed: %s", e)
-        return {"error": str(e)}
+        return f"[ERROR] {e}"
 
 
 # =============================================================================
@@ -292,7 +292,7 @@ def main():
 
     # Generate and return
     result = generate_reply(prompt, config)
-    print(json.dumps(result), flush=True)
+    print(result, flush=True)
 
 
 if __name__ == "__main__":

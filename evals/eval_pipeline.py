@@ -115,13 +115,95 @@ def ensure_realistic_thread(context: list[str], last_message: str) -> list[str]:
     return ["Me: quick follow-up", f"Them: {last_message}"]
 
 
+def _strip_fenced_json(text: str) -> str:
+    text = (text or "").strip()
+    if text.startswith("```"):
+        parts = text.split("```")
+        if len(parts) >= 2:
+            text = parts[1]
+        if text.startswith("json"):
+            text = text[4:]
+    return text.strip()
+
+
+def _extract_json_blob(text: str) -> str:
+    """Extract the most likely JSON object/array from model output."""
+    s = _strip_fenced_json(text)
+    if not s:
+        return s
+    # Prefer array payload for batched judge; fallback to object payload.
+    arr_start = s.find("[")
+    arr_end = s.rfind("]")
+    if arr_start != -1 and arr_end != -1 and arr_end > arr_start:
+        return s[arr_start : arr_end + 1]
+    obj_start = s.find("{")
+    obj_end = s.rfind("}")
+    if obj_start != -1 and obj_end != -1 and obj_end > obj_start:
+        return s[obj_start : obj_end + 1]
+    return s
+
+
+def _judge_single_item(judge_client: object, judge_model: str, ex: EvalExample, generated: str) -> tuple[float | None, str]:
+    """Judge one item and return (score, reasoning)."""
+    try:
+        prompt = (
+            "You are an expert evaluator for a text message reply generator.\n\n"
+            f"CONVERSATION CONTEXT:\n{chr(10).join(ex.context)}\n\n"
+            f"LAST MESSAGE (to reply to):\n{ex.last_message}\n\n"
+            f"IDEAL RESPONSE:\n{ex.ideal_response}\n\n"
+            f"GENERATED REPLY:\n{generated}\n\n"
+            f"CATEGORY: {ex.category}\n"
+            f"NOTES: {ex.notes}\n\n"
+            "Score the generated reply from 0-10. Consider:\n"
+            "- Does it match the tone and intent of the ideal response?\n"
+            "- Does it sound like a real person texting (not an AI)?\n"
+            "- Is it appropriate for the category?\n"
+            "- Is the length appropriate?\n\n"
+            'Respond in JSON: {"score": <0-10>, "reasoning": "<1-2 sentences>"}'
+        )
+        resp = judge_client.chat.completions.create(
+            model=judge_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            max_tokens=150,
+        )
+        payload = json.loads(_extract_json_blob(resp.choices[0].message.content or ""))
+        score = float(payload["score"])
+        if score < 0:
+            score = 0.0
+        if score > 10:
+            score = 10.0
+        return score, str(payload.get("reasoning", ""))
+    except Exception as e:
+        return None, f"judge error: {e}"
+
+
 def main() -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="JARVIS Eval Pipeline")
     parser.add_argument("--judge", action="store_true", help="Enable LLM judge scoring")
     parser.add_argument("--similarity", action="store_true", help="Enable BERT cosine similarity")
+    parser.add_argument(
+        "--judge-batch-size",
+        type=int,
+        default=1,
+        help="Judge batch size (1 = per-example judging, >1 = batched judging)",
+    )
+    parser.add_argument(
+        "--judge-delay-seconds",
+        type=float,
+        default=2.2,
+        help="Delay between judge API calls/batches to reduce rate-limit errors",
+    )
+    parser.add_argument(
+        "--force-model-load",
+        action="store_true",
+        help="Set JARVIS_FORCE_MODEL_LOAD=1 to bypass memory-pressure load guard (risky)",
+    )
     args = parser.parse_args()
+    if args.force_model_load:
+        os.environ["JARVIS_FORCE_MODEL_LOAD"] = "1"
 
     # Setup logging
     log_path = PROJECT_ROOT / "results" / "eval_pipeline.log"
@@ -251,39 +333,15 @@ def main() -> int:
         # Judge scoring
         j_score = None
         j_reasoning = ""
-        if judge_client and generated and not generated.startswith("[ERROR"):
-            try:
-                prompt = (
-                    "You are an expert evaluator for a text message reply generator.\n\n"
-                    f"CONVERSATION CONTEXT:\n{chr(10).join(ex.context)}\n\n"
-                    f"LAST MESSAGE (to reply to):\n{ex.last_message}\n\n"
-                    f"IDEAL RESPONSE:\n{ex.ideal_response}\n\n"
-                    f"GENERATED REPLY:\n{generated}\n\n"
-                    f"CATEGORY: {ex.category}\n"
-                    f"NOTES: {ex.notes}\n\n"
-                    "Score the generated reply from 0-10. Consider:\n"
-                    "- Does it match the tone and intent of the ideal response?\n"
-                    "- Does it sound like a real person texting (not an AI)?\n"
-                    "- Is it appropriate for the category?\n"
-                    "- Is the length appropriate?\n\n"
-                    'Respond in JSON: {"score": <0-10>, "reasoning": "<1-2 sentences>"}'
-                )
-                resp = judge_client.chat.completions.create(
-                    model=JUDGE_MODEL,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.0,
-                    max_tokens=150,
-                )
-                text = resp.choices[0].message.content.strip()
-                if text.startswith("```"):
-                    text = text.split("```")[1]
-                    if text.startswith("json"):
-                        text = text[4:]
-                data = json.loads(text)
-                j_score = float(data["score"])
-                j_reasoning = data.get("reasoning", "")
-            except Exception as e:
-                j_reasoning = f"judge error: {e}"
+        if (
+            judge_client
+            and args.judge_batch_size <= 1
+            and generated
+            and not generated.startswith("[ERROR")
+        ):
+            j_score, j_reasoning = _judge_single_item(judge_client, JUDGE_MODEL, ex, generated)
+            if args.judge_delay_seconds > 0:
+                time.sleep(args.judge_delay_seconds)
 
         result = EvalResult(
             example=ex,
@@ -311,6 +369,108 @@ def main() -> int:
             f"  Cat: {cat_status} | {ai_status} | {latency_ms:.0f}ms {sim_str} {judge_str}",
             flush=True,
         )
+
+    # Optional batched judge pass (reduces API requests significantly)
+    if judge_client and args.judge_batch_size > 1:
+        judgeable_idx = [
+            i
+            for i, r in enumerate(results)
+            if r.generated_response and not r.generated_response.startswith("[ERROR")
+        ]
+        if judgeable_idx:
+            print(
+                f"\nRunning batched judge: {len(judgeable_idx)} items, "
+                f"batch_size={args.judge_batch_size}",
+                flush=True,
+            )
+            for start in range(0, len(judgeable_idx), args.judge_batch_size):
+                chunk = judgeable_idx[start : start + args.judge_batch_size]
+                batch_prompt = (
+                    "You are an expert evaluator for text message replies.\n"
+                    "For each item, score generated reply 0-10 and provide brief reasoning.\n"
+                    "Return ONLY JSON array with objects: "
+                    '{"index": <1-based item index in this batch>, "score": <0-10>, '
+                    '"reasoning": "<1-2 sentences>"}.\n\n'
+                )
+                for pos, idx in enumerate(chunk, 1):
+                    r = results[idx]
+                    ex = r.example
+                    batch_prompt += (
+                        f"ITEM {pos}\n"
+                        f"CATEGORY: {ex.category}\n"
+                        f"CONTEXT:\n{chr(10).join(ex.context)}\n"
+                        f"LAST MESSAGE:\n{ex.last_message}\n"
+                        f"IDEAL RESPONSE:\n{ex.ideal_response}\n"
+                        f"GENERATED REPLY:\n{r.generated_response}\n\n"
+                    )
+                try:
+                    resp = judge_client.chat.completions.create(
+                        model=JUDGE_MODEL,
+                        messages=[{"role": "user", "content": batch_prompt}],
+                        temperature=0.0,
+                        max_tokens=600,
+                    )
+                    text = _extract_json_blob(resp.choices[0].message.content or "")
+                    payload = json.loads(text)
+                    assigned: set[int] = set()
+                    payload_items = payload
+                    if isinstance(payload, dict):
+                        payload_items = payload.get("items", [])
+                    if isinstance(payload_items, list):
+                        for i, item in enumerate(payload_items, 1):
+                            try:
+                                if isinstance(item, dict):
+                                    local_idx = int(item.get("index", i))
+                                    score = float(item.get("score"))
+                                    reasoning = str(item.get("reasoning", ""))
+                                elif isinstance(item, list | tuple) and len(item) >= 2:
+                                    local_idx = i
+                                    score = float(item[0])
+                                    reasoning = str(item[1])
+                                else:
+                                    continue
+                                if 1 <= local_idx <= len(chunk):
+                                    if score < 0:
+                                        score = 0.0
+                                    if score > 10:
+                                        score = 10.0
+                                    target = results[chunk[local_idx - 1]]
+                                    target.judge_score = score
+                                    target.judge_reasoning = reasoning
+                                    assigned.add(local_idx)
+                            except Exception:
+                                continue
+                    for local_idx, idx in enumerate(chunk, 1):
+                        if local_idx in assigned:
+                            continue
+                        score, reasoning = _judge_single_item(
+                            judge_client,
+                            JUDGE_MODEL,
+                            results[idx].example,
+                            results[idx].generated_response,
+                        )
+                        results[idx].judge_score = score
+                        results[idx].judge_reasoning = reasoning
+                        if args.judge_delay_seconds > 0:
+                            time.sleep(min(args.judge_delay_seconds, 0.6))
+                except Exception as e:
+                    for idx in chunk:
+                        score, reasoning = _judge_single_item(
+                            judge_client,
+                            JUDGE_MODEL,
+                            results[idx].example,
+                            results[idx].generated_response,
+                        )
+                        results[idx].judge_score = score
+                        results[idx].judge_reasoning = (
+                            f"batch_fail_then_single: {reasoning}; batch_error={e}"
+                        )
+                        if args.judge_delay_seconds > 0:
+                            time.sleep(min(args.judge_delay_seconds, 0.6))
+                if args.judge_delay_seconds > 0 and (start + args.judge_batch_size) < len(
+                    judgeable_idx
+                ):
+                    time.sleep(args.judge_delay_seconds)
 
     total_ms = (time.perf_counter() - total_start) * 1000
 

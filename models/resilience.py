@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,9 @@ def should_skip_model_load() -> bool:
     Returns:
         True if memory pressure is too high for safe model loading.
     """
+    if os.getenv("JARVIS_FORCE_MODEL_LOAD", "").strip().lower() in {"1", "true", "yes", "on"}:
+        logger.warning("JARVIS_FORCE_MODEL_LOAD enabled: bypassing memory-pressure load guard")
+        return False
     is_high, _reason = check_memory_pressure()
     return is_high
 

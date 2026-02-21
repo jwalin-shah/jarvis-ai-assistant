@@ -21,7 +21,7 @@ from typing import Any
 @dataclass(frozen=True)
 class DeltaGate:
     key: str
-    mode: str  # "min_delta", "max_relative_increase", "max_absolute"
+    mode: str  # "min_delta", "min_absolute", "max_relative_increase", "max_absolute"
     value: float
 
 
@@ -64,11 +64,38 @@ def _default_gates() -> list[DeltaGate]:
     ]
 
 
+def _gates_from_payload(payload: dict[str, Any]) -> list[DeltaGate]:
+    """Load gate config from baseline payload if present, else use defaults."""
+    cfg = payload.get("gates")
+    if not isinstance(cfg, dict):
+        return _default_gates()
+
+    gates: list[DeltaGate] = []
+    mapping = {
+        "judge_avg_min_delta": ("judge_avg", "min_delta"),
+        "judge_avg_min_absolute": ("judge_avg", "min_absolute"),
+        "anti_ai_clean_rate_min_delta": ("anti_ai_clean_rate", "min_delta"),
+        "category_accuracy_min_delta": ("category_accuracy", "min_delta"),
+        "latency_p95_ms_max_relative_increase": ("latency_p95_ms", "max_relative_increase"),
+        "hallucination_rate_max_absolute": ("hallucination_rate", "max_absolute"),
+    }
+    for cfg_key, (key, mode) in mapping.items():
+        val = cfg.get(cfg_key)
+        if isinstance(val, int | float):
+            gates.append(DeltaGate(key=key, mode=mode, value=float(val)))
+
+    return gates if gates else _default_gates()
+
+
 def _check_gate(gate: DeltaGate, baseline: float, candidate: float) -> tuple[bool, str]:
     if gate.mode == "min_delta":
         delta = candidate - baseline
         ok = delta >= gate.value
         return ok, f"delta={delta:+.4f} (min {gate.value:+.4f})"
+
+    if gate.mode == "min_absolute":
+        ok = candidate >= gate.value
+        return ok, f"value={candidate:.4f} (min {gate.value:.4f})"
 
     if gate.mode == "max_relative_increase":
         if baseline <= 0:
@@ -103,6 +130,17 @@ def main() -> int:
         action="store_true",
         help="Return success if candidate metrics file is missing",
     )
+    parser.add_argument(
+        "--require-judge",
+        action="store_true",
+        help="Fail if candidate judge_avg is missing",
+    )
+    parser.add_argument(
+        "--judge-min-absolute",
+        type=float,
+        default=None,
+        help="Fail if candidate judge_avg is below this absolute threshold",
+    )
     args = parser.parse_args()
 
     if not args.baseline.exists():
@@ -132,10 +170,27 @@ def main() -> int:
 
     failed = 0
     skipped = 0
-    for gate in _default_gates():
+    for gate in _gates_from_payload(baseline_payload):
         b = baseline.get(gate.key)
         c = candidate.get(gate.key)
+        # Absolute gates are candidate-only; all others compare baseline vs candidate.
+        if gate.mode == "min_absolute":
+            if c is None:
+                skipped += 1
+                print(f"[quality-gate] SKIP {gate.key}: missing candidate metric for absolute gate")
+                continue
+            ok, detail = _check_gate(gate, 0.0, c)
+            status = "PASS" if ok else "FAIL"
+            print(f"[quality-gate] {status} {gate.key}: candidate={c:.4f} | {detail}")
+            if not ok:
+                failed += 1
+            continue
+
         if b is None or c is None:
+            if args.require_judge and gate.key == "judge_avg" and c is None:
+                failed += 1
+                print("[quality-gate] FAIL judge_avg: missing metric (required)")
+                continue
             skipped += 1
             print(f"[quality-gate] SKIP {gate.key}: missing metric")
             continue
@@ -145,6 +200,27 @@ def main() -> int:
         print(f"[quality-gate] {status} {gate.key}: baseline={b:.4f}, candidate={c:.4f} | {detail}")
         if not ok:
             failed += 1
+
+    if args.require_judge and "judge_avg" not in candidate:
+        failed += 1
+        print("[quality-gate] FAIL judge_avg: missing metric (required)")
+    elif args.judge_min_absolute is not None:
+        judge_avg = candidate.get("judge_avg")
+        if judge_avg is None:
+            failed += 1
+            print(
+                f"[quality-gate] FAIL judge_avg: missing metric for min absolute "
+                f"{args.judge_min_absolute:.2f}"
+            )
+        else:
+            ok = judge_avg >= args.judge_min_absolute
+            status = "PASS" if ok else "FAIL"
+            print(
+                f"[quality-gate] {status} judge_avg_min_absolute: candidate={judge_avg:.4f} "
+                f"(min {args.judge_min_absolute:.4f})"
+            )
+            if not ok:
+                failed += 1
 
     if failed:
         print(f"[quality-gate] FAILED ({failed} regressions, {skipped} skipped)")

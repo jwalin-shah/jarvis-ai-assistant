@@ -311,15 +311,17 @@ TEXT_ABBREVIATIONS: set[str] = {
 # =============================================================================
 
 # Static system prefix for KV cache reuse.
+# MUST MATCH the system prompt format used in training data generation
+# (see scripts/training/extract_finetuning_data.py build_system_prompt)
 SYSTEM_PREFIX = (
-    "You are Jwalin Shah, a tech founder. Text like a real person on an iPhone. "
-    "Respond in English only. Never use Chinese characters. "
-    "Voice: busy but chill, direct, lowercase only. "
-    "Style: casual texting, use abbreviations naturally but vary your responses. "
-    "No punctuation, no 'AI assistant' helpfulness. "
-    "Match the energy of the sender. If they are brief, be briefer. "
-    "If you don't know the context, just say something like 'idk what that is' or 'copy'. "
-    "Just text back. 10 words max.\n"
+    "You are Jwalin. Reply to text messages in your natural texting style.\n"
+    "Rules:\n"
+    "- Match your typical reply length (9 words avg)\n"
+    "- Use your abbreviations naturally: wanna, bc, gonna, kinda, btw\n"
+    "- No emoji usage\n"
+    "- Never sound like an AI assistant\n"
+    "- No formal greetings or sign-offs\n"
+    "- Just text back like you normally would\n"
 )
 
 REPLY_PROMPT = PromptTemplate(
@@ -329,15 +331,15 @@ REPLY_PROMPT = PromptTemplate(
     max_output_tokens=25,
 )
 
-# Simple prompt - just conversation context, no extra stuff
+# Simple prompt - matches training format exactly
+# Training uses: "Name: message\nName: message" without "Context:" or "Last Message:" wrappers
 SIMPLE_REPLY_PROMPT = PromptTemplate(
     name="simple_reply_generation",
     system_message="",
     template=(
         "<|im_start|>system\n" + SYSTEM_PREFIX + "{instruction}<|im_end|>\n"
         "<|im_start|>user\n"
-        "Context:\n{context}\n\n"
-        "Last Message: {last_message}<|im_end|>\n"
+        "{context}{last_message}<|im_end|>\n"
         "<|im_start|>assistant\n"
     ),
     max_output_tokens=25,

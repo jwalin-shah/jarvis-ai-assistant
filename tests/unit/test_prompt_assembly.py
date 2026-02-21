@@ -532,7 +532,7 @@ class TestBuildPromptFromRequest:
         result = build_prompt_from_request(req)
         # Simple prompt: just conversation + last message
         assert "<|im_start|>system" in result
-        assert "Text like a real person" in result
+        assert "You are Jwalin" in result
 
     def test_few_shot_examples_not_in_simple_prompt(self):
         """Simple prompt doesn't include examples - causes hallucinations per research."""
@@ -549,8 +549,8 @@ class TestBuildPromptFromRequest:
         """Simple prompt uses the simplified system prefix."""
         req = self._make_pipeline_request()
         result = build_prompt_from_request(req)
-        assert "Text like a real person" in result
-        assert "casual" in result
+        assert "You are Jwalin" in result
+        assert "text messages" in result
 
     def test_simple_prompt_no_contact_info(self):
         """Simple prompt doesn't include contact facts - keeps it natural."""
@@ -933,7 +933,7 @@ class TestContextDocumentFormatting:
         )
         result = build_prompt_from_request(req)
         assert "<|im_start|>system" in result
-        assert "Context:" in result
+        assert "You are Jwalin" in result
         assert "Trigger 0" not in result
 
 
@@ -1203,12 +1203,12 @@ class TestSystemPrefix:
         assert len(SYSTEM_PREFIX) > 50
 
     def test_system_prefix_contains_instructions(self):
-        assert "Text like a real person" in SYSTEM_PREFIX
-        assert "Jwalin Shah" in SYSTEM_PREFIX
+        assert "You are Jwalin" in SYSTEM_PREFIX
+        assert "text messages" in SYSTEM_PREFIX
 
     def test_system_prefix_contains_style_guidance(self):
-        assert "Text like a real person" in SYSTEM_PREFIX
-        assert "casual texting" in SYSTEM_PREFIX
+        assert "natural texting style" in SYSTEM_PREFIX
+        assert "abbreviations" in SYSTEM_PREFIX
 
     def test_rag_prompt_template_starts_with_system_role(self):
         # RAG prompt now uses chat template format with im_start tokens

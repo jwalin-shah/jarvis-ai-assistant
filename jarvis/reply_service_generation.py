@@ -410,6 +410,9 @@ def generate_llm_reply(
         model_request.repetition_penalty = 1.25
 
         response = service.generator.generate(model_request)
+        generator_finish_reason = str(getattr(response, "finish_reason", "") or "")
+        generator_error = str(getattr(response, "error", "") or "")
+        generator_model = str(getattr(response, "model_name", "") or "")
         text = response.text.strip()
 
         # Advanced cleanup for 700M model leaks
@@ -515,6 +518,17 @@ def generate_llm_reply(
                 else "low"
             )
 
+        route_type = "generated_llm"
+        route_reason = "generated"
+        if (
+            generator_model == "fallback"
+            or generator_finish_reason in {"fallback", "error"}
+        ):
+            route_type = "generated_fallback"
+            route_reason = generator_error or (
+                f"generator_{generator_finish_reason or 'fallback'}"
+            )
+
         logger.info(
             "[reply] Confidence: %.2f (%s) | direct-to-llm",
             confidence_score,
@@ -525,10 +539,13 @@ def generate_llm_reply(
             response=text,
             confidence=confidence_score,
             metadata={
-                "type": "generated",
-                "reason": "generated",
+                "type": route_type,
+                "reason": route_reason,
                 "confidence_label": confidence_label,
                 "final_prompt": model_request.prompt,
+                "generator_finish_reason": generator_finish_reason,
+                "generator_error": generator_error,
+                "generator_model": generator_model,
             },
         )
     except Exception as e:

@@ -47,10 +47,10 @@ providers:
       temperature: 0.1
       max_tokens: 50
 
-# LLM-rubric grader: ZAI GLM 4.7 via Cerebras (via OPENAI_* env vars in Makefile)
+# LLM-rubric grader via Cerebras (via OPENAI_* env vars in Makefile)
 defaultTest:
   options:
-    provider: openai:chat:zai-glm-4.7
+    provider: openai:chat:gpt-oss-120b
   assert:
     # Universal anti-AI checks on every test
     - type: not-icontains

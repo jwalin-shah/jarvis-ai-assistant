@@ -211,37 +211,27 @@ def build_simple_reply_prompt(
     last_is_from_me: bool = False,
     instruction: str = "",
 ) -> str:
-    """Build a simple reply prompt - just conversation, no extra stuff.
+    """Build a simple reply prompt - matches training format exactly.
 
-    Like texting directly - no examples, no facts, no relationship graph.
+    Training format: "Name: message\nName: message" (no "Context:" or "Last Message:")
     """
     from jarvis.prompts.constants import SIMPLE_REPLY_PROMPT
 
     # Truncate context if needed
     truncated_context = truncate_context(context)
 
-    # Format conversation naturally
+    # Match training format: just the conversation history
+    # Training uses "Name: message" format without any wrappers
     if truncated_context:
-        conversation = truncated_context.strip() + "\n"
+        user_content = truncated_context.strip()
     else:
-        conversation = ""
+        user_content = last_message.strip() if last_message else ""
 
-    # Frame the last message clearly
-    label = "My last message" if last_is_from_me else "Their last message"
-    prefixed_last = f"{label}: {last_message}"
-
-    # If I spoke last, the goal is to follow up
-    if last_is_from_me:
-        goal = "Goal: Continue the conversation or follow up.\n"
-    else:
-        goal = "Goal: Send a short text reply.\n"
-
-    # Simple prompt - just conversation + last message
+    # Build prompt matching training format
     prompt = SIMPLE_REPLY_PROMPT.template.format(
-        instruction=f"{goal}{instruction}",
-        current_time="",  # Removed to avoid robotic time references
-        context=conversation,
-        last_message=prefixed_last,
+        instruction=instruction.strip(),
+        context="",  # Everything goes in last_message slot for now
+        last_message=user_content,
     )
 
     return prompt
