@@ -12,6 +12,7 @@ from re import Pattern
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qs, urlparse
 
+import orjson
 import websockets
 from websockets.asyncio.server import Server, ServerConnection
 from websockets.datastructures import Headers
@@ -580,8 +581,9 @@ class JarvisSocketServer:
         return None
 
     async def broadcast(self, method: str, params: dict[str, Any]) -> None:
-        notification = json.dumps({"jsonrpc": "2.0", "method": method, "params": params})
-        notification_bytes = notification.encode() + b"\n"
+        notification = orjson.dumps({"jsonrpc": "2.0", "method": method, "params": params})
+        notification_bytes = notification + b"\n"
+        notification_str = notification.decode("utf-8")
         async with self._clients_lock:
             for writer in self._clients.copy():
                 try:
@@ -592,7 +594,7 @@ class JarvisSocketServer:
                     self._clients.discard(writer)
             for ws in self._ws_clients.copy():
                 try:
-                    await ws.send(notification)
+                    await ws.send(notification_str)
                 except Exception as e:
                     logger.debug(f"Failed to send to websocket: {e}")
                     self._ws_clients.discard(ws)

@@ -31,6 +31,21 @@ def _serialize_datetime(dt: datetime | None) -> str | None:
     return dt.isoformat()
 
 
+def _sanitize_csv_field(value: Any) -> str:
+    """Sanitize a field for CSV export to prevent formula injection.
+
+    If a string starts with =, +, -, or @, prepend a single quote.
+    """
+    if value is None:
+        return ""
+
+    s_value = str(value)
+    if s_value.startswith(("=", "+", "-", "@")):
+        return f"'{s_value}"
+
+    return s_value
+
+
 def _message_to_dict(message: Message) -> dict[str, Any]:
     """Convert a Message dataclass to a serializable dictionary.
 
@@ -167,20 +182,22 @@ def export_messages_csv(
     for message in messages:
         row = {
             "id": message.id,
-            "chat_id": message.chat_id,
-            "sender": message.sender,
-            "sender_name": message.sender_name or "",
-            "text": message.text.replace("\n", "\\n"),  # Escape newlines
+            "chat_id": _sanitize_csv_field(message.chat_id),
+            "sender": _sanitize_csv_field(message.sender),
+            "sender_name": _sanitize_csv_field(message.sender_name or ""),
+            "text": _sanitize_csv_field(message.text.replace("\n", "\\n")),
             "date": _serialize_datetime(message.date) or "",
             "is_from_me": message.is_from_me,
-            "reply_to_id": message.reply_to_id or "",
+            "reply_to_id": _sanitize_csv_field(message.reply_to_id or ""),
             "is_system_message": message.is_system_message,
             "reaction_count": len(message.reactions),
         }
 
         if include_attachments:
             row["attachment_count"] = len(message.attachments)
-            row["attachment_filenames"] = "; ".join(a.filename for a in message.attachments)
+            row["attachment_filenames"] = _sanitize_csv_field(
+                "; ".join(a.filename for a in message.attachments)
+            )
 
         writer.writerow(row)
 

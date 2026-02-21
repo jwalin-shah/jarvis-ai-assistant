@@ -129,6 +129,7 @@ TOPIC_SHIFT_MARKERS = frozenset(
         "oh wait",
     }
 )
+_TOPIC_SHIFT_MARKERS_TUPLE = tuple(TOPIC_SHIFT_MARKERS)
 
 # Emoji pattern for detecting emoji-only content
 EMOJI_PATTERN = re.compile(
@@ -702,10 +703,7 @@ def starts_new_topic(text: str) -> bool:
     if not text:
         return False
     normalized = text.lower().strip()
-    for marker in TOPIC_SHIFT_MARKERS:
-        if normalized.startswith(marker):
-            return True
-    return False
+    return normalized.startswith(_TOPIC_SHIFT_MARKERS_TUPLE)
 
 
 @lru_cache(maxsize=2048)
@@ -721,7 +719,7 @@ def is_question(text: str) -> bool:
     if stripped.endswith("?"):
         return True
     # Starts with question word (split once and reuse)
-    words = stripped.split()
+    words = stripped.split(maxsplit=1)
     first_word = words[0].lower() if words else ""
     return first_word in QUESTION_WORDS
 

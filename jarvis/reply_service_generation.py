@@ -290,35 +290,36 @@ def get_cached_embeddings(
     texts: list[str],
     embedder: CachedEmbedder,
 ) -> Any:
-    """Get embeddings with content-addressable caching."""
+    """Get embeddings with content-addressable caching using LRU eviction."""
+    from collections import OrderedDict
+
     if not hasattr(service, "_embedding_cache"):
-        service._embedding_cache = {}
+        service._embedding_cache: OrderedDict[str, np.ndarray] = OrderedDict()
         service._embedding_cache_hits = 0
         service._embedding_cache_misses = 0
 
     cache = service._embedding_cache
+    cache_max_size = 1000
     results: list[Any] = []
-    texts_to_encode: list[tuple[int, str]] = []
+    texts_to_encode: list[tuple[int, str, str]] = []
 
     for idx, text in enumerate(texts):
         text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
         if text_hash in cache:
+            cache.move_to_end(text_hash)
             results.append((idx, cache[text_hash]))
             service._embedding_cache_hits += 1
         else:
-            texts_to_encode.append((idx, text))
+            texts_to_encode.append((idx, text, text_hash))
             service._embedding_cache_misses += 1
 
     if texts_to_encode:
-        missing_texts = [t for _, t in texts_to_encode]
+        missing_texts = [t for _, t, _ in texts_to_encode]
         new_embeddings = embedder.encode(missing_texts, normalize=True)
 
-        for (idx, text), emb in zip(texts_to_encode, new_embeddings):
-            text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
-            if len(cache) >= 1000:
-                keys_to_remove = list(cache.keys())[:500]
-                for k in keys_to_remove:
-                    del cache[k]
+        for (idx, text, text_hash), emb in zip(texts_to_encode, new_embeddings):
+            if len(cache) >= cache_max_size:
+                cache.popitem(last=False)
             cache[text_hash] = emb
             results.append((idx, emb))
 

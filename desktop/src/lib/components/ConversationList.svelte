@@ -9,6 +9,7 @@
   } from '../stores/conversations.svelte';
   import type { Conversation } from '../types';
   import ConversationSkeleton from './ConversationSkeleton.svelte';
+  import SearchIcon from './icons/SearchIcon.svelte';
   import {
     activeZone,
     setActiveZone,
@@ -451,8 +452,37 @@
     {/if}
   </div>
 
-  <div class="search">
-    <input type="text" placeholder="Search conversations..." bind:value={searchQuery} />
+  <div class="search" role="search">
+    <div class="search-input-wrapper">
+      <div class="search-icon-wrapper">
+        <SearchIcon size={14} class="search-icon" />
+      </div>
+      <input
+        type="text"
+        placeholder="Search conversations..."
+        bind:value={searchQuery}
+        aria-label="Filter conversations"
+      />
+      {#if searchQuery}
+        <button
+          class="clear-button"
+          onclick={() => (searchQuery = '')}
+          aria-label="Clear search"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            width="14"
+            height="14"
+          >
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      {/if}
+    </div>
   </div>
 
   {#if conversationsStore.loading && conversationsStore.isInitialLoad}
@@ -657,9 +687,27 @@
     border-bottom: 1px solid var(--border-default);
   }
 
+  .search-input-wrapper {
+    position: relative;
+    width: 100%;
+  }
+
+  .search-icon-wrapper {
+    position: absolute;
+    left: var(--space-3);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-tertiary);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+  }
+
   .search input {
     width: 100%;
     padding: var(--space-2) var(--space-3);
+    padding-left: calc(var(--space-3) + 14px + var(--space-2));
+    padding-right: var(--space-8);
     background: var(--surface-base);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-md);
@@ -670,6 +718,29 @@
 
   .search input::placeholder {
     color: var(--text-tertiary);
+  }
+
+  .clear-button {
+    position: absolute;
+    right: var(--space-2);
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    padding: 4px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-full);
+    transition: color var(--duration-fast) var(--ease-out),
+      background-color var(--duration-fast) var(--ease-out);
+  }
+
+  .clear-button:hover {
+    color: var(--text-primary);
+    background-color: var(--surface-hover);
   }
 
   .list {

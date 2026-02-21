@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from typing import Any
+
+import orjson
 
 from jarvis.interfaces.desktop.websocket_writer import WebSocketWriter
 
 
 def success_response(request_id: Any, result: Any) -> str:
     """Build a success response."""
-    return json.dumps(
+    return orjson.dumps(
         {
             "jsonrpc": "2.0",
             "result": result,
             "id": request_id,
         }
-    )
+    ).decode("utf-8")
 
 
 def error_response(
@@ -29,13 +30,13 @@ def error_response(
     if data is not None:
         error["data"] = data
 
-    return json.dumps(
+    return orjson.dumps(
         {
             "jsonrpc": "2.0",
             "error": error,
             "id": request_id,
         }
-    )
+    ).decode("utf-8")
 
 
 async def send_stream_token(
@@ -54,7 +55,7 @@ async def send_stream_token(
         is_final: Whether this is the last token
         request_id: Request ID for correlating tokens with requests
     """
-    notification = json.dumps(
+    notification = orjson.dumps(
         {
             "jsonrpc": "2.0",
             "method": "stream.token",
@@ -67,10 +68,10 @@ async def send_stream_token(
         }
     )
     if isinstance(writer, WebSocketWriter):
-        writer.write(notification.encode())
+        writer.write(notification)
         await writer.drain()
     else:
-        writer.write(notification.encode() + b"\n")
+        writer.write(notification + b"\n")
         await writer.drain()
 
 
@@ -111,7 +112,7 @@ async def send_stream_error(
         message: Error message
         data: Optional error data
     """
-    notification = json.dumps(
+    notification = orjson.dumps(
         {
             "jsonrpc": "2.0",
             "method": "stream.error",
@@ -124,8 +125,8 @@ async def send_stream_error(
         }
     )
     if isinstance(writer, WebSocketWriter):
-        writer.write(notification.encode())
+        writer.write(notification)
         await writer.drain()
     else:
-        writer.write(notification.encode() + b"\n")
+        writer.write(notification + b"\n")
         await writer.drain()

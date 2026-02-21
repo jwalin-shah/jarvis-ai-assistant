@@ -95,6 +95,7 @@
           onclick={onAIDraft}
           disabled={disabled}
           title="Generate AI Draft"
+          aria-label="Generate AI Draft"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
             <path d="M12 3l1.912 5.886L20 10.8l-5.886 1.912L12 18.6l-1.912-5.886L4.2 10.8l5.886-1.912L12 3z" fill="currentColor" opacity="0.2" />
@@ -110,6 +111,7 @@
         disabled={!value.trim() || disabled}
         loading={sending}
         title="Send message (Enter)"
+        aria-label="Send message"
       >
         <SendIcon size={18} />
       </Button>

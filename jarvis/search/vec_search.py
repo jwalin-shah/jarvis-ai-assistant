@@ -220,14 +220,17 @@ class VecSearcher:
             # Use cached embedder which handles batching internally
             embeddings = self._embedder.encode(texts, normalize=True, dtype=dtype)
 
+            # Vectorized quantization for performance (avoids loop overhead)
+            quantized_embeddings = (embeddings * 127).astype(np.int8)
+
             with self.db.connection() as conn:
                 # Prepare batch data
                 batch_data = []
-                for msg, emb in zip(to_index, embeddings):
+                for msg, q_emb in zip(to_index, quantized_embeddings):
                     batch_data.append(
                         (
                             msg.id,
-                            self._quantize_embedding(emb),
+                            q_emb.tobytes(),
                             msg.chat_id,
                             msg.text[:200],
                             msg.sender,
