@@ -294,7 +294,7 @@ def get_cached_embeddings(
     from collections import OrderedDict
 
     if not hasattr(service, "_embedding_cache"):
-        service._embedding_cache: OrderedDict[str, np.ndarray] = OrderedDict()
+        service._embedding_cache = OrderedDict()  # type: OrderedDict[str, np.ndarray]
         service._embedding_cache_hits = 0
         service._embedding_cache_misses = 0
 

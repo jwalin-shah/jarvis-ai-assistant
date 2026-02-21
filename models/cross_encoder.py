@@ -48,13 +48,13 @@ CROSS_ENCODER_REGISTRY: dict[str, tuple[str, int, str]] = {
 }
 
 
-class BertForSequenceClassification(nn.Module):  # type: ignore[name-defined,misc]
+class BertForSequenceClassification(nn.Module):  # type: ignore[misc]
     """BERT with a linear classification head on [CLS] token."""
 
     def __init__(self, config: dict[str, Any], num_labels: int = 1) -> None:
         super().__init__()
         self.bert = BertModel(config, add_pooler=True)
-        self.classifier = nn.Linear(config["hidden_size"], num_labels)  # type: ignore[attr-defined]
+        self.classifier = nn.Linear(config["hidden_size"], num_labels)
 
     def __call__(
         self,

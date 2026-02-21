@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import platform
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+
+_MLX_AVAILABLE = platform.system() == "Darwin"
 
 
 class TestBertForSequenceClassification:
@@ -31,9 +34,11 @@ class TestBertForSequenceClassification:
         assert model.bert is not None
         assert model.classifier is not None
 
-    @patch("models.cross_encoder.BertModel")
-    @patch("models.cross_encoder.mx")
-    def test_num_labels_stored(self, mock_mx, mock_bert_model):
+    @pytest.mark.skipif(
+        not _MLX_AVAILABLE,
+        reason="BertForSequenceClassification construction requires real MLX nn.Module"
+    )
+    def test_num_labels_stored(self):
         """Model respects num_labels parameter."""
         import mlx.nn as nn
 
