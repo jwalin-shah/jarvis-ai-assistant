@@ -205,12 +205,37 @@ def build_generation_request(
     use_rag = config.reply_pipeline.reply_enable_rag
     use_few_shot = config.reply_pipeline.reply_enable_few_shot
 
+    # Convert search results to RAGDocuments
+    from jarvis.contracts.pipeline import RAGDocument
+
+    rag_docs: list[RAGDocument] = []
+    if use_rag and search_results:
+        for res in search_results:
+            # Handle possible key variations from different search backends
+            content = res.get("content") or res.get("text") or ""
+            source = res.get("source") or res.get("url") or "unknown"
+            score = float(res.get("score") or res.get("similarity") or 0.0)
+            rag_docs.append(
+                RAGDocument(
+                    content=str(content),
+                    source=str(source),
+                    score=score,
+                    metadata=res,
+                )
+            )
+
+    # Convert few-shot examples (tuples) to dicts
+    few_shot_dicts: list[dict[str, str]] = []
+    if use_few_shot and all_exchanges:
+        for ctx, out in all_exchanges:
+            few_shot_dicts.append({"input": ctx, "output": out})
+
     return GenerationRequest(
         context=context,
         classification=classification,
         extraction=None,
-        retrieved_docs=search_results if use_rag else [],
-        few_shot_examples=all_exchanges if use_few_shot else [],
+        retrieved_docs=rag_docs,
+        few_shot_examples=few_shot_dicts,
     )
 
 
