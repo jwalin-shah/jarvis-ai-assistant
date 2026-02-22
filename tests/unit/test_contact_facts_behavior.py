@@ -23,7 +23,6 @@ from unittest.mock import patch
 
 import pytest
 
-from jarvis.contracts.imessage import Message
 from jarvis.contacts.contact_profile import (
     ContactProfile,
     ContactProfileBuilder,
@@ -36,6 +35,7 @@ from jarvis.contacts.contact_profile import (
 )
 from jarvis.contacts.fact_extractor import FactExtractor
 from jarvis.contacts.fact_storage import get_facts_for_contact, save_facts
+from jarvis.contracts.imessage import Message
 
 # =============================================================================
 # Test Data Helpers

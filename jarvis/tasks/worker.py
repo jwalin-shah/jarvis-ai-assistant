@@ -333,9 +333,9 @@ class TaskWorker:
         update_progress: Callable[[int, int, str], None],
     ) -> TaskResult:
         """Handle batch summarize task."""
-        from jarvis.contracts.models import GenerationRequest
         from integrations.imessage import ChatDBReader
         from jarvis.context import ContextFetcher
+        from jarvis.contracts.models import GenerationRequest
         from jarvis.prompts import SUMMARY_EXAMPLES, build_summary_prompt
         from models import get_generator
 
@@ -426,9 +426,9 @@ class TaskWorker:
         update_progress: Callable[[int, int, str], None],
     ) -> TaskResult:
         """Handle batch reply generation task."""
-        from jarvis.contracts.models import GenerationRequest
         from integrations.imessage import ChatDBReader
         from jarvis.context import ContextFetcher
+        from jarvis.contracts.models import GenerationRequest
         from models import get_generator
 
         params = task.params

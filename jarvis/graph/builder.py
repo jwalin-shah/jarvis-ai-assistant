@@ -698,11 +698,11 @@ class GraphBuilder:
         if not chat_ids:
             return {}
 
-        from jarvis.contracts.imessage import Message
         from integrations.imessage.parser import (
             datetime_to_apple_timestamp,
             parse_apple_timestamp,
         )
+        from jarvis.contracts.imessage import Message
 
         messages_by_chat: dict[str, list[Any]] = defaultdict(list)
 
