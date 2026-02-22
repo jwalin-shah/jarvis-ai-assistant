@@ -1,0 +1,70 @@
+model_registry: "models.yaml"
+
+models:
+  style_rm_adapter: "data/style_rm_lora/"
+  quantization:
+    generator: "4bit"
+    classifier: "8bit"
+
+categories:
+  - casual
+  - question
+  - logistics
+  - emotional
+  - invitation
+  - decline
+  - flirty
+  - confrontational
+  - hype
+  - informational
+  - tricky
+
+strategy_templates:
+  casual: "mirror their energy level, keep it concise"
+  question: "answer directly, maybe add a suggestion"
+  logistics: "be clear, confirm details, brief"
+  emotional: "validate first, ask before advising, be genuine"
+  invitation: "show enthusiasm, confirm logistics"
+  decline: "graceful, suggest alternative time"
+  flirty: "match energy, light escalation okay, don't overdo it"
+  confrontational: "acknowledge their feeling, don't get defensive, stay calm"
+  hype: "match or exceed energy, reference specifics"
+  informational: "engage with content, show interest"
+  tricky: "identify what they actually want, respond to subtext not just surface"
+
+sampling:
+  casual:          { temperature: 0.85, min_p: 0.05, rep_penalty: 1.0,  n_samples: 8 }
+  question:        { temperature: 0.5,  min_p: 0.1,  rep_penalty: 1.05, n_samples: 8 }
+  logistics:       { temperature: 0.4,  min_p: 0.1,  rep_penalty: 1.05, n_samples: 4 }
+  emotional:       { temperature: 0.7,  min_p: 0.08, rep_penalty: 1.0,  n_samples: 16 }
+  invitation:      { temperature: 0.75, min_p: 0.05, rep_penalty: 1.0,  n_samples: 8 }
+  decline:         { temperature: 0.6,  min_p: 0.1,  rep_penalty: 1.05, n_samples: 12 }
+  flirty:          { temperature: 0.8,  min_p: 0.05, rep_penalty: 1.0,  n_samples: 16 }
+  confrontational: { temperature: 0.6,  min_p: 0.1,  rep_penalty: 1.05, n_samples: 16 }
+  hype:            { temperature: 0.95, min_p: 0.03, rep_penalty: 1.0,  n_samples: 8 }
+  informational:   { temperature: 0.6,  min_p: 0.08, rep_penalty: 1.0,  n_samples: 8 }
+  tricky:          { temperature: 0.65, min_p: 0.1,  rep_penalty: 1.05, n_samples: 16 }
+
+soft_bon:
+  temperature: 2.0
+  min_score_threshold: 0.6
+
+training:
+  lora_rank: 16
+  lora_alpha: 32
+  learning_rate: 5e-5
+  batch_size: 8
+  epochs: 3
+  max_seq_length: 256
+  val_split: 0.1
+
+runtime:
+  user_name: "Me"
+  default_contact_name: "Friend"
+  default_relationship: "friend"
+  classifier_confidence_threshold: 0.6
+  classifier_vote_samples: 4
+  classifier_vote_temperature: 0.3
+  candidate_retry_limit: 2
+  min_valid_candidates: 3
+  timestamp_format: "%Y-%m-%d %H:%M"

@@ -1,0 +1,9 @@
+roles:
+  generator:
+    - /Users/jwalinshah/projects/jarvis-ai-assistant/text-reply-system/models/LFM2.5-1.2B-Instruct-4bit
+  classifier_base:
+    - /Users/jwalinshah/projects/jarvis-ai-assistant/text-reply-system/models/LFM2-350M-base-4bit
+  reward_base:
+    - /Users/jwalinshah/projects/jarvis-ai-assistant/text-reply-system/models/LFM2-350M-base-4bit
+  base_700m:
+    - /Users/jwalinshah/projects/jarvis-ai-assistant/text-reply-system/models/LFM2-700M-base-4bit

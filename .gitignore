@@ -338,3 +338,11 @@ jarvis_auto_context/
 
 # Training cache files (large, generated)
 data/category_training/samsum_cache/
+
+# text-reply-system large/generated artifacts
+text-reply-system/models/
+text-reply-system/data/raw/
+text-reply-system/data/processed/
+text-reply-system/data/training/
+text-reply-system/data/style_rm_lora/
+text-reply-system/.venv/

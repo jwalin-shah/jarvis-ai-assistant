@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+
+# Local configuration
+.env
+
+# Local model artifacts (large)
+models/
+!models/.gitkeep
+
+# Generated data artifacts
+data/raw/*.jsonl
+data/processed/*.jsonl
+data/training/*.jsonl
+
+# Trained adapter outputs
+data/style_rm_lora/
+
+# Logs and temp outputs
+*.log
+*.tmp
