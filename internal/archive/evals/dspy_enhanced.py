@@ -76,7 +76,7 @@ class ConstraintAwareReplySignature(dspy.Signature):
 
 CATEGORY_SIGNATURES = {
     "question": """They asked a question. Your job: answer it directly.
-    
+
 Rules:
 - Give the answer first, then brief context if needed
 - Don't ask counter-questions unless critical
@@ -99,7 +99,7 @@ Rules:
     "statement": """They're sharing information or chatting.
 
 Rules:
-- React naturally (not too enthusiastic, not dismissive)  
+- React naturally (not too enthusiastic, not dismissive)
 - Add something to move conversation forward OR just acknowledge
 - Match their length (long message → longer reply, short → short)""",
     "acknowledge": """Brief acknowledgment needed.

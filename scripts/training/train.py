@@ -7,10 +7,10 @@ All configuration is in ft_configs/lora_template.yaml.
 Usage:
     # Train with default config
     uv run python scripts/training/train.py
-    
+
     # Train with custom config
     uv run python scripts/training/train.py --config ft_configs/my_config.yaml
-    
+
     # Quick test run (10 iterations)
     uv run python scripts/training/train.py --test
 """
