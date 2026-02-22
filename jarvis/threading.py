@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 if TYPE_CHECKING:
-    from contracts.imessage import Message
+    from jarvis.contracts.imessage import Message
     from jarvis.embedding_adapter import CachedEmbedder
 
 logger = logging.getLogger(__name__)

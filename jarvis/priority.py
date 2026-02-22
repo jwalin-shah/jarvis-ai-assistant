@@ -25,7 +25,7 @@ import numpy as np
 from jarvis.config import get_config
 
 if TYPE_CHECKING:
-    from contracts.imessage import Message
+    from jarvis.contracts.imessage import Message
 
 logger = logging.getLogger(__name__)
 

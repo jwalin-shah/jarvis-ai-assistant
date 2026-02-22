@@ -9,7 +9,7 @@ import logging
 import subprocess
 from datetime import datetime, timedelta
 
-from contracts.calendar import CreateEventResult, DetectedEvent
+from jarvis.contracts.calendar import CreateEventResult, DetectedEvent
 from jarvis.core.exceptions import CalendarAccessError
 
 logger = logging.getLogger(__name__)

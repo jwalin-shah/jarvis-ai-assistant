@@ -7,9 +7,9 @@ the CLI (jarvis/cli.py) and API (jarvis/api.py) components.
 import logging
 from typing import Any
 
-from contracts.health import DegradationPolicy
-from core.health import get_degradation_controller
-from core.memory import get_memory_controller
+from jarvis.contracts.health import DegradationPolicy
+from jarvis.core.health import get_degradation_controller
+from jarvis.core.memory import get_memory_controller
 
 logger = logging.getLogger(__name__)
 

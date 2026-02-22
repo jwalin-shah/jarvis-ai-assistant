@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from core.health.circuit import (
+from jarvis.core.health.circuit import (
     CircuitBreaker,
     CircuitBreakerConfig,
     CircuitBreakerStats,

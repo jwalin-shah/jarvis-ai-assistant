@@ -22,7 +22,7 @@ from api.schemas import (
     ExportResponse,
     ExportSearchRequest,
 )
-from contracts.imessage import Conversation, Message
+from jarvis.contracts.imessage import Conversation, Message
 from integrations.imessage import ChatDBReader
 from jarvis.core.exceptions import ExportError
 from jarvis.export import (

@@ -21,7 +21,7 @@ from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
 from api.schemas.stats import TimeRangeEnum
-from contracts.imessage import Message
+from jarvis.contracts.imessage import Message
 
 # =============================================================================
 # Fixtures

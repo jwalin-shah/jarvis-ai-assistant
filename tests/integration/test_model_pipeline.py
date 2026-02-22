@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from contracts.models import GenerationRequest
+from jarvis.contracts.models import GenerationRequest
 from models.generator import MLXGenerator
 from models.loader import GenerationResult, MLXModelLoader
 

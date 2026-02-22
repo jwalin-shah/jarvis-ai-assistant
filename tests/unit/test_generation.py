@@ -6,8 +6,8 @@ Given input X, expect output Y - tests should pass even if internals are rewritt
 
 from unittest.mock import patch
 
-from contracts.memory import MemoryMode, MemoryState
-from contracts.models import GenerationRequest, GenerationResponse
+from jarvis.contracts.memory import MemoryMode, MemoryState
+from jarvis.contracts.models import GenerationRequest, GenerationResponse
 from jarvis.generation import (
     can_use_llm,
     generate_summary,

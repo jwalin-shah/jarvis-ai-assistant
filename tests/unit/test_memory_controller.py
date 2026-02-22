@@ -8,14 +8,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from contracts.memory import MemoryMode, MemoryState
-from core.memory.controller import (
+from jarvis.contracts.memory import MemoryMode, MemoryState
+from jarvis.core.memory.controller import (
     DefaultMemoryController,
     MemoryThresholds,
     get_memory_controller,
     reset_memory_controller,
 )
-from core.memory.monitor import MemoryMonitor, SystemMemoryInfo
+from jarvis.core.memory.monitor import MemoryMonitor, SystemMemoryInfo
 
 
 @pytest.fixture

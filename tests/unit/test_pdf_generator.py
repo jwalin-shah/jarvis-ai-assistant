@@ -39,7 +39,7 @@ sys.modules["reportlab.lib.styles"].ParagraphStyle = MagicMock()
 
 
 # Import after mocking
-from contracts.imessage import Attachment, Conversation, Message, Reaction  # noqa: E402
+from jarvis.contracts.imessage import Attachment, Conversation, Message, Reaction  # noqa: E402
 from jarvis.pdf_generator import (  # noqa: E402
     PDFExportOptions,
     PDFGenerator,

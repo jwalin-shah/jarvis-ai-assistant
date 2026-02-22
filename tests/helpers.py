@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from contracts.imessage import Attachment, Conversation, Message, Reaction
+from jarvis.contracts.imessage import Attachment, Conversation, Message, Reaction
 
 # --- Context Fetching Stubs ---
 

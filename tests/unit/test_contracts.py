@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from contracts import (
+from jarvis.contracts import (
     Calendar,
     CalendarEvent,
     CreateEventResult,
@@ -23,8 +23,8 @@ from contracts import (
     PermissionStatus,
     SchemaInfo,
 )
-from contracts.health import DegradationPolicy, FeatureState
-from contracts.imessage import Attachment, AttachmentSummary, Conversation, Message, Reaction
+from jarvis.contracts.health import DegradationPolicy, FeatureState
+from jarvis.contracts.imessage import Attachment, AttachmentSummary, Conversation, Message, Reaction
 from jarvis.contracts.pipeline import (
     CategoryType,
     ClassificationResult,

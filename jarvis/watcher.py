@@ -448,7 +448,7 @@ class ChatDBWatcher:
             messages: List of message dicts from _get_new_messages
         """
         try:
-            from contracts.imessage import Message
+            from jarvis.contracts.imessage import Message
             from jarvis.config import get_config
             from jarvis.search.vec_search import get_vec_searcher
 
@@ -592,7 +592,7 @@ class ChatDBWatcher:
             for chat_id, chat_msgs in by_chat.items():
                 # 1. Create a "Live Segment" for these new messages
                 # Convert dict messages to Message objects for the segmenter
-                from contracts.imessage import Message
+                from jarvis.contracts.imessage import Message
                 from integrations.imessage.parser import parse_apple_timestamp
 
                 message_objs = []

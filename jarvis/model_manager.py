@@ -44,7 +44,7 @@ class ModelManager:
         Also checks system-wide memory pressure.
         """
         # If already at red/critical pressure, unload everything regardless of type
-        from core.memory.controller import get_memory_controller
+        from jarvis.core.memory.controller import get_memory_controller
 
         pressure = get_memory_controller().get_state().pressure_level
         if pressure in ("red", "critical"):

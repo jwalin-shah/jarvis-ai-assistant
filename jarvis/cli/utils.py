@@ -13,7 +13,7 @@ from typing import NoReturn
 from rich.console import Console
 from rich.text import Text
 
-from contracts.health import FeatureState
+from jarvis.contracts.health import FeatureState
 from jarvis.core.exceptions import (
     ConfigurationError,
     JarvisError,
@@ -121,8 +121,8 @@ def _format_jarvis_error(error: JarvisError) -> None:
 
 def cleanup() -> None:
     """Clean up system resources."""
-    from core.health import reset_degradation_controller
-    from core.memory import reset_memory_controller
+    from jarvis.core.health import reset_degradation_controller
+    from jarvis.core.memory import reset_memory_controller
 
     try:
         # Reset singletons to free resources

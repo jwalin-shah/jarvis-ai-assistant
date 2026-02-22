@@ -34,10 +34,10 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from contracts.memory import MemoryMode
+from jarvis.contracts.memory import MemoryMode
 
 if TYPE_CHECKING:
-    from core.memory.controller import DefaultMemoryController
+    from jarvis.core.memory.controller import DefaultMemoryController
 
 if TYPE_CHECKING:
     from models.generator import MLXGenerator
@@ -165,7 +165,7 @@ class ModelWarmer:
         Returns:
             The DefaultMemoryController singleton.
         """
-        from core.memory.controller import get_memory_controller
+        from jarvis.core.memory.controller import get_memory_controller
 
         return get_memory_controller()
 

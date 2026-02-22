@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from contracts.imessage import Message
+from jarvis.contracts.imessage import Message
 
 _ALLOWED_INSTRUCTION_PATTERN = re.compile(r"^[a-zA-Z0-9 ,.'!?;:\-/()]+$")
 

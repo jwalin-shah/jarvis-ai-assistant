@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from contracts.imessage import Message
+    from jarvis.contracts.imessage import Message
 
 
 # Sentiment lexicon for lightweight analysis

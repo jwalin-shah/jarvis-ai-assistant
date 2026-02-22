@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from api.main import app
-from contracts.imessage import Attachment, Conversation, Message, Reaction
+from jarvis.contracts.imessage import Attachment, Conversation, Message, Reaction
 from tests.helpers_api import api_client_with_reader
 
 

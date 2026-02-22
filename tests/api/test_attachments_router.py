@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 from api.routers.attachments import format_bytes
-from contracts.imessage import Attachment
+from jarvis.contracts.imessage import Attachment
 
 # =============================================================================
 # Fixtures

@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from contracts.models import GenerationRequest as ModelGenerationRequest
+from jarvis.contracts.models import GenerationRequest as ModelGenerationRequest
 from jarvis.classifiers.classification_result import build_classification_result
 from jarvis.classifiers.response_mobilization import (
     MobilizationResult,

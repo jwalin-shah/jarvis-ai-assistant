@@ -46,7 +46,7 @@ def test_embedding_latency_gate():
 )
 def test_generation_latency_gate():
     """Gate: Generation (warm start) must be under budget."""
-    from contracts.models import GenerationRequest
+    from jarvis.contracts.models import GenerationRequest
     from models.generator import MLXGenerator
     from models.loader import MLXModelLoader
 

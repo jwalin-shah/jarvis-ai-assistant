@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.health import reset_degradation_controller
-from core.memory import reset_memory_controller
+from jarvis.core.health import reset_degradation_controller
+from jarvis.core.memory import reset_memory_controller
 from jarvis.cli import (
     FEATURE_CHAT,
     FEATURE_IMESSAGE,
@@ -112,7 +112,7 @@ class TestInitializeSystem:
 
     def test_initialize_registers_features(self):
         """Initialize system registers degradation features."""
-        from core.health import get_degradation_controller
+        from jarvis.core.health import get_degradation_controller
 
         initialize_system()
         controller = get_degradation_controller()

@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from jarvis.observability.insights import analyze_sentiment
 
 if TYPE_CHECKING:
-    from contracts.imessage import Message
+    from jarvis.contracts.imessage import Message
 
 # Optional pandas import for vectorized operations
 try:

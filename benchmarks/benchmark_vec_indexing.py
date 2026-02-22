@@ -22,7 +22,7 @@ except ImportError:
 
 from datetime import datetime  # noqa: E402
 
-from contracts.imessage import Message  # noqa: E402
+from jarvis.contracts.imessage import Message  # noqa: E402
 
 
 def benchmark():

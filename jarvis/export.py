@@ -13,7 +13,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from contracts.imessage import Conversation, Message
+from jarvis.contracts.imessage import Conversation, Message
 
 
 class ExportFormat(StrEnum):

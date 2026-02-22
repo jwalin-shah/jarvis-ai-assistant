@@ -24,7 +24,7 @@ from api.schemas import (
     DetectEventsRequest,
     ErrorResponse,
 )
-from contracts.calendar import DetectedEvent
+from jarvis.contracts.calendar import DetectedEvent
 from integrations.calendar import (
     get_calendar_reader,
     get_calendar_writer,

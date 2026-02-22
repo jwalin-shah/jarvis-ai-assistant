@@ -13,7 +13,7 @@ import time
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
-from contracts.models import GenerationRequest, GenerationResponse
+from jarvis.contracts.models import GenerationRequest, GenerationResponse
 from jarvis.observability.logging import log_event, timed_operation
 from models.loader import MLXModelLoader, ModelConfig
 from models.prompt_builder import PromptBuilder

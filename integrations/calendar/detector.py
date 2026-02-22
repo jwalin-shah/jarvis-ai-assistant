@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from dateutil import parser as dateutil_parser
 
-from contracts.calendar import DetectedEvent
+from jarvis.contracts.calendar import DetectedEvent
 
 if TYPE_CHECKING:
     pass

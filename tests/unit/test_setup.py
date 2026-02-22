@@ -12,8 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from contracts.health import Permission, PermissionStatus, SchemaInfo
-from contracts.memory import MemoryMode
+from jarvis.contracts.health import Permission, PermissionStatus, SchemaInfo
+from jarvis.contracts.memory import MemoryMode
 from jarvis.setup import (
     DEFAULT_MODEL_PATH,
     CheckResult,

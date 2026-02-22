@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from contracts.imessage import Conversation, Message, iMessageReader
+from jarvis.contracts.imessage import Conversation, Message, iMessageReader
 
 logger = logging.getLogger(__name__)
 

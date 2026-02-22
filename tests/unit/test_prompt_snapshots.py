@@ -4,7 +4,7 @@ These tests ensure that the exact text of prompts remains stable.
 Any change to prompts should be intentional and verified, as it affects model behavior.
 """
 
-from contracts.imessage import Message
+from jarvis.contracts.imessage import Message
 from jarvis.prompts import build_reply_prompt, build_threaded_reply_prompt
 from jarvis.threading import ThreadContext, ThreadState, ThreadTopic, UserRole
 

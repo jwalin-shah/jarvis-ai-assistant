@@ -4,7 +4,7 @@ Formats prompts with injected context documents and example pairs
 for optimal model performance.
 """
 
-from contracts.models import GenerationRequest
+from jarvis.contracts.models import GenerationRequest
 
 
 class PromptBuilder:

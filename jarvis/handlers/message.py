@@ -103,7 +103,7 @@ class MessageHandler(BaseHandler):
 
         prompt = "".join(prompt_parts)
 
-        from contracts.models import GenerationRequest
+        from jarvis.contracts.models import GenerationRequest
 
         request = GenerationRequest(
             prompt=prompt,
@@ -561,7 +561,7 @@ class MessageHandler(BaseHandler):
 
         generator = get_generator()
 
-        from contracts.models import GenerationRequest
+        from jarvis.contracts.models import GenerationRequest
 
         request = GenerationRequest(prompt=prompt, max_tokens=300)
 

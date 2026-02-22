@@ -15,10 +15,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from contracts.imessage import Message
-from contracts.models import GenerationResponse
-from core.health import reset_degradation_controller
-from core.memory import reset_memory_controller
+from jarvis.contracts.imessage import Message
+from jarvis.contracts.models import GenerationResponse
+from jarvis.core.health import reset_degradation_controller
+from jarvis.core.memory import reset_memory_controller
 from tests.helpers import create_mock_message
 
 # --- Context Managers for Mocking ---

@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from contracts.health import DegradationPolicy, FeatureState
-from core.health.degradation import (
+from jarvis.contracts.health import DegradationPolicy, FeatureState
+from jarvis.core.health.degradation import (
     FeatureRegistration,
     GracefulDegradationController,
     get_degradation_controller,

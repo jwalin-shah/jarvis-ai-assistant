@@ -1,0 +1,19 @@
+{
+  "schema": "jarvis_reply_phase0_baseline_v1",
+  "captured_at": "2026-02-21T00:00:00",
+  "source_file": "pending_capture",
+  "metrics": {
+    "judge_avg": 3.5,
+    "anti_ai_clean_rate": 1.0,
+    "category_accuracy": 0.5,
+    "hallucination_rate": 0.05,
+    "latency_p95_ms": 3000.0
+  },
+  "gates": {
+    "judge_avg_min_delta": -0.25,
+    "anti_ai_clean_rate_min_delta": -0.01,
+    "category_accuracy_min_delta": -0.03,
+    "latency_p95_ms_max_relative_increase": 0.2,
+    "hallucination_rate_max_absolute": 0.05
+  }
+}

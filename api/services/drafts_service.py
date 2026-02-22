@@ -23,7 +23,7 @@ from api.services.drafts_pipeline import (
     route_reply_sync,
     run_classification_and_search,
 )
-from contracts.imessage import Message
+from jarvis.contracts.imessage import Message
 from jarvis.contracts.pipeline import MessageContext
 from jarvis.core.exceptions import (
     ConversationNotFoundError,

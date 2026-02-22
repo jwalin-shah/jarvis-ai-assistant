@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from contracts.models import GenerationRequest
+from jarvis.contracts.models import GenerationRequest
 from jarvis.classifiers.cascade import classify_with_cascade
 from jarvis.classifiers.classification_result import build_classification_result
 from jarvis.search.hybrid_search import get_hybrid_searcher

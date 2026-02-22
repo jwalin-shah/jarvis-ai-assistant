@@ -77,7 +77,7 @@ def test_generation_latency_budget():
     """Test that generation meets latency budget."""
     import time
 
-    from contracts.models import GenerationRequest
+    from jarvis.contracts.models import GenerationRequest
     from models.loader import MLXModelLoader
 
     loader = MLXModelLoader()

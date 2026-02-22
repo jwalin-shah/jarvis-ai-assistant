@@ -344,7 +344,7 @@ class PrefetchManager:
 
                 # Skip predictions when memory is under pressure
                 try:
-                    from core.memory import get_memory_controller
+                    from jarvis.core.memory import get_memory_controller
 
                     pressure = get_memory_controller().get_state().pressure_level
                     if pressure in ("yellow", "red", "critical"):

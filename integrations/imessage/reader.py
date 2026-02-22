@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Generic, Self, TypeVar
 
-from contracts.imessage import Attachment, Conversation, Message, Reaction
+from jarvis.contracts.imessage import Attachment, Conversation, Message, Reaction
 from jarvis.core.exceptions import (
     ErrorCode,
     imessage_db_not_found,

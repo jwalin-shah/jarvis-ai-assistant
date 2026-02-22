@@ -15,8 +15,8 @@ Usage in tests:
 
 from rich.console import Console
 
-from core.health import get_degradation_controller, reset_degradation_controller
-from core.memory import get_memory_controller, reset_memory_controller
+from jarvis.core.health import get_degradation_controller, reset_degradation_controller
+from jarvis.core.memory import get_memory_controller, reset_memory_controller
 from jarvis.context import ContextFetcher
 from jarvis.system import (
     FEATURE_CHAT,

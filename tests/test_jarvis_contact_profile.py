@@ -4,7 +4,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from contracts.imessage import Message
+from jarvis.contracts.imessage import Message
 from jarvis.contacts.contact_profile import (
     ContactProfile,
     ContactProfileBuilder,

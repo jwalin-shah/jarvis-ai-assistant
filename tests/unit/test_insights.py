@@ -6,7 +6,7 @@ and relationship health score calculations.
 
 from datetime import datetime, timedelta
 
-from contracts.imessage import Message
+from jarvis.contracts.imessage import Message
 from jarvis.observability.insights import (
     SentimentScore,
     analyze_frequency_trends,

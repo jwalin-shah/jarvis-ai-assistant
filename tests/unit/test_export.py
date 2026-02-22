@@ -10,7 +10,7 @@ from datetime import datetime
 
 import pytest
 
-from contracts.imessage import Attachment, Conversation, Message, Reaction
+from jarvis.contracts.imessage import Attachment, Conversation, Message, Reaction
 from jarvis.export import (
     ExportFormat,
     export_backup,

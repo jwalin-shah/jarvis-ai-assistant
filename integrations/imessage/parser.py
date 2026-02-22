@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from contracts.imessage import Attachment, Reaction
+from jarvis.contracts.imessage import Attachment, Reaction
 
 logger = logging.getLogger(__name__)
 

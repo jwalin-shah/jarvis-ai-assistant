@@ -18,8 +18,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from core.health import reset_degradation_controller
-from core.memory import reset_memory_controller
+from jarvis.core.health import reset_degradation_controller
+from jarvis.core.memory import reset_memory_controller
 from jarvis.config import (
     CONFIG_VERSION,
     JarvisConfig,

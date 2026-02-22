@@ -5,7 +5,7 @@ Tests analytics engine, aggregator, trends detection, and report generation.
 
 from datetime import UTC, datetime, timedelta
 
-from contracts.imessage import Message
+from jarvis.contracts.imessage import Message
 from jarvis.analytics import (
     AnalyticsEngine,
     ReportGenerator,

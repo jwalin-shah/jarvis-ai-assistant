@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from contracts.memory import MemoryMode
+from jarvis.contracts.memory import MemoryMode
 from jarvis.model_warmer import (
     ModelWarmer,
     WarmerConfig,

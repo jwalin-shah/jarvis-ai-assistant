@@ -39,9 +39,9 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from contracts.health import FeatureState
-from core.health import get_degradation_controller, reset_degradation_controller
-from core.memory import get_memory_controller, reset_memory_controller
+from jarvis.contracts.health import FeatureState
+from jarvis.core.health import get_degradation_controller, reset_degradation_controller
+from jarvis.core.memory import get_memory_controller, reset_memory_controller
 from jarvis.core.exceptions import JarvisError
 from jarvis.db import get_db
 from jarvis.system import (

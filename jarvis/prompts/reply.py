@@ -18,7 +18,7 @@ from jarvis.prompts.examples import (
 from jarvis.prompts.utils import truncate_context
 
 if TYPE_CHECKING:
-    from contracts.imessage import Message
+    from jarvis.contracts.imessage import Message
     from jarvis.relationships import RelationshipProfile
     from jarvis.threading import ThreadContext, ThreadedReplyConfig
 

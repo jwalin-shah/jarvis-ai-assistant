@@ -25,7 +25,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from contracts.imessage import Conversation, Message
+from jarvis.contracts.imessage import Conversation, Message
 
 
 @dataclass

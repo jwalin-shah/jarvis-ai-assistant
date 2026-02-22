@@ -23,7 +23,7 @@ from jarvis.analytics.engine import AnalyticsEngine, get_analytics_engine
 from jarvis.analytics.trends import TrendAnalyzer, get_trend_analyzer
 
 if TYPE_CHECKING:
-    from contracts.imessage import Message
+    from jarvis.contracts.imessage import Message
 
 
 @dataclass

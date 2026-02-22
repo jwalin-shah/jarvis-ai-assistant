@@ -698,7 +698,7 @@ class GraphBuilder:
         if not chat_ids:
             return {}
 
-        from contracts.imessage import Message
+        from jarvis.contracts.imessage import Message
         from integrations.imessage.parser import (
             datetime_to_apple_timestamp,
             parse_apple_timestamp,

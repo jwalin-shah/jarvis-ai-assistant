@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from api.main import app
-from contracts.imessage import Message
+from jarvis.contracts.imessage import Message
 from tests.helpers_api import api_client_with_reader
 
 

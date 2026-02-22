@@ -11,9 +11,9 @@ import time
 
 import pytest
 
-from contracts.health import DegradationPolicy, FeatureState
-from core.health.circuit import CircuitBreaker, CircuitBreakerConfig, CircuitOpenError, CircuitState
-from core.health.degradation import GracefulDegradationController
+from jarvis.contracts.health import DegradationPolicy, FeatureState
+from jarvis.core.health.circuit import CircuitBreaker, CircuitBreakerConfig, CircuitOpenError, CircuitState
+from jarvis.core.health.degradation import GracefulDegradationController
 from jarvis.fallbacks import FailureReason, get_fallback_response
 from jarvis.tasks.models import TaskStatus, TaskType
 from jarvis.tasks.queue import TaskQueue, reset_task_queue
@@ -713,7 +713,7 @@ class TestReliabilityIntegration:
     @pytest.mark.asyncio
     async def test_full_reliability_stack(self):
         """Test all reliability components in async context."""
-        from core.health.circuit import CircuitBreaker
+        from jarvis.core.health.circuit import CircuitBreaker
 
         cb = CircuitBreaker("async_test")
 

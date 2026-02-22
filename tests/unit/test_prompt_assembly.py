@@ -15,7 +15,7 @@ from datetime import datetime
 
 import pytest
 
-from contracts.models import GenerationRequest as ModelGenerationRequest
+from jarvis.contracts.models import GenerationRequest as ModelGenerationRequest
 from jarvis.contracts.pipeline import (
     CategoryType,
     ClassificationResult,

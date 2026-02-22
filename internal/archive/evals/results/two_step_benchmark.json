@@ -1,0 +1,27 @@
+{
+  "examples": 50,
+  "results": [
+    {
+      "backend": "keyword",
+      "examples": 50,
+      "should_reply_accuracy": 0.84,
+      "should_reply_f1": 0.75,
+      "mobilization_accuracy": 0.74,
+      "mobilization_macro_f1": 0.3728,
+      "fallback_rate": 0.34,
+      "latency_ms_mean": 0.014,
+      "latency_ms_p95": 0.021
+    },
+    {
+      "backend": "alias:falconsai",
+      "examples": 50,
+      "should_reply_accuracy": 0.76,
+      "should_reply_f1": 0.1429,
+      "mobilization_accuracy": 0.74,
+      "mobilization_macro_f1": 0.2151,
+      "fallback_rate": 0.36,
+      "latency_ms_mean": 3.058,
+      "latency_ms_p95": 8.496
+    }
+  ]
+}

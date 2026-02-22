@@ -7,7 +7,7 @@ import csv
 import io
 from datetime import datetime
 
-from contracts.imessage import Message
+from jarvis.contracts.imessage import Message
 from jarvis.export import export_messages_csv
 
 

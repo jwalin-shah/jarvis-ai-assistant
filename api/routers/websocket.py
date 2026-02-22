@@ -21,7 +21,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from starlette.concurrency import run_in_threadpool
 
 from api.services.websocket_auth import load_or_generate_token, validate_websocket_auth
-from contracts.models import GenerationRequest
+from jarvis.contracts.models import GenerationRequest
 from models import get_generator
 
 logger = logging.getLogger(__name__)

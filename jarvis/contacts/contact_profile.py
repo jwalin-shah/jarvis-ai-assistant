@@ -29,7 +29,7 @@ from jarvis.contacts.contact_utils import hash_contact_id
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from contracts.imessage import Message
+    from jarvis.contracts.imessage import Message
 
 
 # =============================================================================

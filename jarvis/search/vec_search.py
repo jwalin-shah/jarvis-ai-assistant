@@ -35,7 +35,7 @@ from jarvis.db import JarvisDB, get_db
 from jarvis.embedding_adapter import get_embedder
 
 if TYPE_CHECKING:
-    from contracts.imessage import Message
+    from jarvis.contracts.imessage import Message
     from jarvis.topics.topic_segmenter import TopicSegment
 
 logger = logging.getLogger(__name__)

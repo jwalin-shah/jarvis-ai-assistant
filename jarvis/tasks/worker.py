@@ -20,7 +20,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from contracts.imessage import Message
+from jarvis.contracts.imessage import Message
 from jarvis.tasks.models import Task, TaskResult, TaskType
 from jarvis.tasks.queue import TaskQueue, get_task_queue
 
@@ -333,7 +333,7 @@ class TaskWorker:
         update_progress: Callable[[int, int, str], None],
     ) -> TaskResult:
         """Handle batch summarize task."""
-        from contracts.models import GenerationRequest
+        from jarvis.contracts.models import GenerationRequest
         from integrations.imessage import ChatDBReader
         from jarvis.context import ContextFetcher
         from jarvis.prompts import SUMMARY_EXAMPLES, build_summary_prompt
@@ -426,7 +426,7 @@ class TaskWorker:
         update_progress: Callable[[int, int, str], None],
     ) -> TaskResult:
         """Handle batch reply generation task."""
-        from contracts.models import GenerationRequest
+        from jarvis.contracts.models import GenerationRequest
         from integrations.imessage import ChatDBReader
         from jarvis.context import ContextFetcher
         from models import get_generator
