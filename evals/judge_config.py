@@ -31,14 +31,11 @@ if _env_path.exists():
 # Cerebras Model Options (FREE tier: 30 req/min, 14.4k req/day)
 # Change JUDGE_MODEL to switch between them
 
-# Option 1: Llama 3.3 70B - Reliable, well-tested
-# JUDGE_MODEL = "llama-3.3-70b"
-
-# Option 1: GPT-OSS-120B - Ultra fast, high intelligence (NEW)
+# Option 1: GPT-OSS-120B - Ultra fast, high intelligence
 JUDGE_MODEL = "gpt-oss-120b"
 
 # Option 2: Llama 3.3 70B - Reliable, well-tested (RECOMMENDED)
-# JUDGE_MODEL = "llama3.3-70b"
+# JUDGE_MODEL = "llama-3.3-70b"
 
 # Option 3: Qwen 2.5 72B - Strong multilingual, good for complex reasoning
 # JUDGE_MODEL = "qwen-2.5-72b"
@@ -47,7 +44,8 @@ JUDGE_MODEL = "gpt-oss-120b"
 # JUDGE_MODEL = "qwq-32b-preview"
 
 JUDGE_BASE_URL = "https://api.cerebras.ai/v1"
-JUDGE_API_KEY_ENV = "CEREBRAS_API_KEY"
+# Use paid API key for higher rate limits (1000 RPM vs 30 RPM)
+JUDGE_API_KEY_ENV = "CEREBRAS_PAID_API_KEY"
 
 # Alternative Providers:
 # Groq: JUDGE_MODEL = "llama-3.3-70b-versatile", JUDGE_BASE_URL = "https://api.groq.com/openai/v1"
