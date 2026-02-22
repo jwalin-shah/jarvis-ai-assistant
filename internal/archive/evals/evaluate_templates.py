@@ -21,9 +21,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.judge_config import JUDGE_MODEL, get_judge_client
-
-from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
+from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES  # noqa: E402
 
 
 def fetch_real_messages(limit: int = 50) -> list[dict]:
@@ -43,7 +42,7 @@ def fetch_real_messages(limit: int = 50) -> list[dict]:
         # Heuristic: short messages (2-15 chars) or common patterns
         cursor.execute(
             """
-            SELECT 
+            SELECT
                 m.text,
                 m.date,
                 c.display_name,
@@ -126,7 +125,11 @@ Rate this response on a scale of 1-10:
 - 1-2: Very bad, completely wrong
 
 Respond with ONLY a JSON object:
-{{"score": <number>, "reasoning": "<brief explanation>", "better_alternative": "<suggested better response or null>"}}
+{{
+    "score": <number>,
+    "reasoning": "<brief explanation>",
+    "better_alternative": "<suggested better response or null>"
+}}
 """
 
     try:
@@ -302,7 +305,7 @@ def main():
 Based on the analysis:
 
 1. Check if your templates match your actual style
-2. Consider adding emoji if you use them (👍, 🙏)
+2. Consider adding emoji if you use them (👍, 😊)
 3. Add abbreviations you actually use ("bet", "alr", etc.)
 4. Consider context-aware template selection (not random)
 
