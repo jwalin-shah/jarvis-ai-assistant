@@ -143,7 +143,9 @@ def _extract_json_blob(text: str) -> str:
     return s
 
 
-def _judge_single_item(judge_client: object, judge_model: str, ex: EvalExample, generated: str) -> tuple[float | None, str]:
+def _judge_single_item(
+    judge_client: object, judge_model: str, ex: EvalExample, generated: str
+) -> tuple[float | None, str]:
     """Judge one item and return (score, reasoning)."""
     try:
         prompt = (
@@ -462,9 +464,9 @@ def main() -> int:
                             results[idx].generated_response,
                         )
                         results[idx].judge_score = score
-                        results[idx].judge_reasoning = (
-                            f"batch_fail_then_single: {reasoning}; batch_error={e}"
-                        )
+                        results[
+                            idx
+                        ].judge_reasoning = f"batch_fail_then_single: {reasoning}; batch_error={e}"
                         if args.judge_delay_seconds > 0:
                             time.sleep(min(args.judge_delay_seconds, 0.6))
                 if args.judge_delay_seconds > 0 and (start + args.judge_batch_size) < len(
