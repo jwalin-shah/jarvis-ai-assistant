@@ -86,27 +86,28 @@ class EvalResult:
 # Input Preprocessing
 # ---------------------------------------------------------------------------
 
+
 def clean_message(text: str) -> str:
     """Clean a single message."""
     if not text:
         return ""
 
     # Remove attachment placeholders
-    text = re.sub(r'\[?image\]?', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\[?photo\]?', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\[?link\]?', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\[?video\]?', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\[?voice memo\]?', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\[?audio\]?', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\[?Location\]?', '', text, flags=re.IGNORECASE)
+    text = re.sub(r"\[?image\]?", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[?photo\]?", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[?link\]?", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[?video\]?", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[?voice memo\]?", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[?audio\]?", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[?Location\]?", "", text, flags=re.IGNORECASE)
 
     # Remove unicode replacement character
-    text = text.replace('\ufffc', '')
+    text = text.replace("\ufffc", "")
 
     # Remove reaction prefixes
     text = re.sub(
         r'^(liked|loved|laughed at|emphasized|questioned)\s+["\']?',
-        '',
+        "",
         text,
         flags=re.IGNORECASE,
     )
@@ -120,7 +121,7 @@ def clean_message(text: str) -> str:
 def strip_phone_numbers(text: str) -> str:
     """Replace phone numbers with 'Them'."""
     # Pattern for +14025551234 style numbers
-    return re.sub(r'\+\d{10,15}', 'Them', text)
+    return re.sub(r"\+\d{10,15}", "Them", text)
 
 
 def preprocess_conversation(context: list[str], last_message: str) -> tuple[list[str], str]:
@@ -177,6 +178,7 @@ Jwalin: """
 # Output Post-processing
 # ---------------------------------------------------------------------------
 
+
 def clean_output(text: str) -> str:
     """Clean generated output."""
     if not text:
@@ -185,36 +187,36 @@ def clean_output(text: str) -> str:
     original = text
 
     # Strip contact name prefixes (Them:, +123:, Jwalin:, etc.)
-    text = re.sub(r'^(?:Them|Jwalin|[+]?\d{10,15}|\w+)\s*:\s*', '', text)
+    text = re.sub(r"^(?:Them|Jwalin|[+]?\d{10,15}|\w+)\s*:\s*", "", text)
 
     # Strip quoted content
-    text = re.sub(r'^"([^"]*)"\s*', r'\1', text)
+    text = re.sub(r'^"([^"]*)"\s*', r"\1", text)
 
     # Strip markdown artifacts
-    text = re.sub(r'\*\*', '', text)
-    text = re.sub(r'\*\s*', '', text)
+    text = re.sub(r"\*\*", "", text)
+    text = re.sub(r"\*\s*", "", text)
 
     # Strip stage directions
-    text = re.sub(r'\([^)]*\)', '', text)
+    text = re.sub(r"\([^)]*\)", "", text)
 
     # Strip meta-commentary patterns
-    text = re.sub(r'is a phrase that means.*', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'seems like.*', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'it sounds like.*', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'sounds like.*', '', text, flags=re.IGNORECASE)
+    text = re.sub(r"is a phrase that means.*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"seems like.*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"it sounds like.*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"sounds like.*", "", text, flags=re.IGNORECASE)
 
     # Strip emojis
     emoji_pattern = re.compile(
-        '[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF'
-        '\U0001F1E0-\U0001F1FF\U00002702-\U000027B0\U000024C2-\U0001F251]+'
+        "[\U0001f600-\U0001f64f\U0001f300-\U0001f5ff\U0001f680-\U0001f6ff"
+        "\U0001f1e0-\U0001f1ff\U00002702-\U000027b0\U000024c2-\U0001f251]+"
     )
-    text = emoji_pattern.sub('', text)
+    text = emoji_pattern.sub("", text)
 
     # Normalize whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
 
     # Remove trailing fragments
-    text = re.sub(r'[,;\s]+$', '', text)
+    text = re.sub(r"[,;\s]+$", "", text)
 
     if text != original:
         logger.debug(f"Cleaned: '{original[:50]}...' -> '{text[:50]}...'")
@@ -225,6 +227,7 @@ def clean_output(text: str) -> str:
 # ---------------------------------------------------------------------------
 # Dataset Loading
 # ---------------------------------------------------------------------------
+
 
 def load_training_format_dataset(path: Path) -> list[EvalExample]:
     """Load training-format dataset (messages format).
@@ -276,6 +279,7 @@ def load_training_format_dataset(path: Path) -> list[EvalExample]:
 # ---------------------------------------------------------------------------
 # Generation
 # ---------------------------------------------------------------------------
+
 
 def load_generator(model_id: str | None = None):
     """Load the MLX generator."""
@@ -334,6 +338,7 @@ def generate_reply(
 # Judge
 # ---------------------------------------------------------------------------
 
+
 def _extract_json_blob(text: str) -> str:
     """Extract JSON object from text."""
     text = text.strip()
@@ -347,7 +352,7 @@ def _extract_json_blob(text: str) -> str:
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
-        return text[start:end+1]
+        return text[start : end + 1]
     return text
 
 
@@ -400,6 +405,7 @@ def judge_reply(
 # Evaluation
 # ---------------------------------------------------------------------------
 
+
 def run_evaluation(
     prompt_variant: str,
     examples: list[EvalExample],
@@ -417,6 +423,7 @@ def run_evaluation(
     judge_model = None
     if use_judge:
         from evals.judge_config import JUDGE_MODEL, get_judge_client
+
         judge_client = get_judge_client()
         judge_model = JUDGE_MODEL
         if judge_client:
@@ -442,9 +449,7 @@ def run_evaluation(
         judge_score = None
         judge_reasoning = ""
         if judge_client and use_judge and not generated.startswith("[ERROR"):
-            judge_score, judge_reasoning = judge_reply(
-                judge_client, judge_model, ex, generated
-            )
+            judge_score, judge_reasoning = judge_reply(judge_client, judge_model, ex, generated)
 
         result = EvalResult(
             example=ex,
@@ -469,6 +474,7 @@ def run_evaluation(
 # Reporting
 # ---------------------------------------------------------------------------
 
+
 def print_summary(results: list[EvalResult], variant: str) -> dict[str, Any]:
     """Print and return summary statistics."""
     print("=" * 70)
@@ -492,7 +498,7 @@ def print_summary(results: list[EvalResult], variant: str) -> dict[str, Any]:
         print(f"Examples:           {n}")
         print(f"Avg latency:        {avg_latency:.0f}ms")
         print(f"Judge avg:          {avg_score:.2f}/10")
-        print(f"Judge pass (>=7):   {pass_7}/{len(scored)} ({pass_7/len(scored)*100:.0f}%)")
+        print(f"Judge pass (>=7):   {pass_7}/{len(scored)} ({pass_7 / len(scored) * 100:.0f}%)")
         print()
 
         low = sorted(scored, key=lambda r: r.judge_score)[:3]
@@ -564,6 +570,7 @@ def save_results(results: list[EvalResult], variant: str) -> Path:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
     import argparse
 
@@ -611,7 +618,7 @@ def main() -> int:
         return 1
 
     if args.limit:
-        examples = examples[:args.limit]
+        examples = examples[: args.limit]
 
     print("=" * 70)
     print("PROMPT CEILING EVALUATION - CLEAN VERSION")
@@ -626,9 +633,9 @@ def main() -> int:
     all_summaries = []
 
     for variant in variants:
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print(f"Testing prompt variant: {variant}")
-        print(f"{'='*70}\n")
+        print(f"{'=' * 70}\n")
 
         results = run_evaluation(
             prompt_variant=variant,

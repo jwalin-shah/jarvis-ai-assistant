@@ -18,8 +18,6 @@ os.chdir(PROJECT_ROOT)
 
 from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY  # noqa: E402
 
-logging.basicConfig(
-    level=logging.WARNING, format="%(levelname)s: %(message)s", stream=sys.stderr
-)
+logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s", stream=sys.stderr)
 
 print(f"Loaded config with penalty: {DEFAULT_REPETITION_PENALTY}")

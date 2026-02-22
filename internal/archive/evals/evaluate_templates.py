@@ -55,17 +55,13 @@ def load_recent_messages(limit: int = 100) -> list[dict]:
         ] * 10
 
 
-def batch_judge_templates(
-    evaluations: list[dict], client, batch_size: int = 10
-) -> list[dict]:
+def batch_judge_templates(evaluations: list[dict], client, batch_size: int = 10) -> list[dict]:
     """Judge templates in batches to save time."""
     results = []
 
     for i in range(0, len(evaluations), batch_size):
         batch = evaluations[i : i + batch_size]
-        prompt = (
-            "Judge the appropriateness of these response templates for the given incoming messages.\n\n"  # noqa: E501  # noqa: E501
-        )
+        prompt = "Judge the appropriateness of these response templates for the given incoming messages.\n\n"  # noqa: E501  # noqa: E501
 
         for idx, item in enumerate(batch):
             prompt += f"--- CASE {idx + 1} ---\n"
@@ -128,13 +124,15 @@ def run_evaluation(args):
         matched = next((t for t in templates if t in text), None)
 
         if matched:
-            evaluations.append({
-                "type": "template",
-                "incoming": text,
-                "template_text": matched,
-                "category": "basic_match",
-                "score": 1.0
-            })
+            evaluations.append(
+                {
+                    "type": "template",
+                    "incoming": text,
+                    "template_text": matched,
+                    "category": "basic_match",
+                    "score": 1.0,
+                }
+            )
 
     # Judging
     if not args.no_judge and evaluations:
@@ -154,6 +152,7 @@ def run_evaluation(args):
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-judge", action="store_true", help="Skip LLM judging")
     parser.add_argument("--batch-size", type=int, default=10, help="Batch size for judging")

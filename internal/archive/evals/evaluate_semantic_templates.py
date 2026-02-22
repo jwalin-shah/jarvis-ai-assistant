@@ -63,7 +63,7 @@ def judge_template_quality(client, incoming: str, template: ResponseTemplate) ->
 Incoming Message: "{incoming}"
 Selected Template: "{template.text}"
 Category: {template.category}
-Tone: {template.tone or 'neutral'}
+Tone: {template.tone or "neutral"}
 
 Respond with ONLY a JSON array in this exact format:
 [
@@ -91,17 +91,13 @@ Criteria:
         return {"score": 0, "reasoning": str(e), "better_alternative": None}
 
 
-def batch_judge_templates(
-    evaluations: list[dict], client, batch_size: int = 10
-) -> list[dict]:
+def batch_judge_templates(evaluations: list[dict], client, batch_size: int = 10) -> list[dict]:
     """Judge templates in batches to save time."""
     results = []
 
     for i in range(0, len(evaluations), batch_size):
         batch = evaluations[i : i + batch_size]
-        prompt = (
-            "Judge the appropriateness of these response templates for the given incoming messages.\n\n"  # noqa: E501  # noqa: E501
-        )
+        prompt = "Judge the appropriateness of these response templates for the given incoming messages.\n\n"  # noqa: E501  # noqa: E501
 
         for idx, item in enumerate(batch):
             prompt += f"--- CASE {idx + 1} ---\n"
@@ -195,27 +191,31 @@ def run_evaluation(args):
 
         if semantic_result:
             semantic_hits += 1
-            evaluations.append({
-                "type": "semantic",
-                "incoming": text,
-                "template_text": semantic_result.text,
-                "category": semantic_result.category,
-                "score": semantic_result.score
-            })
+            evaluations.append(
+                {
+                    "type": "semantic",
+                    "incoming": text,
+                    "template_text": semantic_result.text,
+                    "category": semantic_result.category,
+                    "score": semantic_result.score,
+                }
+            )
 
         if legacy_result:
             legacy_hits += 1
-            evaluations.append({
-                "type": "legacy",
-                "incoming": text,
-                "template_text": legacy_result,
-                "category": "regex_match",
-                "score": 1.0
-            })
+            evaluations.append(
+                {
+                    "type": "legacy",
+                    "incoming": text,
+                    "template_text": legacy_result,
+                    "category": "regex_match",
+                    "score": 1.0,
+                }
+            )
 
     print("\nMatch Rates:")
-    print(f"Semantic: {semantic_hits}/{len(messages)} ({semantic_hits/len(messages)*100:.1f}%)")
-    print(f"Legacy:   {legacy_hits}/{len(messages)} ({legacy_hits/len(messages)*100:.1f}%)")
+    print(f"Semantic: {semantic_hits}/{len(messages)} ({semantic_hits / len(messages) * 100:.1f}%)")
+    print(f"Legacy:   {legacy_hits}/{len(messages)} ({legacy_hits / len(messages) * 100:.1f}%)")
 
     # Judging
     if not args.no_judge and evaluations:
@@ -252,6 +252,7 @@ def run_evaluation(args):
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-judge", action="store_true", help="Skip LLM judging")
     parser.add_argument("--batch-size", type=int, default=10, help="Batch size for judging")

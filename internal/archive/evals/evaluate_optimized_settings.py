@@ -218,7 +218,7 @@ def main():
 
     score_improvement = optimized_results["avg_score"] - baseline_results["avg_score"]
     length_reduction = baseline_results["avg_length"] - optimized_results["avg_length"]
-    length_reduction_pct = length_reduction / baseline_results['avg_length'] * 100
+    length_reduction_pct = length_reduction / baseline_results["avg_length"] * 100
 
     print("\n📈 Improvements:")
     print(f"   Score: {score_improvement:+.2f} points")
