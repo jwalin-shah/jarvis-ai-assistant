@@ -61,12 +61,40 @@ from jarvis.reply_service_generation import (
 from jarvis.reply_service_generation import (
     to_model_generation_request as to_model_generation_request_payload,
 )
-from jarvis.reply_service_legacy import (
-    get_routing_stats as get_routing_stats_payload,
-)
-from jarvis.reply_service_legacy import (
-    route_legacy as route_legacy_payload,
-)
+# Legacy helpers inlined from reply_service_legacy.py
+from datetime import UTC, datetime as _datetime
+from typing import cast as _cast
+
+
+def route_legacy_payload(
+    service: Any,
+    *,
+    incoming: str,
+    contact_id: int | None = None,
+    thread: list[str] | None = None,
+    chat_id: str | None = None,
+    conversation_messages: list[Any] | None = None,
+    context: MessageContext | None = None,
+) -> dict[str, Any]:
+    """Compatibility route API used by socket/api handlers and tests."""
+    if context is None:
+        context = MessageContext(
+            chat_id=chat_id or "",
+            message_text=incoming or "",
+            is_from_me=False,
+            timestamp=_datetime.now(UTC),
+            metadata={"thread": thread or [], "contact_id": contact_id},
+        )
+    if not thread and conversation_messages:
+        context.metadata["thread"] = service._build_thread_context(conversation_messages)
+
+    response = service.generate_reply(context, classification=None)
+    return _cast(dict[str, Any], service._to_legacy_response(response))
+
+
+def get_routing_stats_payload(service: Any) -> dict[str, Any]:
+    """Return legacy routing stats payload."""
+    return {"db_stats": service.db.get_stats(), "index_available": True}
 from jarvis.reply_service_utils import (
     build_mobilization_hint,
     build_thread_context,
