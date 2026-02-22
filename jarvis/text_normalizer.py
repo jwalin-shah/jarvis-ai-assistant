@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from re import Match
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -256,9 +257,6 @@ REPEATED_EMOJI_PATTERN = re.compile(
 # Question words for detecting questions
 QUESTION_WORDS = {"who", "what", "when", "where", "why", "how", "which", "whose"}
 
-# Pre-compiled patterns for hot path functions (avoid recompiling in loops)
-_WHITESPACE_PATTERN = re.compile(r"[ \t]+")
-
 # Zero-width and control characters to strip (invisible Unicode that breaks matching)
 # - \u200b-\u200f: zero-width space, non-joiner, joiner, LTR/RTL marks
 # - \uFEFF: byte order mark (BOM)
@@ -370,10 +368,10 @@ def normalize_text(
     lines = cleaned.split("\n")
     normalized_lines = []
     for line in lines:
-        # Collapse multiple spaces/tabs to single space (use pre-compiled pattern)
-        line = _WHITESPACE_PATTERN.sub(" ", line.strip())
-        if line:
-            normalized_lines.append(line)
+        # Collapse multiple spaces/tabs to single space
+        line_parts = line.split()
+        if line_parts:
+            normalized_lines.append(" ".join(line_parts))
     cleaned = "\n".join(normalized_lines)
 
     # 3b. URL handling
@@ -506,25 +504,25 @@ def is_spam_message(text: str) -> bool:
     return bool(SPAM_REGEX.search(text))
 
 
+def _url_repl(match: Match[str]) -> str:
+    """Helper for URL replacement."""
+    url = match.group(0)
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc or parsed.path.split("/")[0]
+        if domain:
+            return f"<URL:{domain.lower()}>"
+    except Exception:  # nosec B110
+        pass
+    return "<URL>"
+
+
 def _replace_urls_with_domains(text: str) -> str:
     """Replace URLs with <URL:domain> tokens."""
     if not text:
         return text
 
-    def _repl(match: Match[str]) -> str:
-        url = match.group(0)
-        try:
-            from urllib.parse import urlparse
-
-            parsed = urlparse(url)
-            domain = parsed.netloc or parsed.path.split("/")[0]
-            if domain:
-                return f"<URL:{domain.lower()}>"
-        except Exception:  # nosec B110
-            pass
-        return "<URL>"
-
-    return URL_REGEX.sub(_repl, text)
+    return URL_REGEX.sub(_url_repl, text)
 
 
 def _replace_codes_with_placeholder(text: str) -> str:

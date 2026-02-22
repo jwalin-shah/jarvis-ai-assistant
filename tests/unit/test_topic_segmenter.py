@@ -13,7 +13,6 @@ sys.modules["jarvis.embedding_adapter"] = mock_adapter
 # We need to ensure we import from the source, assuming it's in python path
 try:
     from jarvis.contracts.imessage import Message
-
     from jarvis.topics.topic_segmenter import segment_conversation
 except ImportError:
     # If not in path (e.g. running as script), assume we are in root

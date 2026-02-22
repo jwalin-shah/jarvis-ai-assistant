@@ -30,7 +30,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # Ensure model-relative paths resolve regardless of promptfoo basePath/cwd.
 os.chdir(PROJECT_ROOT)
 
-from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY
+from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY  # noqa: E402
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s", stream=sys.stderr)
 logger = logging.getLogger(__name__)

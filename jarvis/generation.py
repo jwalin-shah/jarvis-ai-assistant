@@ -9,8 +9,8 @@ from typing import Any
 
 from jarvis.contracts.memory import MemoryMode
 from jarvis.contracts.models import GenerationRequest, GenerationResponse
-from jarvis.core.memory import get_memory_controller
 from jarvis.core.exceptions import ModelLoadError
+from jarvis.core.memory import get_memory_controller
 from models import get_generator
 
 logger = logging.getLogger(__name__)

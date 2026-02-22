@@ -179,6 +179,7 @@ def eval_retrieval_relevance(client, test_cases: list[dict]) -> list[RelevanceRe
 def eval_generation_ablation(client, test_cases: list[dict]) -> list[AblationResult]:
     """Compare generation quality WITH vs WITHOUT RAG examples."""
     from evals.batch_eval import build_prompt, judge_response
+
     from jarvis.search.vec_search import get_vec_searcher
     from models.loader import get_model
 
