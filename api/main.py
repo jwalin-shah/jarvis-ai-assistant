@@ -216,60 +216,58 @@ def _configure_middleware(app_instance: FastAPI) -> None:
 
 
 def _register_routers(app_instance: FastAPI) -> None:
-    """Register API routers.
+    """Register all API routers explicitly.
 
-    Core routers are always loaded. Non-essential routers (analytics,
-    experiments, graph, etc.) are commented out to reduce startup time
-    and attack surface. Uncomment as needed.
+    Imports routers on-demand to avoid eager loading at module import time.
+    This improves testability and reduces import-time coupling.
     """
-    # --- Core routers (always loaded) ---
+    # Import routers locally to avoid module-level coupling
+    from api.routers.analytics import router as analytics_router
     from api.routers.attachments import router as attachments_router
+    from api.routers.batch import router as batch_router
     from api.routers.calendar import router as calendar_router
     from api.routers.contacts import router as contacts_router
     from api.routers.conversations import router as conversations_router
+    from api.routers.custom_templates import router as custom_templates_router
     from api.routers.drafts import router as drafts_router
+    from api.routers.experiments import router as experiments_router
+    from api.routers.export import router as export_router
+    from api.routers.feedback import router as feedback_router
+    from api.routers.graph import router as graph_router
     from api.routers.health import router as health_router
+    from api.routers.metrics import router as metrics_router
+    from api.routers.priority import router as priority_router
     from api.routers.search import router as search_router
     from api.routers.settings import router as settings_router
+    from api.routers.stats import router as stats_router
     from api.routers.suggestions import router as suggestions_router
     from api.routers.tasks import router as tasks_router
+    from api.routers.threads import router as threads_router
     from api.routers.websocket import router as websocket_router
 
+    # Register routers in logical order
     app_instance.include_router(health_router)
-    app_instance.include_router(conversations_router)
-    app_instance.include_router(drafts_router)
-    app_instance.include_router(search_router)
-    app_instance.include_router(contacts_router)
-    app_instance.include_router(settings_router)
-    app_instance.include_router(websocket_router)
     app_instance.include_router(attachments_router)
     app_instance.include_router(calendar_router)
+    app_instance.include_router(contacts_router)
+    app_instance.include_router(conversations_router)
+    app_instance.include_router(custom_templates_router)
+    app_instance.include_router(drafts_router)
+    app_instance.include_router(export_router)
+    app_instance.include_router(search_router)
     app_instance.include_router(suggestions_router)
+    app_instance.include_router(settings_router)
+    app_instance.include_router(stats_router)
+    app_instance.include_router(metrics_router)
+    app_instance.include_router(threads_router)
+    app_instance.include_router(websocket_router)
     app_instance.include_router(tasks_router)
-
-    # --- Non-essential routers (uncomment as needed) ---
-    # from api.routers.analytics import router as analytics_router
-    # from api.routers.batch import router as batch_router
-    # from api.routers.custom_templates import router as custom_templates_router
-    # from api.routers.experiments import router as experiments_router
-    # from api.routers.export import router as export_router
-    # from api.routers.feedback import router as feedback_router
-    # from api.routers.graph import router as graph_router
-    # from api.routers.metrics import router as metrics_router
-    # from api.routers.priority import router as priority_router
-    # from api.routers.stats import router as stats_router
-    # from api.routers.threads import router as threads_router
-    # app_instance.include_router(analytics_router)
-    # app_instance.include_router(batch_router)
-    # app_instance.include_router(custom_templates_router)
-    # app_instance.include_router(experiments_router)
-    # app_instance.include_router(export_router)
-    # app_instance.include_router(feedback_router)
-    # app_instance.include_router(graph_router)
-    # app_instance.include_router(metrics_router)
-    # app_instance.include_router(priority_router)
-    # app_instance.include_router(stats_router)
-    # app_instance.include_router(threads_router)
+    app_instance.include_router(batch_router)
+    app_instance.include_router(priority_router)
+    app_instance.include_router(feedback_router)
+    app_instance.include_router(experiments_router)
+    app_instance.include_router(analytics_router)
+    app_instance.include_router(graph_router)
 
 
 def create_app() -> FastAPI:
