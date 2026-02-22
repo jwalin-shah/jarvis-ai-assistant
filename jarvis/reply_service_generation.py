@@ -9,8 +9,8 @@ from typing import Any
 
 import numpy as np
 
-from jarvis.contracts.models import GenerationRequest as ModelGenerationRequest
 from jarvis.config import get_config
+from jarvis.contracts.models import GenerationRequest as ModelGenerationRequest
 from jarvis.contracts.pipeline import (
     GenerationRequest,
     GenerationResponse,
@@ -210,11 +210,12 @@ def build_generation_request(
     retrieved_docs = []
     if use_rag and search_results:
         for res in search_results:
+            score = float(res.get("score") or res.get("similarity") or 0.0)
             retrieved_docs.append(
                 RAGDocument(
                     content=res.get("text", "") or res.get("content", ""),
                     source=res.get("source", "unknown"),
-                    score=float(res.get("score", 0.0) or 0.0),
+                    score=score,
                     metadata=res,
                 )
             )

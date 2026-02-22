@@ -5,13 +5,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from jarvis.contracts.imessage import Attachment, Conversation, Message
 from jarvis.context import (
     ContextFetcher,
     ReplyContext,
     SearchContext,
     SummaryContext,
 )
+from jarvis.contracts.imessage import Attachment, Conversation, Message
 
 # =============================================================================
 # Fixtures
