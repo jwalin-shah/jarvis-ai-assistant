@@ -380,7 +380,9 @@ class TestSetupWizard:
         monkeypatch.setattr("platform.system", lambda: "Darwin")
         monkeypatch.setattr("platform.mac_ver", lambda: ("14.0", ("", "", ""), "arm64"))
 
-        with patch("core.memory.controller.get_memory_controller", return_value=mock_controller):
+        with patch(
+            "jarvis.core.memory.controller.get_memory_controller", return_value=mock_controller
+        ):
             wizard = SetupWizard(
                 console=mock_console,
                 permission_monitor=mock_permission_monitor,
@@ -408,7 +410,9 @@ class TestSetupWizard:
         monkeypatch.setattr("platform.system", lambda: "Darwin")
         monkeypatch.setattr("platform.mac_ver", lambda: ("14.0", ("", "", ""), "arm64"))
 
-        with patch("core.memory.controller.get_memory_controller", return_value=mock_controller):
+        with patch(
+            "jarvis.core.memory.controller.get_memory_controller", return_value=mock_controller
+        ):
             wizard = SetupWizard(
                 console=mock_console,
                 permission_monitor=mock_permission_monitor,
@@ -457,7 +461,9 @@ class TestSetupWizard:
         monkeypatch.setattr("platform.system", lambda: "Darwin")
         monkeypatch.setattr("platform.mac_ver", lambda: ("14.0", ("", "", ""), "arm64"))
 
-        with patch("core.memory.controller.get_memory_controller", return_value=mock_controller):
+        with patch(
+            "jarvis.core.memory.controller.get_memory_controller", return_value=mock_controller
+        ):
             wizard = SetupWizard(
                 console=mock_console,
                 permission_monitor=mock_permission_monitor,
@@ -573,7 +579,9 @@ class TestSetupWizard:
         mock_controller.get_state.return_value = MagicMock(available_mb=10000)
         mock_controller.get_mode.return_value = MemoryMode.FULL
 
-        with patch("core.memory.controller.get_memory_controller", return_value=mock_controller):
+        with patch(
+            "jarvis.core.memory.controller.get_memory_controller", return_value=mock_controller
+        ):
             wizard = SetupWizard(console=mock_console)
             mode = wizard._check_memory()
 
@@ -594,7 +602,7 @@ class TestSetupWizard:
 
         monkeypatch.setattr("psutil.virtual_memory", lambda: mock_mem)
 
-        with patch("core.memory.controller.get_memory_controller", side_effect=ImportError):
+        with patch("jarvis.core.memory.controller.get_memory_controller", side_effect=ImportError):
             wizard = SetupWizard(console=mock_console)
             mode = wizard._check_memory()
 
@@ -702,7 +710,7 @@ class TestRunSetup:
         mock_mem.available = 16 * 1024**3
         monkeypatch.setattr("psutil.virtual_memory", lambda: mock_mem)
 
-        with patch("core.memory.controller.get_memory_controller", side_effect=ImportError):
+        with patch("jarvis.core.memory.controller.get_memory_controller", side_effect=ImportError):
             with patch("huggingface_hub.try_to_load_from_cache", return_value=None):
                 result = run_setup(check_only=True)
 
@@ -1021,7 +1029,7 @@ class TestSetupWizardExtended:
 
         monkeypatch.setattr("psutil.virtual_memory", lambda: mock_mem)
 
-        with patch("core.memory.controller.get_memory_controller", side_effect=ImportError):
+        with patch("jarvis.core.memory.controller.get_memory_controller", side_effect=ImportError):
             wizard = SetupWizard(console=mock_console)
             mode = wizard._check_memory()
 
@@ -1142,7 +1150,9 @@ class TestSetupWizardExtended:
         mock_controller.get_state.return_value = MagicMock(available_mb=8000)
         mock_controller.get_mode.return_value = MemoryMode.FULL
 
-        with patch("core.memory.controller.get_memory_controller", return_value=mock_controller):
+        with patch(
+            "jarvis.core.memory.controller.get_memory_controller", return_value=mock_controller
+        ):
             with patch("huggingface_hub.try_to_load_from_cache", return_value="/path"):
                 wizard = SetupWizard(
                     console=mock_console,
@@ -1235,7 +1245,9 @@ class TestMainFunction:
         from jarvis.setup import main
 
         with patch("sys.argv", ["setup", "--check"]):
-            with patch("core.memory.controller.get_memory_controller", side_effect=ImportError):
+            with patch(
+                "jarvis.core.memory.controller.get_memory_controller", side_effect=ImportError
+            ):
                 with patch("huggingface_hub.try_to_load_from_cache", return_value=None):
                     exit_code = main()
 
@@ -1259,7 +1271,9 @@ class TestMainFunction:
         from jarvis.setup import main
 
         with patch("sys.argv", ["setup", "--check", "--verbose"]):
-            with patch("core.memory.controller.get_memory_controller", side_effect=ImportError):
+            with patch(
+                "jarvis.core.memory.controller.get_memory_controller", side_effect=ImportError
+            ):
                 with patch("huggingface_hub.try_to_load_from_cache", return_value=None):
                     with patch("logging.basicConfig") as mock_logging:
                         main()
@@ -1323,7 +1337,9 @@ class TestMainFunction:
         from jarvis.setup import main
 
         with patch("sys.argv", ["setup"]):
-            with patch("core.memory.controller.get_memory_controller", side_effect=ImportError):
+            with patch(
+                "jarvis.core.memory.controller.get_memory_controller", side_effect=ImportError
+            ):
                 with patch("huggingface_hub.try_to_load_from_cache", return_value=None):
                     with patch.object(
                         PermissionMonitorImpl, "check_permission", mock_check_permission
@@ -1348,7 +1364,9 @@ class TestMainFunction:
         from jarvis.setup import main
 
         with patch("sys.argv", ["setup"]):
-            with patch("core.memory.controller.get_memory_controller", side_effect=ImportError):
+            with patch(
+                "jarvis.core.memory.controller.get_memory_controller", side_effect=ImportError
+            ):
                 with patch("huggingface_hub.try_to_load_from_cache", return_value=None):
                     exit_code = main()
 

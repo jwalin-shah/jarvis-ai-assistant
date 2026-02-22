@@ -11,8 +11,6 @@ User-facing features (chat, reply, search, etc.) are in the desktop app.
 
 # Re-export core CLI functions
 # Re-export core controllers for testing
-from jarvis.core.health import get_degradation_controller, reset_degradation_controller
-from jarvis.core.memory import get_memory_controller, reset_memory_controller
 from jarvis._cli_main import (
     cleanup,
     cmd_benchmark,
@@ -26,6 +24,8 @@ from jarvis._cli_main import (
     run,
     setup_logging,
 )
+from jarvis.core.health import get_degradation_controller, reset_degradation_controller
+from jarvis.core.memory import get_memory_controller, reset_memory_controller
 
 # Re-export system functions
 from jarvis.system import (
