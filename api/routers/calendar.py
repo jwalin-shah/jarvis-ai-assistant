@@ -24,7 +24,6 @@ from api.schemas import (
     DetectEventsRequest,
     ErrorResponse,
 )
-from jarvis.contracts.calendar import DetectedEvent
 from integrations.calendar import (
     get_calendar_reader,
     get_calendar_writer,
@@ -33,6 +32,7 @@ from integrations.calendar import (
 from integrations.calendar.reader import CalendarReaderImpl
 from integrations.calendar.writer import CalendarWriterImpl
 from integrations.imessage import ChatDBReader
+from jarvis.contracts.calendar import DetectedEvent
 
 if TYPE_CHECKING:
     pass
