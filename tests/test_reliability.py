@@ -12,7 +12,12 @@ import time
 import pytest
 
 from jarvis.contracts.health import DegradationPolicy, FeatureState
-from jarvis.core.health.circuit import CircuitBreaker, CircuitBreakerConfig, CircuitOpenError, CircuitState
+from jarvis.core.health.circuit import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitOpenError,
+    CircuitState,
+)
 from jarvis.core.health.degradation import GracefulDegradationController
 from jarvis.fallbacks import FailureReason, get_fallback_response
 from jarvis.tasks.models import TaskStatus, TaskType
