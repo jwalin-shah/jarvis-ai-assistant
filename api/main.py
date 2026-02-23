@@ -25,6 +25,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from api.errors import register_exception_handlers
+from api.middleware import SecurityHeadersMiddleware
 from api.ratelimit import limiter, rate_limit_exceeded_handler
 from jarvis.metrics import get_latency_histogram, get_request_counter
 
@@ -325,6 +326,9 @@ def _configure_middleware(app_instance: FastAPI) -> None:
 
     # Rate limiting middleware (applies default_limits to all routes)
     app_instance.add_middleware(SlowAPIMiddleware)
+
+    # Security headers middleware
+    app_instance.add_middleware(SecurityHeadersMiddleware)
 
     # Request timing middleware
     @app_instance.middleware("http")
