@@ -288,10 +288,8 @@ def print_report(report: dict) -> None:
     print(f"\nTotal Experiments: {summary['total']}")
     print(f"Passed: {summary['passed']} | Failed: {summary['failed']}")
     # E501 fix: split long line
-    total_time = summary['total_duration_s']
-    print(
-        f"Total Duration: {total_time:.1f}s ({total_time / 60:.1f} min)"
-    )
+    total_time = summary["total_duration_s"]
+    print(f"Total Duration: {total_time:.1f}s ({total_time / 60:.1f} min)")
 
     print("\n" + "-" * 70)
     print("INDIVIDUAL RESULTS")

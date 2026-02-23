@@ -371,11 +371,9 @@ def main() -> int:
     for s in all_summaries:
         print(f"\n{s['name'].upper()}")
         # E501 fix: split print
-        cd = s['config']['context_depth']
-        rag = s['config']['use_rag']
-        print(
-            f"  Config: context_depth={cd}, use_rag={rag}"
-        )
+        cd = s["config"]["context_depth"]
+        rag = s["config"]["use_rag"]
+        print(f"  Config: context_depth={cd}, use_rag={rag}")
         print(f"  Avg Score: {s['avg_score']:.2f}/10")
         print(f"  Anti-AI Rate: {s['anti_ai_rate']:.1%}")
         print(f"  Avg Latency: {s['avg_latency']:.0f}ms")
@@ -390,11 +388,9 @@ def main() -> int:
     print("=" * 70)
     print(f"Score: {winner['avg_score']:.2f}/10")
     # E501 fix
-    w_cd = winner['config']['context_depth']
-    w_rag = winner['config']['use_rag']
-    print(
-        f"Config: context_depth={w_cd}, use_rag={w_rag}"
-    )
+    w_cd = winner["config"]["context_depth"]
+    w_rag = winner["config"]["use_rag"]
+    print(f"Config: context_depth={w_cd}, use_rag={w_rag}")
 
     # Save results
     output_path = PROJECT_ROOT / "results" / "ablation_context_rag.json"

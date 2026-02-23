@@ -490,9 +490,7 @@ def main():
                 print(f"\n⚖️  Judging {len(evaluations)} template responses with Cerebras...")
                 # E501 fix: split long line
                 est_time = len(evaluations) // args.batch_size * 2.1
-                print(
-                    f"   (Batch size: {args.batch_size}, Estimated time: {est_time:.0f}s)"
-                )
+                print(f"   (Batch size: {args.batch_size}, Estimated time: {est_time:.0f}s)")
                 judge_results = batch_judge_templates(evaluations, client, args.batch_size)
         else:
             print("\n⚠️  Cerebras client not configured (set CEREBRAS_API_KEY)")
