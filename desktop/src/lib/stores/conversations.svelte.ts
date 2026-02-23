@@ -709,7 +709,11 @@ function refreshConversationNames() {
 }
 
 export async function initializePolling(): Promise<() => void> {
-  await initDatabases();
+  try {
+    await initDatabases();
+  } catch (e) {
+    console.warn("Direct DB init failed, falling back to HTTP", e);
+  }
   // Load pinned/archived state from localStorage
   conversationsStore.pinnedChats = loadPinnedChats();
   conversationsStore.archivedChats = loadArchivedChats();
