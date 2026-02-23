@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """Evaluate optimized generation settings with Cerebras judge."""
 
-import json
+
+# Add project root to path
 import sys
-import time
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.append(str(PROJECT_ROOT))
+
+import json
+import time
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))

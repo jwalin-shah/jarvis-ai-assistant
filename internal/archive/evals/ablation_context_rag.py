@@ -12,12 +12,18 @@ Usage:
 
 from __future__ import annotations
 
+
+# Add project root to path
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.append(str(PROJECT_ROOT))
+
 import argparse
 import json
-import sys
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 from tqdm import tqdm

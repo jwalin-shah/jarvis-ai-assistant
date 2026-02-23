@@ -14,13 +14,19 @@ Usage:
 
 from __future__ import annotations
 
+
+# Add project root to path
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.append(str(PROJECT_ROOT))
+
 import argparse
 import json
 import sqlite3
-import sys
 import time
 from collections import defaultdict
-from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))

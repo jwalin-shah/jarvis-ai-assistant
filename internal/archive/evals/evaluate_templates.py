@@ -11,12 +11,18 @@ Usage:
     uv run python evals/evaluate_templates.py [--limit 50]
 """
 
+
+# Add project root to path
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.append(str(PROJECT_ROOT))
+
 import argparse
 import json
 import random
-import sys
 import time
-from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
