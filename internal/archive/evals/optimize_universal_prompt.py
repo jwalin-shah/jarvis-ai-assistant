@@ -8,7 +8,6 @@ Usage:
     uv run python evals/optimize_universal_prompt.py --trials 10 --depths 3,5,10
 """
 
-
 # Add project root to path
 import sys
 from pathlib import Path

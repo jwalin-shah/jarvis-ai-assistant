@@ -1,0 +1,7 @@
+{
+  "timestamp": "2026-02-21T00:00:00",
+  "metrics": {
+    "response_time_ms": 100,
+    "success_rate": 0.99
+  }
+}

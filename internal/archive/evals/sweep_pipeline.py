@@ -120,9 +120,7 @@ def run_sweep(judge_client):
                 rag_context = "User prefers short replies. Avoid questions."
 
             # 3. Build prompt
-            prompt = build_prompt(
-                config["system_prompt"], context, ex.last_message, rag_context
-            )
+            prompt = build_prompt(config["system_prompt"], context, ex.last_message, rag_context)
 
             # 4. Generate
             start = time.perf_counter()

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Evaluate optimized generation settings with Cerebras judge."""
 
-
 # Add project root to path
 import sys
 from pathlib import Path

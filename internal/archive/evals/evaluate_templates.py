@@ -11,7 +11,6 @@ Usage:
     uv run python evals/evaluate_templates.py [--limit 50]
 """
 
-
 # Add project root to path
 import sys
 from pathlib import Path
