@@ -256,9 +256,6 @@ REPEATED_EMOJI_PATTERN = re.compile(
 # Question words for detecting questions
 QUESTION_WORDS = {"who", "what", "when", "where", "why", "how", "which", "whose"}
 
-# Pre-compiled patterns for hot path functions (avoid recompiling in loops)
-_WHITESPACE_PATTERN = re.compile(r"[ \t]+")
-
 # Zero-width and control characters to strip (invisible Unicode that breaks matching)
 # - \u200b-\u200f: zero-width space, non-joiner, joiner, LTR/RTL marks
 # - \uFEFF: byte order mark (BOM)
@@ -370,8 +367,8 @@ def normalize_text(
     lines = cleaned.split("\n")
     normalized_lines = []
     for line in lines:
-        # Collapse multiple spaces/tabs to single space (use pre-compiled pattern)
-        line = _WHITESPACE_PATTERN.sub(" ", line.strip())
+        # Collapse multiple spaces/tabs/unicode to single space
+        line = " ".join(line.split())
         if line:
             normalized_lines.append(line)
     cleaned = "\n".join(normalized_lines)
