@@ -571,7 +571,11 @@
       <div class="virtual-spacer-bottom" style="height: {virtualBottomPadding}px;"></div>
 
       {#if archivedConversations.length > 0}
-        <button class="archived-toggle" onclick={() => showArchived = !showArchived}>
+        <button
+          class="archived-toggle"
+          onclick={() => showArchived = !showArchived}
+          aria-expanded={showArchived}
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points={showArchived ? "18 15 12 9 6 15" : "6 9 12 15 18 9"}></polyline>
           </svg>

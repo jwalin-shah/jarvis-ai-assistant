@@ -458,22 +458,29 @@
 
       <div class="subsection">
         <h3 class="subsection-title">Accent Color</h3>
-        <div class="color-picker">
+        <div class="color-picker" role="radiogroup" aria-label="Accent Color">
           {#each Object.entries(accentColors) as [key, color]}
-            <button
+            <label
               class="color-option"
               class:selected={$accentColor === key}
               style="--color: {color.value}"
-              onclick={() => setAccentColor(key as AccentColorKey)}
               title={color.name}
-              aria-label={color.name}
             >
+              <input
+                type="radio"
+                name="accent-color"
+                value={key}
+                checked={$accentColor === key}
+                onchange={() => setAccentColor(key as AccentColorKey)}
+                class="sr-only"
+              />
+              <span class="sr-only">{color.name}</span>
               {#if $accentColor === key}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               {/if}
-            </button>
+            </label>
           {/each}
         </div>
       </div>
@@ -1020,6 +1027,12 @@
 
   .color-option.selected {
     border-color: var(--text-primary);
+    transform: scale(1.1);
+  }
+
+  .color-option:focus-within {
+    outline: none;
+    box-shadow: var(--shadow-focus), 0 2px 8px rgba(0, 0, 0, 0.2);
     transform: scale(1.1);
   }
 
