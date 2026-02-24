@@ -1,0 +1,77 @@
+"""Centralized LLM judge configuration for evals and scripts.
+
+All eval/script files should import from here instead of hardcoding
+model names and API endpoints. Change the judge model in ONE place.
+
+Usage:
+    from evals.judge_config import JUDGE_MODEL, get_judge_client
+
+    client = get_judge_client()
+    resp = client.chat.completions.create(model=JUDGE_MODEL, ...)
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+# Load .env from project root
+_env_path = Path(__file__).parent.parent / ".env"
+if _env_path.exists():
+    for _line in _env_path.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _, _v = _line.partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip())
+
+# ---------------------------------------------------------------------------
+# Judge configuration (change here to switch providers)
+# ---------------------------------------------------------------------------
+
+# Cerebras Model Options (FREE tier: 30 req/min, 14.4k req/day)
+# Change JUDGE_MODEL to switch between them
+
+# Option 1: GPT-OSS-120B - Ultra fast, high intelligence
+JUDGE_MODEL = "gpt-oss-120b"
+
+# Option 2: Llama 3.3 70B - Reliable, well-tested (RECOMMENDED)
+# JUDGE_MODEL = "llama-3.3-70b"
+
+# Option 3: Qwen 2.5 72B - Strong multilingual, good for complex reasoning
+# JUDGE_MODEL = "qwen-2.5-72b"
+
+# Option 4: QwQ 32B Preview - Good at reasoning through problems
+# JUDGE_MODEL = "qwq-32b-preview"
+
+JUDGE_BASE_URL = "https://api.cerebras.ai/v1"
+# Use paid API key for higher rate limits (1000 RPM vs 30 RPM)
+JUDGE_API_KEY_ENV = "CEREBRAS_PAID_API_KEY"
+
+# Alternative Providers:
+# Groq: JUDGE_MODEL = "llama-3.3-70b-versatile", JUDGE_BASE_URL = "https://api.groq.com/openai/v1"
+# DeepInfra: Various models available
+
+
+def get_judge_api_key() -> str | None:
+    """Get the judge API key from environment.
+
+    Returns:
+        The API key string, or None if not configured.
+    """
+    key = os.environ.get(JUDGE_API_KEY_ENV, "")
+    if not key or key == "your-key-here":
+        return None
+    return key
+
+
+def get_judge_client():
+    """Create OpenAI-compatible client for the judge model.
+
+    Returns None if the API key is not set (non-fatal for optional judge usage).
+    """
+    key = os.environ.get(JUDGE_API_KEY_ENV, "")
+    if not key or key == "your-key-here":
+        return None
+    from openai import OpenAI
+
+    return OpenAI(base_url=JUDGE_BASE_URL, api_key=key)
