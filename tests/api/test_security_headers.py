@@ -4,6 +4,7 @@ Verifies that all responses include the required security headers.
 """
 
 from fastapi.testclient import TestClient
+
 from api.main import app
 
 client = TestClient(app)
