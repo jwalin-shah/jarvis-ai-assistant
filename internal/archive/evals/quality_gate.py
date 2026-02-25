@@ -141,6 +141,9 @@ def main() -> int:
 
     if not args.baseline.exists():
         print(f"[quality-gate] Baseline file missing: {args.baseline}")
+        if args.allow_missing_candidate:
+            print("[quality-gate] Allowing missing baseline since missing candidate is allowed.")
+            return 0
         return 2
 
     if not args.candidate.exists():
