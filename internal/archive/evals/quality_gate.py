@@ -140,7 +140,14 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.baseline.exists():
-        print(f"[quality-gate] Baseline file missing: {args.baseline}")
+        # If baseline is missing, we can't do regression testing.
+        # But for Phase 0 (CI initialization), we might not have a baseline yet.
+        # If --allow-missing-candidate is set, we treat this as a non-fatal "skip".
+        msg = f"[quality-gate] Baseline file missing: {args.baseline}"
+        if args.allow_missing_candidate:
+            print(f"{msg} (skipping regression check)")
+            return 0
+        print(msg)
         return 2
 
     if not args.candidate.exists():
