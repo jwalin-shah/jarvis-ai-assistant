@@ -173,7 +173,7 @@
   <h1>Settings</h1>
 
   {#if loading}
-    <div class="loading">Loading settings...</div>
+    <div class="loading" role="status" aria-busy="true">Loading settings...</div>
   {:else if error}
     <div class="error-banner">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -458,7 +458,7 @@
 
       <div class="subsection">
         <h3 class="subsection-title">Accent Color</h3>
-        <div class="color-picker">
+        <div class="color-picker" role="radiogroup" aria-label="Accent Color">
           {#each Object.entries(accentColors) as [key, color]}
             <button
               class="color-option"
@@ -467,6 +467,8 @@
               onclick={() => setAccentColor(key as AccentColorKey)}
               title={color.name}
               aria-label={color.name}
+              role="radio"
+              aria-checked={$accentColor === key}
             >
               {#if $accentColor === key}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
