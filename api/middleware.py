@@ -40,17 +40,21 @@ class SecurityHeadersMiddleware:
                 # Restrict browser features (privacy/security)
                 headers.setdefault(
                     "Permissions-Policy",
-                    "geolocation=(), microphone=(), camera=(), payment=(), usb=(), vr=()"
+                    "geolocation=(), microphone=(), camera=(), payment=(), usb=(), vr=()",
                 )
 
                 # Strict-Transport-Security (HSTS)
                 # Enforce HTTPS for 1 year (ignored on localhost usually, but good practice)
-                headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+                headers.setdefault(
+                    "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+                )
 
                 # Content Security Policy
                 # Skip for docs to allow Swagger UI/ReDoc to load assets
                 if not is_docs:
-                    headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+                    headers.setdefault(
+                        "Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'"
+                    )
 
             await send(message)
 
