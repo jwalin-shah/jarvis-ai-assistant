@@ -1,7 +1,8 @@
 
-import timeit
 import random
 import string
+import timeit
+
 from jarvis.text_normalizer import extract_text_features
 
 random.seed(42)
