@@ -140,7 +140,8 @@ ignore = ["E741"]  # Allow single-letter variable names (common in ML code)
 "tests/**/*.py" = ["N806", "E501"]
 # Evaluation scripts have intentional sys.path.insert and long lines
 "evals/**/*.py" = ["E402", "E501", "W291", "W293"]
-"scripts/**/*.py" = ["E402", "E501"]
+"internal/archive/evals/*.py" = ["E402", "E501", "W291", "W293"]
+"scripts/**/*.py" = ["E402", "E501", "W293"]
 
 [tool.mypy]
 python_version = "3.11"
