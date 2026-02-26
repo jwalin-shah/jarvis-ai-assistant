@@ -807,17 +807,19 @@ def extract_text_features(text: str) -> TextFeatures:
     if not text:
         return TextFeatures()
 
+    words = text.split()
+    word_count = len(words)
     return TextFeatures(
         is_reaction=is_reaction(text),
         is_emoji_only=is_emoji_only(text),
         is_acknowledgment=is_acknowledgment_only(text),
         has_attachment_token="<ATTACHMENT:" in text,
-        word_count=len(text.split()),
+        word_count=word_count,
         char_count=len(text),
         starts_new_topic=starts_new_topic(text),
         is_question=is_question(text),
         temporal_refs=extract_temporal_refs(text),
-        is_short=len(text.split()) <= 3,
+        is_short=word_count <= 3,
     )
 
 
