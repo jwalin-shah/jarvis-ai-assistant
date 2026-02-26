@@ -3,8 +3,8 @@
 Enforces HSTS, CSP, and standard security headers.
 """
 
-from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -24,7 +24,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
 
         # Disable browser features not needed by API
-        response.headers.setdefault("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), camera=(), microphone=()"
+        )
 
         # Content Security Policy (CSP)
         # We default to a very strict policy for API endpoints to prevent XSS
