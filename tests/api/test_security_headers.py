@@ -1,7 +1,10 @@
 """Tests for security headers middleware."""
 from contextlib import asynccontextmanager
+
 from fastapi.testclient import TestClient
+
 from api.main import create_app
+
 
 def get_test_app():
     """Create an app instance with disabled lifespan for testing."""
