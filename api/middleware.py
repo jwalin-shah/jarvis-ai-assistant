@@ -41,7 +41,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             # base-uri 'none' prevents base tag hijacking
             response.headers.setdefault(
                 "Content-Security-Policy",
-                "default-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'"
+                "default-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'",
             )
 
         return response

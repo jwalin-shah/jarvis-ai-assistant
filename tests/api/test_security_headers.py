@@ -1,4 +1,5 @@
 """Tests for security headers middleware."""
+
 from contextlib import asynccontextmanager
 
 from fastapi.testclient import TestClient
@@ -17,6 +18,7 @@ def get_test_app():
 
     app.router.lifespan_context = noop_lifespan
     return app
+
 
 def test_security_headers_api():
     """Test that API endpoints have strict security headers."""
@@ -41,6 +43,7 @@ def test_security_headers_api():
     assert "frame-ancestors 'none'" in csp
     assert "object-src 'none'" in csp
     assert "base-uri 'none'" in csp
+
 
 def test_security_headers_docs():
     """Test that documentation endpoints have relaxed security headers."""
