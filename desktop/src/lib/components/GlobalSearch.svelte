@@ -419,6 +419,11 @@
           placeholder={searchMode === "semantic" ? "Search by meaning..." : "Search messages..."}
           bind:value={query}
           oninput={handleInput}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={searchState === "results"}
+          aria-controls="search-results-list"
+          aria-activedescendant={selectedIndex >= 0 && flatResults[selectedIndex] ? `result-${flatResults[selectedIndex]?.msg.id}` : undefined}
         />
         {#if query}
           <button class="clear-btn" onclick={() => { query = ""; searchState = "idle"; results = []; semanticResults = []; }} aria-label="Clear search">
@@ -586,10 +591,10 @@
             <span class="mode-indicator">Semantic</span>
           {/if}
         </div>
-        <div class="results-list">
+        <div class="results-list" id="search-results-list" role="listbox" aria-label="Search results">
           {#each groupedResults as group}
-            <div class="result-group">
-              <div class="group-header">
+            <div class="result-group" role="group" aria-label="{group.conversation_name}, {group.messages.length} messages">
+              <div class="group-header" aria-hidden="true">
                 <span class="conversation-name">{group.conversation_name}</span>
                 <span class="message-count">{group.messages.length}</span>
               </div>
@@ -600,6 +605,9 @@
                   class:selected={selectedIndex === flatIndex}
                   data-result-index={flatIndex}
                   onclick={() => handleResultClick(message)}
+                  id="result-{message.id}"
+                  role="option"
+                  aria-selected={selectedIndex === flatIndex}
                 >
                   <div class="result-meta">
                     <span class="sender">{message.sender_name || message.sender}</span>
