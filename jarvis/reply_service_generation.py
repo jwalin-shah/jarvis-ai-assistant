@@ -214,7 +214,7 @@ def build_generation_request(
                 RAGDocument(
                     content=res.get("text", "") or res.get("content", ""),
                     source=res.get("source", "unknown"),
-                    score=float(res.get("score", 0.0) or 0.0),
+                    score=float(res.get("score", 0.0) or res.get("similarity", 0.0) or 0.0),
                     metadata=res,
                 )
             )
