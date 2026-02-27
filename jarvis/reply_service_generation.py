@@ -9,8 +9,8 @@ from typing import Any
 
 import numpy as np
 
-from jarvis.contracts.models import GenerationRequest as ModelGenerationRequest
 from jarvis.config import get_config
+from jarvis.contracts.models import GenerationRequest as ModelGenerationRequest
 from jarvis.contracts.pipeline import (
     GenerationRequest,
     GenerationResponse,
@@ -539,14 +539,9 @@ def generate_llm_reply(
 
         route_type = "generated_llm"
         route_reason = "generated"
-        if (
-            generator_model == "fallback"
-            or generator_finish_reason in {"fallback", "error"}
-        ):
+        if generator_model == "fallback" or generator_finish_reason in {"fallback", "error"}:
             route_type = "generated_fallback"
-            route_reason = generator_error or (
-                f"generator_{generator_finish_reason or 'fallback'}"
-            )
+            route_reason = generator_error or (f"generator_{generator_finish_reason or 'fallback'}")
 
         logger.info(
             "[reply] Confidence: %.2f (%s) | direct-to-llm",
