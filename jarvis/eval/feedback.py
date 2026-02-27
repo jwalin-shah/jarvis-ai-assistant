@@ -223,6 +223,18 @@ class FeedbackStore:
                 timeout=30.0,
                 check_same_thread=False,
             )
+            # Register adapters/converters for datetime to avoid DeprecationWarning in Python 3.12+
+            # The default adapter is deprecated. We prefer ISO format strings.
+            def adapt_datetime(dt: datetime) -> str:
+                return dt.isoformat()
+
+            def convert_datetime(s: bytes) -> datetime:
+                return datetime.fromisoformat(s.decode())
+
+            sqlite3.register_adapter(datetime, adapt_datetime)
+            sqlite3.register_converter("timestamp", convert_datetime)
+            sqlite3.register_converter("TIMESTAMP", convert_datetime)
+
             self._local.connection.row_factory = sqlite3.Row
             # Enable foreign keys and optimize
             self._local.connection.execute("PRAGMA foreign_keys = ON")
