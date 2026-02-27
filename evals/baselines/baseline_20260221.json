@@ -1,0 +1,18 @@
+{
+  "metrics": {
+    "judge_avg": 8.0,
+    "anti_ai_clean_rate": 0.95,
+    "category_accuracy": 0.90,
+    "hallucination_rate": 0.05
+  },
+  "latency": {
+    "p95_ms": 1000.0
+  },
+  "gates": {
+    "judge_avg_min_delta": -1.0,
+    "anti_ai_clean_rate_min_delta": -0.05,
+    "category_accuracy_min_delta": -0.05,
+    "latency_p95_ms_max_relative_increase": 0.50,
+    "hallucination_rate_max_absolute": 0.08
+  }
+}
