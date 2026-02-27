@@ -34,7 +34,9 @@
 
   // Handle Enter key (send on Enter, new line on Shift+Enter)
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    // Send on Enter (no modifiers) or Cmd+Enter/Ctrl+Enter
+    const isModifier = event.metaKey || event.ctrlKey;
+    if (event.key === 'Enter' && (!event.shiftKey || isModifier)) {
       event.preventDefault();
       handleSend();
     }
@@ -110,8 +112,8 @@
         onclick={handleSend}
         disabled={!value.trim() || disabled}
         loading={sending}
-        title="Send message (Enter)"
-        aria-label="Send message"
+        title="Send message (Enter or ⌘+Enter)"
+        aria-label="Send message (Enter or ⌘+Enter)"
       >
         <SendIcon size={18} />
       </Button>

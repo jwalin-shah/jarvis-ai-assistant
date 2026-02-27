@@ -94,7 +94,9 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === "Enter" && !event.shiftKey) {
+    // Send on Enter (no modifiers) or Cmd+Enter/Ctrl+Enter
+    const isModifier = event.metaKey || event.ctrlKey;
+    if (event.key === "Enter" && (!event.shiftKey || isModifier)) {
       event.preventDefault();
       sendMessage();
     }
@@ -169,7 +171,8 @@
         class="send-btn"
         onclick={sendMessage}
         disabled={!inputText.trim() || isGenerating}
-        title="Send (Enter)"
+        title="Send (Enter or ⌘+Enter)"
+        aria-label="Send message (Enter or ⌘+Enter)"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="22" y1="2" x2="11" y2="13"></line>
