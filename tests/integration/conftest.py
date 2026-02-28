@@ -63,7 +63,7 @@ def patch_services():
     """Context manager to patch all RAG services for testing."""
     with patch_imessage_reader() as mock_reader:
         with patch_generator() as mock_gen:
-            with patch("core.health.get_degradation_controller") as mock_deg:
+            with patch("jarvis.core.health.get_degradation_controller") as mock_deg:
                 # Configure degradation controller to pass through
                 mock_controller = MagicMock()
                 mock_controller.execute.side_effect = lambda feature, func, *args: func(*args)
