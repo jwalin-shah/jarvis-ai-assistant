@@ -51,12 +51,12 @@
 {#if visible}
   <div class="hover-card" style="left: {x}px; top: {y}px;" transition:fade={{ duration: 100 }}>
     {#if loading}
-      <div class="loading">
+      <div class="loading" role="status" aria-busy="true">
         <div class="spinner"></div>
         <span>Loading profile...</span>
       </div>
     {:else if error}
-      <div class="error">{error}</div>
+      <div class="error" role="status">{error}</div>
     {:else if profile}
       <div class="header">
         <div class="avatar">
@@ -101,7 +101,7 @@
         </div>
       {/if}
     {:else}
-      <div class="empty">No profile data available</div>
+      <div class="empty" role="status">No profile data available</div>
     {/if}
   </div>
 {/if}
