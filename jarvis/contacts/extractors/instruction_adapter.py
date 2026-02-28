@@ -68,10 +68,13 @@ class InstructionExtractorAdapter(ExtractorAdapter):
 
         # Wrap in a segment
         now = datetime.now()
+        from typing import Any, cast
+        mock_msg = cast(Any, MockMessage(text, is_from_me))
+
         segment = TopicSegment(
             chat_id="eval_chat",
             contact_id="eval_contact",
-            messages=[MockMessage(text, is_from_me)],
+            messages=[mock_msg],
             start_time=now,
             end_time=now,
             message_count=1,
