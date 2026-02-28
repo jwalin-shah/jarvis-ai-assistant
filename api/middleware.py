@@ -21,10 +21,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         docs_paths = ["/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"]
         if request.url.path in docs_paths:
             # Exempt documentation from strict CSP so Swagger/ReDoc can load external assets
-            response.headers.setdefault(
-                "Content-Security-Policy",
-                "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com;",
+            csp = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "img-src 'self' data: https://fastapi.tiangolo.com;"
             )
+            response.headers.setdefault("Content-Security-Policy", csp)
         else:
             # Strict CSP for regular API endpoints
             response.headers.setdefault(
