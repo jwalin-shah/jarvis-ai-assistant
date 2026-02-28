@@ -40,6 +40,7 @@
   class:loading
   class:full-width={fullWidth}
   disabled={disabled || loading}
+  aria-busy={loading}
   {...rest}
 >
   {#if loading}

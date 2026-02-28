@@ -523,7 +523,7 @@
 
     <div class="search-results" bind:this={searchResultsRef}>
       {#if searchState === "idle"}
-        <div class="empty-state">
+        <div class="empty-state" role="status">
           {#if searchMode === "semantic"}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="12" cy="12" r="3"></circle>
@@ -541,12 +541,12 @@
           {/if}
         </div>
       {:else if searchState === "searching"}
-        <div class="loading-state">
+        <div class="loading-state" role="status" aria-busy="true">
           <div class="spinner"></div>
           <p>{searchMode === "semantic" ? "Computing semantic similarity..." : "Searching..."}</p>
         </div>
       {:else if searchState === "error"}
-        <div class="error-state">
+        <div class="error-state" role="status">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="12" y1="8" x2="12" y2="12"></line>
@@ -556,7 +556,7 @@
           <button class="retry-btn" onclick={performSearch}>Try Again</button>
         </div>
       {:else if searchState === "no-results"}
-        <div class="no-results-state">
+        <div class="no-results-state" role="status">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.35-4.35"></path>
