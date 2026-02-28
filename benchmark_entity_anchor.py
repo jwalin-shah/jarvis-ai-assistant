@@ -10,7 +10,8 @@ t0 = time.time()
 for t in texts:
     tracker.get_anchors(t)
 t1 = time.time()
-print(f"Sequential: {t1-t0:.2f}s")
+print(f"Sequential: {t1 - t0:.2f}s")
+
 
 def get_anchors_batch(texts):
     docs = tracker.nlp.pipe(texts, batch_size=50)
@@ -26,7 +27,8 @@ def get_anchors_batch(texts):
         results.append(anchors)
     return results
 
+
 t2 = time.time()
 get_anchors_batch(texts)
 t3 = time.time()
-print(f"Batch: {t3-t2:.2f}s")
+print(f"Batch: {t3 - t2:.2f}s")
