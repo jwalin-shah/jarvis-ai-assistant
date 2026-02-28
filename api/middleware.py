@@ -2,11 +2,14 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
 
+from typing import Any
+from starlette.responses import Response
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Middleware to add security headers to all responses."""
 
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
+        response: Response = await call_next(request)
 
         # Standard security headers
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
