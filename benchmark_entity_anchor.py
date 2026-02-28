@@ -1,4 +1,5 @@
 import time
+
 from jarvis.topics.entity_anchor import EntityAnchorTracker
 
 tracker = EntityAnchorTracker()
