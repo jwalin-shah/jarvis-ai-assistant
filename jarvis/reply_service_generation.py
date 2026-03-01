@@ -210,11 +210,15 @@ def build_generation_request(
     retrieved_docs = []
     if use_rag and search_results:
         for res in search_results:
+            score = res.get("score")
+            if score is None:
+                score = res.get("similarity", 0.0)
+
             retrieved_docs.append(
                 RAGDocument(
                     content=res.get("text", "") or res.get("content", ""),
                     source=res.get("source", "unknown"),
-                    score=float(res.get("score", 0.0) or 0.0),
+                    score=float(score or 0.0),
                     metadata=res,
                 )
             )
