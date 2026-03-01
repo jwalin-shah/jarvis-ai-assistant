@@ -115,7 +115,7 @@
       </svg>
       <span>Chat</span>
     </div>
-    <button class="new-chat-btn" onclick={clearChat} title="New Chat">
+    <button class="new-chat-btn" aria-label="New Chat" onclick={clearChat} title="New Chat">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
         <line x1="12" y1="5" x2="12" y2="19"></line>
         <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -124,7 +124,7 @@
     </button>
   </div>
 
-  <div class="messages-area" bind:this={messagesAreaRef}>
+  <div class="messages-area" aria-live="polite" bind:this={messagesAreaRef}>
     {#if messages.length === 0 && !streamingContent}
       <div class="empty-state">
         <div class="empty-icon">
