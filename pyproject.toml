@@ -136,6 +136,7 @@ ignore = ["E741"]  # Allow single-letter variable names (common in ML code)
 "scripts/train_*.py" = ["N803", "N806"]
 "scripts/label_*.py" = ["N803", "N806"]
 "scripts/eval_*.py" = ["N806"]
+"internal/archive/evals/**/*.py" = ["E402", "E501", "W291", "W293"]
 "jarvis/agents/classifier.py" = ["N806"]
 "tests/**/*.py" = ["N806", "E501"]
 # Evaluation scripts have intentional sys.path.insert and long lines
