@@ -833,6 +833,8 @@
         class:group={conversationsStore.selectedConversation.is_group}
         onmouseenter={handleAvatarMouseEnter}
         onmouseleave={handleAvatarMouseLeave}
+        role="img"
+        aria-label="{conversationsStore.selectedConversation.is_group ? 'Group avatar' : `${conversationsStore.selectedConversation.display_name || formatParticipant(conversationsStore.selectedConversation.participants[0] ?? '') || 'Unknown'} avatar`}"
       >
         {#if conversationsStore.selectedConversation.is_group}
           <svg viewBox="0 0 24 24" fill="currentColor">
