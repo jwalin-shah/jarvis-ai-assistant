@@ -58,7 +58,7 @@ Tried and rejected:
 
 ## For Employers
 
-- Portfolio summary: `PORTFOLIO.md`
+- Case study: `CASE_STUDY.md`
 - Showcase brief: `docs/SHOWCASE.md`
 - System walkthrough: `docs/HOW_IT_WORKS.md`
 - Architecture details: `docs/ARCHITECTURE.md`
@@ -79,4 +79,3 @@ jarvis serve
 ## Privacy Note
 
 This public repository is sanitized for sharing: no personal exports, no local logs, no secret material.
-

@@ -1,4 +1,4 @@
-# Portfolio Summary: JARVIS AI Assistant
+# JARVIS AI Assistant Case Study
 
 ## Elevator Pitch
 
@@ -12,6 +12,13 @@ It prioritizes privacy, low latency, and practical product behavior over flashy 
 - Vector retrieval and indexing path over SQLite + `sqlite-vec`
 - Reliability and health signals for runtime monitoring
 - Structured evaluation workflows for quality and latency
+
+## Technologies Used
+
+- Python, FastAPI, SQLite, `sqlite-vec`
+- MLX local inference runtime (Apple Silicon)
+- Svelte + Tauri + TypeScript desktop integration
+- Benchmark/eval harnesses for latency and quality tracking
 
 ## Technical Outcomes (Measured)
 
@@ -51,6 +58,28 @@ It prioritizes privacy, low latency, and practical product behavior over flashy 
 - **Single global confidence threshold** — Failed due to class-specific calibration differences
 - **Polling-based update flow** — Failed from latency/race issues; replaced by watcher + push
 - **Heavy fine-tuning for personalization** — Failed cost/maintenance tradeoff and style-drift concerns
+
+## What I Learned
+
+- Data is the bottleneck. Better models helped less than better task framing and better labeled examples.
+- Prompt format is model-specific. Different backends/model families responded better to different instruction layouts and schema constraints.
+- ChatML-style role separation improved output consistency in compatible generation paths.
+- Logit-biasing/token steering was useful where supported by the serving stack, but backend support varied and needed fallback controls.
+- Fine-tuning is high leverage for stable failure modes, but only after eval sets and labels are clean.
+
+## What Worked
+
+- Deterministic-first routing plus LLM fallback.
+- Strict output schemas and post-generation validation.
+- Prompt contracts with compact system instructions and explicit examples.
+- Eval loops that optimize quality and latency together.
+
+## What Did Not Work
+
+- LLM-only routing without rule calibration.
+- Prompt iteration without frozen benchmark sets.
+- Assuming one prompt format generalizes equally across every model runtime.
+- Treating token-level controls as universally available across providers/runtimes.
 
 ## Tech Stack
 
