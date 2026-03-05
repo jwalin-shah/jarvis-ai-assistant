@@ -59,10 +59,9 @@ Tried and rejected:
 ## For Employers
 
 - Case study: `CASE_STUDY.md`
-- Showcase brief: `docs/SHOWCASE.md`
 - System walkthrough: `docs/HOW_IT_WORKS.md`
 - Architecture details: `docs/ARCHITECTURE.md`
-- Design decisions: `docs/design/DECISIONS.md`
+- Design decisions: `docs/DECISIONS.md`
 - Performance notes: `docs/PERFORMANCE.md`
 
 ## Quick Start
