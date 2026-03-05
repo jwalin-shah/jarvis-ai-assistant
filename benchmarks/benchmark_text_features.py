@@ -9,7 +9,7 @@ def main():
         "btw, can you send me that document?",
         "ok",
         "😭 😭 😭",
-        "This is a longer message that has more words in it to test the word count feature. " * 5
+        "This is a longer message that has more words in it to test the word count feature. " * 5,
     ] * 1000
 
     start_time = time.time()
@@ -19,5 +19,6 @@ def main():
 
     print(f"Processed {len(texts)} texts in {end_time - start_time:.4f} seconds.")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
