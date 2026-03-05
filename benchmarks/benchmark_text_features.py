@@ -1,6 +1,7 @@
 import time
-import timeit
+
 from jarvis.text_normalizer import extract_text_features
+
 
 def main():
     texts = [

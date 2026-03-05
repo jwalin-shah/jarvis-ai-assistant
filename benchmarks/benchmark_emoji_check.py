@@ -1,5 +1,5 @@
-import time
 import re
+import time
 
 # Use normal string for unicode escape handling
 _EMOJI_RE = re.compile("[\U0001F300-\U0001F9FF\u2600-\u27BF\U0001F000-\U0001F02F]")
@@ -8,6 +8,7 @@ def count_emoji_regex(text: str) -> int:
     return len(_EMOJI_RE.findall(text))
 
 from jarvis.classifiers.relationship_classifier import _is_emoji
+
 
 def count_emoji_original(text: str) -> int:
     return sum(1 for c in text if _is_emoji(c))
