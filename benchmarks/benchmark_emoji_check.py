@@ -16,7 +16,10 @@ def count_old(text):
 def count_new(text):
     return len(_EMOJI_RE.findall(text))
 
-text = "Hello world! This is a test string. Let's add some emojis: 😀😎🌟⭐. And some more text just to make it longer and more realistic for a message."
+text = (
+    "Hello world! This is a test string. Let's add some emojis: 😀😎🌟⭐. "
+    "And some more text just to make it longer and more realistic for a message."
+)
 
 def main():
     print("Old count time:", timeit.timeit("count_old(text)", globals=globals(), number=100000))
