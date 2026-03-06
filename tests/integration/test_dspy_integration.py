@@ -8,7 +8,7 @@ import os
 
 import dspy
 import pytest
-from evals.dspy_client import DSPYMLXClient
+from internal.archive.evals.dspy_client import DSPYMLXClient
 
 
 class SimpleReply(dspy.Signature):
