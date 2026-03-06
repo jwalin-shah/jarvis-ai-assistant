@@ -178,7 +178,7 @@ def eval_retrieval_relevance(client, test_cases: list[dict]) -> list[RelevanceRe
 
 def eval_generation_ablation(client, test_cases: list[dict]) -> list[AblationResult]:
     """Compare generation quality WITH vs WITHOUT RAG examples."""
-    from evals.batch_eval import build_prompt, judge_response
+    from internal.archive.evals.batch_eval import build_prompt, judge_response
     from jarvis.search.vec_search import get_vec_searcher
     from models.loader import get_model
 
@@ -363,7 +363,7 @@ def main() -> int:
         return 1
 
     # Load test cases
-    from evals.batch_eval import TEST_CASES
+    from internal.archive.evals.batch_eval import TEST_CASES
 
     print(f"Test cases: {len(TEST_CASES)}", flush=True)
     print(f"Judge: {JUDGE_MODEL} via DeepInfra", flush=True)

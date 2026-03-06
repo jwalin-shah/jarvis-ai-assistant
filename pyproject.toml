@@ -131,6 +131,7 @@ select = ["E", "F", "I", "N", "W", "UP"]
 ignore = ["E741"]  # Allow single-letter variable names (common in ML code)
 
 [tool.ruff.lint.per-file-ignores]
+"internal/archive/evals/*" = ["E402", "E501", "W291", "W293"]
 # ML scripts use standard conventions like X, C, X_train, BATCH_SIZE
 "experiments/**/*.py" = ["N803", "N806"]
 "scripts/train_*.py" = ["N803", "N806"]

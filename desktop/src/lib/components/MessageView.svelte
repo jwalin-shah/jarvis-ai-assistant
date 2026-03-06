@@ -51,7 +51,7 @@
   let hoverCardY = $state(0);
   let hoverTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  function handleAvatarMouseEnter(event: MouseEvent) {
+  function handleAvatarMouseEnter(event: MouseEvent | FocusEvent) {
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     hoverCardX = rect.left;
     hoverCardY = rect.bottom + 8;
@@ -828,14 +828,20 @@
     </EmptyState>
   {:else}
     <div class="header">
-      <div 
+      <button
         class="avatar" 
         class:group={conversationsStore.selectedConversation.is_group}
         onmouseenter={handleAvatarMouseEnter}
         onmouseleave={handleAvatarMouseLeave}
+        onfocus={handleAvatarMouseEnter}
+        onblur={handleAvatarMouseLeave}
+        onclick={() => hoverCardVisible = !hoverCardVisible}
+        aria-haspopup="dialog"
+        aria-label={conversationsStore.selectedConversation.is_group ? "Group details" : "Contact details"}
+        title={conversationsStore.selectedConversation.is_group ? "Group details" : "Contact details"}
       >
         {#if conversationsStore.selectedConversation.is_group}
-          <svg viewBox="0 0 24 24" fill="currentColor">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path
               d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-6 8v-2c0-2.67 5.33-4 6-4s6 1.33 6 4v2H6z"
             />
@@ -849,7 +855,7 @@
             .charAt(0)
             .toUpperCase()}
         {/if}
-      </div>
+      </button>
       <div class="info">
         <h2>
           {conversationsStore.selectedConversation.display_name || conversationsStore.selectedConversation.participants.map(p => formatParticipant(p)).join(', ')}
@@ -1012,6 +1018,13 @@
     font-weight: var(--font-weight-semibold);
     color: white;
     flex-shrink: 0;
+    border: none;
+    outline: none;
+    cursor: pointer;
+  }
+
+  .avatar:focus-visible {
+    box-shadow: 0 0 0 2px var(--surface-elevated), 0 0 0 4px var(--color-primary);
   }
 
   .avatar.group {
