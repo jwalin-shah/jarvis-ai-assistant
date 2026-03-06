@@ -140,7 +140,11 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.baseline.exists():
-        print(f"[quality-gate] Baseline file missing: {args.baseline}")
+        msg = f"[quality-gate] Baseline file missing: {args.baseline}"
+        if args.allow_missing_candidate:
+            print(msg + " (allowed via allow-missing-candidate)")
+            return 0
+        print(msg)
         return 2
 
     if not args.candidate.exists():
