@@ -79,6 +79,30 @@ class EntityAnchorTracker:
 
         return anchors
 
+    def get_anchors_batch(self, texts: list[str], batch_size: int = 50) -> list[set[str]]:
+        """Extract set of entity anchors from a batch of texts.
+
+        Uses nlp.pipe() for better performance compared to sequential processing.
+        """
+        results = []
+        # Replace None or empty texts with empty strings so nlp.pipe handles them correctly
+        safe_texts = [t if t else "" for t in texts]
+
+        for text, doc in zip(safe_texts, self.nlp.pipe(safe_texts, batch_size=batch_size)):
+            if not text:
+                results.append(set())
+                continue
+
+            anchors = set()
+            for ent in doc.ents:
+                anchors.add(ent.text.lower())
+            for chunk in doc.noun_chunks:
+                chunk_text = chunk.root.text.lower()
+                if len(chunk_text) > 2 and chunk.root.pos_ != "PRON":
+                    anchors.add(chunk_text)
+            results.append(anchors)
+        return results
+
 
 _tracker = None
 
