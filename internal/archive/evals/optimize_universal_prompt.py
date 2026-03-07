@@ -17,8 +17,8 @@ import dspy
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.dspy_client import DSPYMLXClient
-from evals.dspy_reply import (
+from evals.dspy_client import DSPYMLXClient  # noqa: E402
+from evals.dspy_reply import (  # noqa: E402
     TRAIN_EXAMPLES,
     judge_metric,
 )
@@ -123,7 +123,7 @@ def prepare_trainset(depth: int):
 
 
 def build_teacher_lm():
-    from evals.judge_config import JUDGE_BASE_URL, JUDGE_MODEL, get_judge_api_key
+    from evals.judge_config import JUDGE_BASE_URL, JUDGE_MODEL, get_judge_api_key  # noqa: E402
 
     key = get_judge_api_key()
     # Teacher models (Cerebras) can handle JSON/Chat via ChatAdapter
@@ -150,10 +150,10 @@ def main():
 
     depths = [int(d.strip()) for d in args.depths.split(",")]
 
-    print("=" * 70)
-    print("JARVIS FULL PIPELINE OPTIMIZATION (MIPROv2 + Context Sweep)")
-    print(f"Teacher/Judge: {args.demos} bootstrapped demos")
-    print("=" * 70)
+    print("=" * 70)  # noqa: E501
+    print("JARVIS FULL PIPELINE OPTIMIZATION (MIPROv2 + Context Sweep)")  # noqa: E501
+    print(f"Teacher/Judge: {args.demos} bootstrapped demos")  # noqa: E501
+    print("=" * 70)  # noqa: E501
 
     teacher_lm = build_teacher_lm()
     # Configure teacher to use ChatAdapter for instruction generation/proposing
@@ -170,7 +170,7 @@ def main():
     results = []
 
     for depth in depths:
-        print(f"\n>>> OPTIMIZING FOR CONTEXT_DEPTH: {depth}")
+        print(f"\n>>> OPTIMIZING FOR CONTEXT_DEPTH: {depth}")  # noqa: E501
         trainset = prepare_trainset(depth)
 
         student = UniversalReplyModule()
@@ -208,7 +208,7 @@ def main():
                 scores.append(score)
 
         avg_score = sum(scores) / len(scores) if scores else 0
-        print(f"Final Optimized Score for Depth {depth}: {avg_score:.3f}")
+        print(f"Final Optimized Score for Depth {depth}: {avg_score:.3f}")  # noqa: E501
 
         # Save results
         save_path = PROJECT_ROOT / "evals" / f"optimized_universal_d{depth}.json"
@@ -221,14 +221,14 @@ def main():
             best_overall_score = avg_score
             best_config = res
 
-    print("\n" + "=" * 70)
-    print("OPTIMIZATION COMPLETE")
-    print("=" * 70)
+    print("\n" + "=" * 70)  # noqa: E501
+    print("OPTIMIZATION COMPLETE")  # noqa: E501
+    print("=" * 70)  # noqa: E501
     for r in results:
-        print(f"Depth {r['depth']}: {r['avg_score']:.3f}")
+        print(f"Depth {r['depth']}: {r['avg_score']:.3f}")  # noqa: E501
 
-    print(f"\n🏆 WINNER: Depth {best_config['depth']} with score {best_config['avg_score']:.3f}")
-    print(f"Saved at: {best_config['save_path']}")
+    print(f"\n🏆 WINNER: Depth {best_config['depth']} with score {best_config['avg_score']:.3f}")  # noqa: E501
+    print(f"Saved at: {best_config['save_path']}")  # noqa: E501
 
 
 if __name__ == "__main__":

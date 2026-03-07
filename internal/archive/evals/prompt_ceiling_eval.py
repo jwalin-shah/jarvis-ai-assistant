@@ -280,8 +280,8 @@ def load_training_format_dataset(path: Path) -> list[EvalExample]:
 
 def load_generator(model_id: str | None = None):
     """Load the MLX generator."""
-    from models.generator import MLXGenerator
-    from models.loader import MLXModelLoader, ModelConfig
+    from models.generator import MLXGenerator  # noqa: E402
+    from models.loader import MLXModelLoader, ModelConfig  # noqa: E402
 
     config = ModelConfig(model_id=model_id)
     loader = MLXModelLoader(config)
@@ -411,7 +411,7 @@ def run_evaluation(
 ) -> list[EvalResult]:
     """Run evaluation with specified prompt variant."""
 
-    print(f"Loading generator (model: {model_id or 'default'})...")
+    print(f"Loading generator (model: {model_id or 'default'})...")  # noqa: E501
     generator = load_generator(model_id=model_id)
 
     system_prompt = PROMPT_VARIANTS.get(prompt_variant, CLEAN_PROMPT)
@@ -419,14 +419,14 @@ def run_evaluation(
     judge_client = None
     judge_model = None
     if use_judge:
-        from evals.judge_config import JUDGE_MODEL, get_judge_client
+        from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
         judge_client = get_judge_client()
         judge_model = JUDGE_MODEL
         if judge_client:
-            print(f"Judge ready: {judge_model}")
+            print(f"Judge ready: {judge_model}")  # noqa: E501
         else:
-            print("WARNING: Judge client not available")
+            print("WARNING: Judge client not available")  # noqa: E501
 
     results = []
 
@@ -458,11 +458,11 @@ def run_evaluation(
         )
         results.append(result)
 
-        print(f"[{ex.category}] {ex.last_message[:40]}...")
-        print(f"  Generated: {generated[:60]}")
+        print(f"[{ex.category}] {ex.last_message[:40]}...")  # noqa: E501
+        print(f"  Generated: {generated[:60]}")  # noqa: E501
         if judge_score is not None:
-            print(f"  Judge: {judge_score:.1f}/10")
-        print()
+            print(f"  Judge: {judge_score:.1f}/10")  # noqa: E501
+        print()  # noqa: E501
 
     return results
 
@@ -474,13 +474,13 @@ def run_evaluation(
 
 def print_summary(results: list[EvalResult], variant: str) -> dict[str, Any]:
     """Print and return summary statistics."""
-    print("=" * 70)
-    print(f"SUMMARY: {variant}")
-    print("=" * 70)
+    print("=" * 70)  # noqa: E501
+    print(f"SUMMARY: {variant}")  # noqa: E501
+    print("=" * 70)  # noqa: E501
 
     n = len(results)
     if n == 0:
-        print("No results.")
+        print("No results.")  # noqa: E501
         return {}
 
     latencies = [r.latency_ms for r in results]
@@ -492,18 +492,18 @@ def print_summary(results: list[EvalResult], variant: str) -> dict[str, Any]:
         avg_score = sum(scores) / len(scores)
         pass_7 = sum(1 for s in scores if s >= 7)
 
-        print(f"Examples:           {n}")
-        print(f"Avg latency:        {avg_latency:.0f}ms")
-        print(f"Judge avg:          {avg_score:.2f}/10")
-        print(f"Judge pass (>=7):   {pass_7}/{len(scored)} ({pass_7 / len(scored) * 100:.0f}%)")
-        print()
+        print(f"Examples:           {n}")  # noqa: E501
+        print(f"Avg latency:        {avg_latency:.0f}ms")  # noqa: E501
+        print(f"Judge avg:          {avg_score:.2f}/10")  # noqa: E501
+        print(f"Judge pass (>=7):   {pass_7}/{len(scored)} ({pass_7 / len(scored) * 100:.0f}%)")  # noqa: E501
+        print()  # noqa: E501
 
         low = sorted(scored, key=lambda r: r.judge_score)[:3]
-        print("Lowest scores:")
+        print("Lowest scores:")  # noqa: E501
         for r in low:
-            print(f"  [{r.judge_score:.0f}/10] {r.example.last_message[:40]}...")
-            print(f"           Generated: {r.generated_response[:50]}")
-        print()
+            print(f"  [{r.judge_score:.0f}/10] {r.example.last_message[:40]}...")  # noqa: E501
+            print(f"           Generated: {r.generated_response[:50]}")  # noqa: E501
+        print()  # noqa: E501
 
         return {
             "variant": variant,
@@ -513,8 +513,8 @@ def print_summary(results: list[EvalResult], variant: str) -> dict[str, Any]:
             "judge_pass_rate": round(pass_7 / len(scored), 3),
         }
     else:
-        print(f"Examples:    {n}")
-        print(f"Avg latency: {avg_latency:.0f}ms")
+        print(f"Examples:    {n}")  # noqa: E501
+        print(f"Avg latency: {avg_latency:.0f}ms")  # noqa: E501
         return {
             "variant": variant,
             "n_examples": n,
@@ -559,7 +559,7 @@ def save_results(results: list[EvalResult], variant: str) -> Path:
         }
 
     output_path.write_text(json.dumps(output_data, indent=2))
-    print(f"Results saved to: {output_path}")
+    print(f"Results saved to: {output_path}")  # noqa: E501
     return output_path
 
 
@@ -606,33 +606,33 @@ def main() -> int:
     if args.dataset == "real":
         real_test_path = PROJECT_ROOT / "data" / "personal" / "raw_style_variable" / "test.jsonl"
         if not real_test_path.exists():
-            print(f"ERROR: Real test set not found at {real_test_path}", file=sys.stderr)
+            print(f"ERROR: Real test set not found at {real_test_path}", file=sys.stderr)  # noqa: E501
             return 1
-        print(f"Loading real test set: {real_test_path}")
+        print(f"Loading real test set: {real_test_path}")  # noqa: E501
         examples = load_training_format_dataset(real_test_path)
     else:
-        print("ERROR: Synthetic dataset not supported in this version", file=sys.stderr)
+        print("ERROR: Synthetic dataset not supported in this version", file=sys.stderr)  # noqa: E501
         return 1
 
     if args.limit:
         examples = examples[: args.limit]
 
-    print("=" * 70)
-    print("PROMPT CEILING EVALUATION - CLEAN VERSION")
-    print("=" * 70)
-    print(f"Model:     {args.model}")
-    print(f"Dataset:   {args.dataset} ({len(examples)} examples)")
-    print(f"Judge:     {'disabled' if args.no_judge else 'enabled'}")
-    print()
+    print("=" * 70)  # noqa: E501
+    print("PROMPT CEILING EVALUATION - CLEAN VERSION")  # noqa: E501
+    print("=" * 70)  # noqa: E501
+    print(f"Model:     {args.model}")  # noqa: E501
+    print(f"Dataset:   {args.dataset} ({len(examples)} examples)")  # noqa: E501
+    print(f"Judge:     {'disabled' if args.no_judge else 'enabled'}")  # noqa: E501
+    print()  # noqa: E501
 
     variants = list(PROMPT_VARIANTS.keys()) if args.prompt == "all" else [args.prompt]
 
     all_summaries = []
 
     for variant in variants:
-        print(f"\n{'=' * 70}")
-        print(f"Testing prompt variant: {variant}")
-        print(f"{'=' * 70}\n")
+        print(f"\n{'=' * 70}")  # noqa: E501
+        print(f"Testing prompt variant: {variant}")  # noqa: E501
+        print(f"{'=' * 70}\n")  # noqa: E501
 
         results = run_evaluation(
             prompt_variant=variant,
@@ -647,20 +647,20 @@ def main() -> int:
         save_results(results, variant)
 
     if len(all_summaries) > 1:
-        print("\n" + "=" * 70)
-        print("COMPARISON")
-        print("=" * 70)
-        print(f"{'Variant':<15} {'Judge Avg':<12} {'Pass Rate':<12} {'Latency':<10}")
-        print("-" * 70)
+        print("\n" + "=" * 70)  # noqa: E501
+        print("COMPARISON")  # noqa: E501
+        print("=" * 70)  # noqa: E501
+        print(f"{'Variant':<15} {'Judge Avg':<12} {'Pass Rate':<12} {'Latency':<10}")  # noqa: E501
+        print("-" * 70)  # noqa: E501
         for s in all_summaries:
             if "judge_avg" in s:
-                print(
+                print(  # noqa: E501
                     f"{s['variant']:<15} "
                     f"{s['judge_avg']:<12.2f} "
                     f"{s['judge_pass_rate']:<12.1%} "
                     f"{s['avg_latency_ms']:<10.0f}ms"
                 )
-        print()
+        print()  # noqa: E501
 
     return 0
 

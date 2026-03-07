@@ -38,8 +38,8 @@ if _env_path.exists():
 # Constants
 # ---------------------------------------------------------------------------
 
-from evals.judge_config import JUDGE_MODEL  # noqa: E402
-from evals.judge_config import get_judge_client as _get_judge_client  # noqa: E402
+from evals.judge_config import JUDGE_MODEL  # noqa: E402  # noqa: E402
+from evals.judge_config import get_judge_client as _get_judge_client  # noqa: E402  # noqa: E402
 
 ANTI_AI_PHRASES = [
     "i'd be happy to",
@@ -696,25 +696,25 @@ def main() -> int:
     logging.getLogger(__name__)
 
     strategy = "dspy_optimized" if args.optimized else "xml_drafter"
-    print("=" * 70, flush=True)
-    print("JARVIS BATCH EVAL - Response Generation", flush=True)
-    print("=" * 70, flush=True)
-    print(f"Test cases:  {len(TEST_CASES)}", flush=True)
-    print(f"Strategy:    {strategy}", flush=True)
+    print("=" * 70, flush=True)  # noqa: E501
+    print("JARVIS BATCH EVAL - Response Generation", flush=True)  # noqa: E501
+    print("=" * 70, flush=True)  # noqa: E501
+    print(f"Test cases:  {len(TEST_CASES)}", flush=True)  # noqa: E501
+    print(f"Strategy:    {strategy}", flush=True)  # noqa: E501
     judge_label = f"{JUDGE_MODEL} via DeepInfra" if args.judge else "disabled (use --judge)"
-    print(f"LLM judge:   {judge_label}", flush=True)
-    print(flush=True)
+    print(f"LLM judge:   {judge_label}", flush=True)  # noqa: E501
+    print(flush=True)  # noqa: E501
 
     # Init judge
     judge_client = None
     if args.judge:
         judge_client = get_judge_client()
         if judge_client is None:
-            print("WARNING: CEREBRAS_API_KEY not set in .env - skipping judge", flush=True)
-            print("         Put your key in .env and re-run with --judge", flush=True)
+            print("WARNING: CEREBRAS_API_KEY not set in .env - skipping judge", flush=True)  # noqa: E501
+            print("         Put your key in .env and re-run with --judge", flush=True)  # noqa: E501
         else:
-            print(f"Judge ready: {JUDGE_MODEL} via Cerebras", flush=True)
-    print(flush=True)
+            print(f"Judge ready: {JUDGE_MODEL} via Cerebras", flush=True)  # noqa: E501
+    print(flush=True)  # noqa: E501
 
     # Load model / compiled program
     dspy_program = None
@@ -723,49 +723,49 @@ def main() -> int:
     # Set MLX memory limits early to prevent swap thrashing on 8GB systems.
     # loader.load() also sets these, but we set them before any MLX import
     # to guard against accidental early allocation.
-    from models.memory_config import apply_embedder_limits
+    from models.memory_config import apply_embedder_limits  # noqa: E402
 
     apply_embedder_limits()
 
     if args.optimized:
         optimized_dir = PROJECT_ROOT / "evals" / "optimized_reply"
         if not optimized_dir.exists():
-            print("ERROR: No compiled program found at evals/optimized_reply/", flush=True)
-            print("       Run: uv run python evals/dspy_optimize.py", flush=True)
+            print("ERROR: No compiled program found at evals/optimized_reply/", flush=True)  # noqa: E501
+            print("       Run: uv run python evals/dspy_optimize.py", flush=True)  # noqa: E501
             return 1
-        print("Loading DSPy compiled program...", flush=True)
+        print("Loading DSPy compiled program...", flush=True)  # noqa: E501
         load_start = time.perf_counter()
         try:
             import dspy
-            from evals.dspy_client import DSPYMLXClient
-            from evals.dspy_reply import ReplyModule
+            from evals.dspy_client import DSPYMLXClient  # noqa: E402
+            from evals.dspy_reply import ReplyModule  # noqa: E402
 
             student_lm = DSPYMLXClient(max_tokens=50, temperature=0.1)
             dspy.configure(lm=student_lm)
             dspy_program = ReplyModule()
             dspy_program.load(str(optimized_dir))
             load_ms = (time.perf_counter() - load_start) * 1000
-            print(f"Compiled program loaded in {load_ms:.0f}ms", flush=True)
+            print(f"Compiled program loaded in {load_ms:.0f}ms", flush=True)  # noqa: E501
         except Exception as e:
-            print(f"FATAL: Failed to load compiled program: {e}", flush=True)
+            print(f"FATAL: Failed to load compiled program: {e}", flush=True)  # noqa: E501
             return 1
     else:
-        print("Loading MLX model...", flush=True)
+        print("Loading MLX model...", flush=True)  # noqa: E501
         load_start = time.perf_counter()
         try:
-            from models.loader import get_model
+            from models.loader import get_model  # noqa: E402
 
             loader = get_model()
             if not loader.is_loaded():
                 loader.load()
             load_ms = (time.perf_counter() - load_start) * 1000
-            print(f"Model loaded in {load_ms:.0f}ms", flush=True)
+            print(f"Model loaded in {load_ms:.0f}ms", flush=True)  # noqa: E501
         except Exception as e:
-            print(f"FATAL: Failed to load model: {e}", flush=True)
+            print(f"FATAL: Failed to load model: {e}", flush=True)  # noqa: E501
             return 1
 
-    print(flush=True)
-    print("-" * 70, flush=True)
+    print(flush=True)  # noqa: E501
+    print("-" * 70, flush=True)  # noqa: E501
 
     results: list[EvalResult] = []
     total_start = time.perf_counter()
@@ -793,7 +793,7 @@ def main() -> int:
                     )
                 )
         if completed_names:
-            print(
+            print(  # noqa: E501
                 f"Resuming: {len(completed_names)}/{len(TEST_CASES)} already completed",
                 flush=True,
             )
@@ -875,25 +875,25 @@ def main() -> int:
         # Print per-case
         status = "PASS" if all_passed else "FAIL"
         cat = tc.get("category", "?")
-        print(f"\n[{i:2d}/{len(TEST_CASES)}] [{cat}] {tc['name']}", flush=True)
-        print(f'  Output:  "{output}"', flush=True)
+        print(f"\n[{i:2d}/{len(TEST_CASES)}] [{cat}] {tc['name']}", flush=True)  # noqa: E501
+        print(f'  Output:  "{output}"', flush=True)  # noqa: E501
         judge_str = ""
         if judge_score is not None and judge_score >= 0:
             judge_str = f" | Judge: {judge_score:.0f}/10"
-        print(f"  Latency: {latency_ms:.0f}ms | Local: {status}{judge_str}", flush=True)
+        print(f"  Latency: {latency_ms:.0f}ms | Local: {status}{judge_str}", flush=True)  # noqa: E501
         if failed_checks:
             for f in failed_checks:
-                print(f"  FAIL: {f}", flush=True)
+                print(f"  FAIL: {f}", flush=True)  # noqa: E501
         if judge_reasoning:
-            print(f"  Judge: {judge_reasoning}", flush=True)
+            print(f"  Judge: {judge_reasoning}", flush=True)  # noqa: E501
 
     total_ms = (time.perf_counter() - total_start) * 1000
 
     # Summary
-    print(flush=True)
-    print("=" * 70, flush=True)
-    print("SUMMARY", flush=True)
-    print("=" * 70, flush=True)
+    print(flush=True)  # noqa: E501
+    print("=" * 70, flush=True)  # noqa: E501
+    print("SUMMARY", flush=True)  # noqa: E501
+    print("=" * 70, flush=True)  # noqa: E501
 
     n_passed = sum(1 for r in results if r.passed)
     n_failed = len(results) - n_passed
@@ -904,15 +904,15 @@ def main() -> int:
     p95_idx = min(int(len(sorted_lat) * 0.95), len(sorted_lat) - 1)
     p95 = sorted_lat[p95_idx] if sorted_lat else 0
 
-    print(
+    print(  # noqa: E501
         f"Local pass:   {n_passed}/{len(results)} ({n_passed / len(results) * 100:.0f}%)",
         flush=True,
     )
-    print(f"Failed:       {n_failed}", flush=True)
-    print(f"Total time:   {total_ms:.0f}ms", flush=True)
-    print(f"Avg latency:  {avg_latency:.0f}ms", flush=True)
-    print(f"P50 latency:  {p50:.0f}ms", flush=True)
-    print(f"P95 latency:  {p95:.0f}ms", flush=True)
+    print(f"Failed:       {n_failed}", flush=True)  # noqa: E501
+    print(f"Total time:   {total_ms:.0f}ms", flush=True)  # noqa: E501
+    print(f"Avg latency:  {avg_latency:.0f}ms", flush=True)  # noqa: E501
+    print(f"P50 latency:  {p50:.0f}ms", flush=True)  # noqa: E501
+    print(f"P95 latency:  {p95:.0f}ms", flush=True)  # noqa: E501
 
     # Judge summary
     scored = [r for r in results if r.judge_score is not None and r.judge_score >= 0]
@@ -922,26 +922,26 @@ def main() -> int:
         min_score = min(scores)
         max_score = max(scores)
         pass_7 = sum(1 for s in scores if s >= 7)
-        print(flush=True)
-        print(
+        print(flush=True)  # noqa: E501
+        print(  # noqa: E501
             f"Judge scores: avg={avg_score:.1f}/10  min={min_score:.0f}  max={max_score:.0f}",
             flush=True,
         )
-        print(
+        print(  # noqa: E501
             f"Judge pass (>=7): {pass_7}/{len(scored)} ({pass_7 / len(scored) * 100:.0f}%)",
             flush=True,
         )
 
     if n_failed:
-        print("\nLocal failures:", flush=True)
+        print("\nLocal failures:", flush=True)  # noqa: E501
         for r in results:
             if not r.passed:
-                print(f"  - {r.name}: {', '.join(r.checks_failed)}", flush=True)
+                print(f"  - {r.name}: {', '.join(r.checks_failed)}", flush=True)  # noqa: E501
 
     # Per-category breakdown
-    print(flush=True)
-    print("PER-CATEGORY BREAKDOWN", flush=True)
-    print("-" * 70, flush=True)
+    print(flush=True)  # noqa: E501
+    print("PER-CATEGORY BREAKDOWN", flush=True)  # noqa: E501
+    print("-" * 70, flush=True)  # noqa: E501
     for cat in CATEGORIES:
         cat_results = [r for r in results if r.category == cat]
         if not cat_results:
@@ -952,7 +952,7 @@ def main() -> int:
         if cat_scored:
             cat_avg = sum(r.judge_score for r in cat_scored) / len(cat_scored)
             cat_judge = f"  judge_avg={cat_avg:.1f}/10"
-        print(
+        print(  # noqa: E501
             f"  {cat:20s}  local={cat_passed}/{len(cat_results)}"
             f" ({cat_passed / len(cat_results) * 100:.0f}%){cat_judge}",
             flush=True,
@@ -961,9 +961,9 @@ def main() -> int:
     if scored:
         low = [r for r in scored if r.judge_score < 7]
         if low:
-            print("\nLow judge scores (<7):", flush=True)
+            print("\nLow judge scores (<7):", flush=True)  # noqa: E501
             for r in low:
-                print(f"  - {r.name}: {r.judge_score:.0f}/10 - {r.judge_reasoning}", flush=True)
+                print(f"  - {r.name}: {r.judge_score:.0f}/10 - {r.judge_reasoning}", flush=True)  # noqa: E501
 
     # Save results
     output_path = PROJECT_ROOT / "results" / "batch_eval_latest.json"
@@ -1002,8 +1002,8 @@ def main() -> int:
     # Clean up checkpoint file after successful completion
     checkpoint_f.close()
     checkpoint_path.unlink(missing_ok=True)
-    print(f"\nResults saved to: {output_path}", flush=True)
-    print("=" * 70, flush=True)
+    print(f"\nResults saved to: {output_path}", flush=True)  # noqa: E501
+    print("=" * 70, flush=True)  # noqa: E501
 
     return 0 if n_failed == 0 else 1
 

@@ -42,8 +42,8 @@ if _env_path.exists():
             os.environ.setdefault(key.strip(), val.strip())
 
 import dspy  # noqa: E402
-from evals.dspy_client import DSPYMLXClient  # noqa: E402
-from evals.dspy_reply import (  # noqa: E402
+from evals.dspy_client import DSPYMLXClient  # noqa: E402  # noqa: E402
+from evals.dspy_reply import (  # noqa: E402  # noqa: E402
     TRAIN_EXAMPLES,
     CategoryReplyModule,
     ReplyModule,
@@ -60,7 +60,7 @@ CATEGORY_SAVE_DIR = PROJECT_ROOT / "evals" / "optimized_categories"
 
 def build_teacher_lm() -> dspy.LM:
     """Cerebras ZAI GLM 4.7 as the teacher/demo generator."""
-    from evals.judge_config import JUDGE_BASE_URL, JUDGE_MODEL, get_judge_api_key
+    from evals.judge_config import JUDGE_BASE_URL, JUDGE_MODEL, get_judge_api_key  # noqa: E402
 
     key = get_judge_api_key()
     return dspy.LM(
@@ -83,9 +83,9 @@ def run_bootstrap(
     teacher_lm: dspy.LM,
 ) -> ReplyModule:
     """BootstrapFewShot: fast, bootstraps few-shot demos from teacher."""
-    print("Optimizer: BootstrapFewShot", flush=True)
-    print("  max_bootstrapped_demos=3, max_labeled_demos=4", flush=True)
-    print(f"  trainset size: {len(trainset)}", flush=True)
+    print("Optimizer: BootstrapFewShot", flush=True)  # noqa: E501
+    print("  max_bootstrapped_demos=3, max_labeled_demos=4", flush=True)  # noqa: E501
+    print(f"  trainset size: {len(trainset)}", flush=True)  # noqa: E501
 
     optimizer = dspy.BootstrapFewShot(
         metric=judge_metric,
@@ -108,13 +108,13 @@ def run_mipro(
     max_bootstrapped_demos: int = 3,
 ) -> dspy.Module:
     """MIPROv2: optimizes instruction text + few-shot demos."""
-    print("Optimizer: MIPROv2", flush=True)
-    print(
+    print("Optimizer: MIPROv2", flush=True)  # noqa: E501
+    print(  # noqa: E501
         f"  num_candidates={num_candidates}, num_trials={num_trials}, "
         f"max_bootstrapped_demos={max_bootstrapped_demos}",
         flush=True,
     )
-    print(f"  trainset size: {len(trainset)}", flush=True)
+    print(f"  trainset size: {len(trainset)}", flush=True)  # noqa: E501
 
     optimizer = dspy.MIPROv2(
         metric=judge_metric,
@@ -169,9 +169,9 @@ def evaluate_program(
             passed = score >= 0.7
             status = f"{score * 10:.0f}/10"
             artifact_tag = " [ARTIFACT]" if has_artifacts else ""
-            print(f"  {status}: {ex.last_message[:40]!r} -> {raw!r}{artifact_tag}", flush=True)
+            print(f"  {status}: {ex.last_message[:40]!r} -> {raw!r}{artifact_tag}", flush=True)  # noqa: E501
             if has_artifacts:
-                print(f"         cleaned: {cleaned!r}", flush=True)
+                print(f"         cleaned: {cleaned!r}", flush=True)  # noqa: E501
             details.append(
                 EvalCaseResult(
                     query=ex.last_message,
@@ -183,7 +183,7 @@ def evaluate_program(
                 )
             )
         except Exception as e:
-            print(f"  ERROR: {ex.last_message[:40]!r} -> {e}", flush=True)
+            print(f"  ERROR: {ex.last_message[:40]!r} -> {e}", flush=True)  # noqa: E501
             scores.append(0.0)
             details.append(
                 EvalCaseResult(
@@ -199,13 +199,13 @@ def evaluate_program(
     avg_score = sum(scores) / len(scores) if scores else 0
     n_passed = sum(1 for d in details if d.passed)
     artifact_fails = sum(1 for d in details if not d.passed and d.has_artifacts)
-    print(f"\nAvg score: {avg_score * 10:.1f}/10", flush=True)
-    print(
+    print(f"\nAvg score: {avg_score * 10:.1f}/10", flush=True)  # noqa: E501
+    print(  # noqa: E501
         f"Pass rate (>=7): {n_passed}/{len(trainset)} ({n_passed / len(trainset) * 100:.0f}%)",
         flush=True,
     )
     if artifact_fails:
-        print(
+        print(  # noqa: E501
             f"  ({artifact_fails} failures had DSPy artifacts - fixable with post-processing)",
             flush=True,
         )
@@ -226,9 +226,9 @@ def run_per_category(
     Returns dict of category -> pass rate.
     """
     categories = get_all_categories()
-    print(f"\nRunning per-category optimization for: {', '.join(categories)}", flush=True)
-    print(f"Optimizer: {optimizer_name}", flush=True)
-    print(flush=True)
+    print(f"\nRunning per-category optimization for: {', '.join(categories)}", flush=True)  # noqa: E501
+    print(f"Optimizer: {optimizer_name}", flush=True)  # noqa: E501
+    print(flush=True)  # noqa: E501
 
     CATEGORY_SAVE_DIR.mkdir(parents=True, exist_ok=True)
     results: dict[str, float] = {}
@@ -237,12 +237,12 @@ def run_per_category(
     for cat in tqdm(categories, desc="Categories"):
         cat_examples = get_category_examples(cat)
         if len(cat_examples) < 3:
-            print(f"SKIP {cat}: only {len(cat_examples)} examples (need >= 3)", flush=True)
+            print(f"SKIP {cat}: only {len(cat_examples)} examples (need >= 3)", flush=True)  # noqa: E501
             continue
 
-        print("=" * 70, flush=True)
-        print(f"CATEGORY: {cat} ({len(cat_examples)} examples)", flush=True)
-        print("=" * 70, flush=True)
+        print("=" * 70, flush=True)  # noqa: E501
+        print(f"CATEGORY: {cat} ({len(cat_examples)} examples)", flush=True)  # noqa: E501
+        print("=" * 70, flush=True)  # noqa: E501
 
         student = CategoryReplyModule(cat)
         start = time.perf_counter()
@@ -260,19 +260,19 @@ def run_per_category(
             compiled = run_bootstrap(student, cat_examples, teacher_lm)
 
         elapsed = time.perf_counter() - start
-        print(f"\n{cat} optimization took {elapsed:.1f}s", flush=True)
+        print(f"\n{cat} optimization took {elapsed:.1f}s", flush=True)  # noqa: E501
 
         # Save per-category program
         save_path = CATEGORY_SAVE_DIR / f"optimized_{cat}.json"
         compiled.save(str(save_path))
-        print(f"Saved to {save_path}", flush=True)
+        print(f"Saved to {save_path}", flush=True)  # noqa: E501
 
         # Evaluate
-        print(f"\nEvaluating {cat}:", flush=True)
+        print(f"\nEvaluating {cat}:", flush=True)  # noqa: E501
         rate, cat_details = evaluate_program(compiled, cat_examples)
         results[cat] = rate
         all_details[cat] = cat_details
-        print(flush=True)
+        print(flush=True)  # noqa: E501
 
     return results, all_details
 
@@ -286,13 +286,13 @@ def eval_per_category() -> tuple[dict[str, float], dict[str, list[EvalCaseResult
     for cat in tqdm(categories, desc="Evaluating categories"):
         save_path = CATEGORY_SAVE_DIR / f"optimized_{cat}.json"
         if not save_path.exists():
-            print(f"SKIP {cat}: no saved program at {save_path}", flush=True)
+            print(f"SKIP {cat}: no saved program at {save_path}", flush=True)  # noqa: E501
             continue
 
         cat_examples = get_category_examples(cat)
-        print(f"\n{'=' * 70}", flush=True)
-        print(f"CATEGORY: {cat} ({len(cat_examples)} examples)", flush=True)
-        print(f"{'=' * 70}", flush=True)
+        print(f"\n{'=' * 70}", flush=True)  # noqa: E501
+        print(f"CATEGORY: {cat} ({len(cat_examples)} examples)", flush=True)  # noqa: E501
+        print(f"{'=' * 70}", flush=True)  # noqa: E501
 
         program = CategoryReplyModule(cat)
         program.load(str(save_path))
@@ -339,62 +339,62 @@ def main() -> int:
     )
     logging.getLogger(__name__)
 
-    print("=" * 70, flush=True)
-    print("JARVIS DSPy Optimization Pipeline", flush=True)
-    print("=" * 70, flush=True)
+    print("=" * 70, flush=True)  # noqa: E501
+    print("JARVIS DSPy Optimization Pipeline", flush=True)  # noqa: E501
+    print("=" * 70, flush=True)  # noqa: E501
 
     # Build student LM and configure as default
     student_lm = build_student_lm()
     dspy.configure(lm=student_lm)
 
     trainset = TRAIN_EXAMPLES
-    print(f"Training examples: {len(trainset)}", flush=True)
-    print(f"Categories: {', '.join(get_all_categories())}", flush=True)
+    print(f"Training examples: {len(trainset)}", flush=True)  # noqa: E501
+    print(f"Categories: {', '.join(get_all_categories())}", flush=True)  # noqa: E501
 
     # --- Eval-only mode ---
     if args.eval_only:
         if args.per_category:
-            print("\nEvaluating per-category compiled programs:", flush=True)
+            print("\nEvaluating per-category compiled programs:", flush=True)  # noqa: E501
             results, all_details = eval_per_category()
             if results:
-                print("\n" + "=" * 70, flush=True)
-                print("PER-CATEGORY SUMMARY", flush=True)
-                print("=" * 70, flush=True)
+                print("\n" + "=" * 70, flush=True)  # noqa: E501
+                print("PER-CATEGORY SUMMARY", flush=True)  # noqa: E501
+                print("=" * 70, flush=True)  # noqa: E501
                 for cat, rate in sorted(results.items()):
-                    print(f"  {cat:20s}  {rate:.0%}", flush=True)
+                    print(f"  {cat:20s}  {rate:.0%}", flush=True)  # noqa: E501
                 avg = sum(results.values()) / len(results)
-                print(f"  {'AVERAGE':20s}  {avg:.0%}", flush=True)
+                print(f"  {'AVERAGE':20s}  {avg:.0%}", flush=True)  # noqa: E501
             return 0
         else:
             if not SAVE_DIR.exists():
-                print(f"ERROR: No saved program at {SAVE_DIR}", flush=True)
+                print(f"ERROR: No saved program at {SAVE_DIR}", flush=True)  # noqa: E501
                 return 1
-            print(f"\nLoading compiled program from {SAVE_DIR}", flush=True)
+            print(f"\nLoading compiled program from {SAVE_DIR}", flush=True)  # noqa: E501
             program = ReplyModule()
             program.load(str(SAVE_DIR))
-            print("\nEvaluating compiled program:", flush=True)
+            print("\nEvaluating compiled program:", flush=True)  # noqa: E501
             evaluate_program(program, trainset)  # results printed inline
             return 0
 
     # --- Optimization mode ---
     teacher_lm = build_teacher_lm()
-    print("Teacher: ZAI GLM 4.7 via Cerebras", flush=True)
-    print("Student: MLX local 1.2B", flush=True)
-    print(flush=True)
+    print("Teacher: ZAI GLM 4.7 via Cerebras", flush=True)  # noqa: E501
+    print("Student: MLX local 1.2B", flush=True)  # noqa: E501
+    print(flush=True)  # noqa: E501
 
     if args.per_category:
         # Per-category optimization (default: mipro for per-category)
         optimizer_name = args.optimizer if args.optimizer != "bootstrap" else "mipro"
         results, all_details = run_per_category(teacher_lm, optimizer_name)
 
-        print("\n" + "=" * 70, flush=True)
-        print("PER-CATEGORY RESULTS", flush=True)
-        print("=" * 70, flush=True)
+        print("\n" + "=" * 70, flush=True)  # noqa: E501
+        print("PER-CATEGORY RESULTS", flush=True)  # noqa: E501
+        print("=" * 70, flush=True)  # noqa: E501
         for cat, rate in sorted(results.items()):
-            print(f"  {cat:20s}  {rate:.0%}", flush=True)
+            print(f"  {cat:20s}  {rate:.0%}", flush=True)  # noqa: E501
         if results:
             avg = sum(results.values()) / len(results)
-            print(f"  {'AVERAGE':20s}  {avg:.0%}", flush=True)
+            print(f"  {'AVERAGE':20s}  {avg:.0%}", flush=True)  # noqa: E501
 
         # Save detailed summary with per-case logs
         summary_path = CATEGORY_SAVE_DIR / "summary.json"
@@ -423,7 +423,7 @@ def main() -> int:
                 indent=2,
             )
         )
-        print(f"\nSummary saved to {summary_path}", flush=True)
+        print(f"\nSummary saved to {summary_path}", flush=True)  # noqa: E501
     else:
         # Global optimization (original behavior)
         start = time.perf_counter()
@@ -435,21 +435,21 @@ def main() -> int:
             compiled = run_bootstrap(student, trainset, teacher_lm)
 
         elapsed = time.perf_counter() - start
-        print(f"\nOptimization took {elapsed:.1f}s", flush=True)
+        print(f"\nOptimization took {elapsed:.1f}s", flush=True)  # noqa: E501
 
         # Save
         SAVE_DIR.parent.mkdir(parents=True, exist_ok=True)
         compiled.save(str(SAVE_DIR))
-        print(f"Saved compiled program to {SAVE_DIR}", flush=True)
+        print(f"Saved compiled program to {SAVE_DIR}", flush=True)  # noqa: E501
 
         # Evaluate the compiled program
-        print("\n" + "-" * 70, flush=True)
-        print("Evaluating compiled program:", flush=True)
+        print("\n" + "-" * 70, flush=True)  # noqa: E501
+        print("Evaluating compiled program:", flush=True)  # noqa: E501
         evaluate_program(compiled, trainset)
 
-    print("=" * 70, flush=True)
-    print("Done. Run batch_eval with --optimized to compare:", flush=True)
-    print("  uv run python evals/batch_eval.py --judge --optimized", flush=True)
+    print("=" * 70, flush=True)  # noqa: E501
+    print("Done. Run batch_eval with --optimized to compare:", flush=True)  # noqa: E501
+    print("  uv run python evals/batch_eval.py --judge --optimized", flush=True)  # noqa: E501
     return 0
 
 

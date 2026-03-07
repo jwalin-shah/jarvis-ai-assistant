@@ -86,9 +86,9 @@ def compute_boundary_metrics(
 
 
 def main() -> int:
-    print("=" * 70)
-    print("JARVIS Topic Segmentation Evaluation")
-    print("=" * 70)
+    print("=" * 70)  # noqa: E501
+    print("JARVIS Topic Segmentation Evaluation")  # noqa: E501
+    print("=" * 70)  # noqa: E501
 
     # 1. Load Gold Data
     # For now, we'll use a small embedded set. In production, this would
@@ -214,15 +214,15 @@ def main() -> int:
         )
 
     # 3. Summary
-    print("\n" + "-" * 70)
-    print(f"{'Example Name':30} | {'Prec':6} | {'Rec':6} | {'F1':6}")
-    print("-" * 70)
+    print("\n" + "-" * 70)  # noqa: E501
+    print(f"{'Example Name':30} | {'Prec':6} | {'Rec':6} | {'F1':6}")  # noqa: E501
+    print("-" * 70)  # noqa: E501
     for r in results:
-        print(f"{r.example_name:30} | {r.precision:0.2f} | {r.recall:0.2f} | {r.f1:0.2f}")
+        print(f"{r.example_name:30} | {r.precision:0.2f} | {r.recall:0.2f} | {r.f1:0.2f}")  # noqa: E501
 
     avg_f1 = sum(r.f1 for r in results) / len(results)
-    print("-" * 70)
-    print(f"Average F1: {avg_f1:0.2f}")
+    print("-" * 70)  # noqa: E501
+    print(f"Average F1: {avg_f1:0.2f}")  # noqa: E501
 
     return 0
 

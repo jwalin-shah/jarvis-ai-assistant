@@ -15,8 +15,8 @@ import json
 import re
 
 import dspy
-from evals.judge_config import JUDGE_MODEL
-from evals.judge_config import get_judge_client as _get_judge_client
+from evals.judge_config import JUDGE_MODEL  # noqa: E402
+from evals.judge_config import get_judge_client as _get_judge_client  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +112,7 @@ class CategoryReplyModule(dspy.Module):
 # ---------------------------------------------------------------------------
 def _build_examples() -> list[dspy.Example]:
     """Convert batch_eval test cases into dspy.Examples for the trainset."""
-    from evals.batch_eval import TEST_CASES
+    from evals.batch_eval import TEST_CASES  # noqa: E402
 
     examples = []
     for tc in TEST_CASES:

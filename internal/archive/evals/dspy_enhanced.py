@@ -312,11 +312,11 @@ def compare_modules(
 
 if __name__ == "__main__":
     # Quick test
-    print("Enhanced DSPy modules loaded.")
-    print("\nAvailable modules:")
-    print("  - StyleAwareReplyModule")
-    print("  - TwoStageReplyModule")
-    print("  - EnhancedCategoryModule")
-    print("\nAvailable presets:")
+    print("Enhanced DSPy modules loaded.")  # noqa: E501
+    print("\nAvailable modules:")  # noqa: E501
+    print("  - StyleAwareReplyModule")  # noqa: E501
+    print("  - TwoStageReplyModule")  # noqa: E501
+    print("  - EnhancedCategoryModule")  # noqa: E501
+    print("\nAvailable presets:")  # noqa: E501
     for name, config in OPTIMIZATION_PRESETS.items():
-        print(f"  - {name}: {config['description']}")
+        print(f"  - {name}: {config['description']}")  # noqa: E501

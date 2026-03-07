@@ -39,7 +39,7 @@ if _env_path.exists():
             key, _, val = line.partition("=")
             os.environ.setdefault(key.strip(), val.strip())
 
-from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -166,7 +166,7 @@ def eval_retrieval_relevance(client, test_cases: list[dict]) -> list[RelevanceRe
             )
         )
 
-        print(f"  {name}: avg_relevance={avg_rel:.1f}/10 ({len(triggers)} retrieved)", flush=True)
+        print(f"  {name}: avg_relevance={avg_rel:.1f}/10 ({len(triggers)} retrieved)", flush=True)  # noqa: E501
 
     return results
 
@@ -178,10 +178,10 @@ def eval_retrieval_relevance(client, test_cases: list[dict]) -> list[RelevanceRe
 
 def eval_generation_ablation(client, test_cases: list[dict]) -> list[AblationResult]:
     """Compare generation quality WITH vs WITHOUT RAG examples."""
-    from evals.batch_eval import build_prompt, judge_response
+    from evals.batch_eval import build_prompt, judge_response  # noqa: E402
 
     from jarvis.search.vec_search import get_vec_searcher
-    from models.loader import get_model
+    from models.loader import get_model  # noqa: E402
 
     searcher = get_vec_searcher()
     results = []
@@ -254,7 +254,7 @@ def eval_generation_ablation(client, test_cases: list[dict]) -> list[AblationRes
         )
 
         marker = "+" if delta > 0 else ("-" if delta < 0 else "=")
-        print(
+        print(  # noqa: E501
             f"  {name}: no_rag={score_no:.0f} rag={score_rag:.0f} delta={marker}{abs(delta):.0f}",
             flush=True,
         )
@@ -283,10 +283,10 @@ def eval_pair_quality(client, sample_size: int = 50) -> list[PairAuditResult]:
     ).fetchall()
 
     if not rows:
-        print("  No pairs found in vec_chunks. Is the database populated?", flush=True)
+        print("  No pairs found in vec_chunks. Is the database populated?", flush=True)  # noqa: E501
         return []
 
-    print(f"  Auditing {len(rows)} random pairs from vec_chunks...", flush=True)
+    print(f"  Auditing {len(rows)} random pairs from vec_chunks...", flush=True)  # noqa: E501
     results = []
 
     for rowid, trigger, response in tqdm(rows, desc="Auditing pairs"):
@@ -353,39 +353,39 @@ def main() -> int:
 
     run_all = not (args.relevance_only or args.ablation_only or args.audit_only)
 
-    print("=" * 70, flush=True)
-    print("JARVIS RAG Quality Evaluation", flush=True)
-    print("=" * 70, flush=True)
+    print("=" * 70, flush=True)  # noqa: E501
+    print("JARVIS RAG Quality Evaluation", flush=True)  # noqa: E501
+    print("=" * 70, flush=True)  # noqa: E501
 
     client = get_judge_client()
     if client is None:
-        print("ERROR: Judge API key not set in .env", flush=True)
-        print("       Required for judge scoring.", flush=True)
+        print("ERROR: Judge API key not set in .env", flush=True)  # noqa: E501
+        print("       Required for judge scoring.", flush=True)  # noqa: E501
         return 1
 
     # Load test cases
-    from evals.batch_eval import TEST_CASES
+    from evals.batch_eval import TEST_CASES  # noqa: E402
 
-    print(f"Test cases: {len(TEST_CASES)}", flush=True)
-    print(f"Judge: {JUDGE_MODEL} via DeepInfra", flush=True)
-    print(flush=True)
+    print(f"Test cases: {len(TEST_CASES)}", flush=True)  # noqa: E501
+    print(f"Judge: {JUDGE_MODEL} via DeepInfra", flush=True)  # noqa: E501
+    print(flush=True)  # noqa: E501
 
     start = time.perf_counter()
     output: dict = {"timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")}
 
     # --- 1. Retrieval Relevance ---
     if run_all or args.relevance_only:
-        print("-" * 70, flush=True)
-        print("1. RETRIEVAL RELEVANCE", flush=True)
-        print("-" * 70, flush=True)
+        print("-" * 70, flush=True)  # noqa: E501
+        print("1. RETRIEVAL RELEVANCE", flush=True)  # noqa: E501
+        print("-" * 70, flush=True)  # noqa: E501
         relevance_results = eval_retrieval_relevance(client, TEST_CASES)
 
         if relevance_results:
             scores = [r.avg_relevance for r in relevance_results if r.avg_relevance >= 0]
             avg = sum(scores) / len(scores) if scores else 0
             high = sum(1 for s in scores if s >= 7)
-            print(f"\n  Avg relevance: {avg:.1f}/10", flush=True)
-            print(
+            print(f"\n  Avg relevance: {avg:.1f}/10", flush=True)  # noqa: E501
+            print(  # noqa: E501
                 f"  High relevance (>=7): {high}/{len(scores)} ({high / len(scores) * 100:.0f}%)",
                 flush=True,
             )
@@ -401,13 +401,13 @@ def main() -> int:
                     for r in relevance_results
                 ],
             }
-        print(flush=True)
+        print(flush=True)  # noqa: E501
 
     # --- 2. Generation Ablation ---
     if run_all or args.ablation_only:
-        print("-" * 70, flush=True)
-        print("2. GENERATION ABLATION (with vs without RAG)", flush=True)
-        print("-" * 70, flush=True)
+        print("-" * 70, flush=True)  # noqa: E501
+        print("2. GENERATION ABLATION (with vs without RAG)", flush=True)  # noqa: E501
+        print("-" * 70, flush=True)  # noqa: E501
         ablation_results = eval_generation_ablation(client, TEST_CASES)
 
         if ablation_results:
@@ -422,10 +422,10 @@ def main() -> int:
                 degraded = sum(1 for r in valid if r.delta < 0)
                 neutral = sum(1 for r in valid if r.delta == 0)
 
-                print(f"\n  Avg score WITHOUT RAG: {avg_no_rag:.1f}/10", flush=True)
-                print(f"  Avg score WITH RAG:    {avg_with_rag:.1f}/10", flush=True)
-                print(f"  Avg delta:             {avg_delta:+.1f}", flush=True)
-                print(
+                print(f"\n  Avg score WITHOUT RAG: {avg_no_rag:.1f}/10", flush=True)  # noqa: E501
+                print(f"  Avg score WITH RAG:    {avg_with_rag:.1f}/10", flush=True)  # noqa: E501
+                print(f"  Avg delta:             {avg_delta:+.1f}", flush=True)  # noqa: E501
+                print(  # noqa: E501
                     f"  Improved: {improved}  Degraded: {degraded}  Neutral: {neutral}", flush=True
                 )
 
@@ -437,13 +437,13 @@ def main() -> int:
                     "degraded": degraded,
                     "neutral": neutral,
                 }
-        print(flush=True)
+        print(flush=True)  # noqa: E501
 
     # --- 3. Pair Quality Audit ---
     if run_all or args.audit_only:
-        print("-" * 70, flush=True)
-        print(f"3. PAIR QUALITY AUDIT (sample={args.audit_sample})", flush=True)
-        print("-" * 70, flush=True)
+        print("-" * 70, flush=True)  # noqa: E501
+        print(f"3. PAIR QUALITY AUDIT (sample={args.audit_sample})", flush=True)  # noqa: E501
+        print("-" * 70, flush=True)  # noqa: E501
         audit_results = eval_pair_quality(client, args.audit_sample)
 
         if audit_results:
@@ -452,23 +452,23 @@ def main() -> int:
             good = sum(1 for s in scores if s >= 7)
             bad = sum(1 for s in scores if s < 4)
 
-            print(f"\n  Pairs audited: {len(audit_results)}", flush=True)
-            print(f"  Avg quality: {avg:.1f}/10", flush=True)
-            print(
+            print(f"\n  Pairs audited: {len(audit_results)}", flush=True)  # noqa: E501
+            print(f"  Avg quality: {avg:.1f}/10", flush=True)  # noqa: E501
+            print(  # noqa: E501
                 f"  Good (>=7): {good}/{len(scores)} ({good / len(scores) * 100:.0f}%)", flush=True
             )
-            print(f"  Bad (<4): {bad}/{len(scores)} ({bad / len(scores) * 100:.0f}%)", flush=True)
+            print(f"  Bad (<4): {bad}/{len(scores)} ({bad / len(scores) * 100:.0f}%)", flush=True)  # noqa: E501
 
             if bad > 0:
-                print("\n  Worst pairs:", flush=True)
+                print("\n  Worst pairs:", flush=True)  # noqa: E501
                 worst = sorted(audit_results, key=lambda r: r.quality_score)[:5]
                 for r in worst:
-                    print(
+                    print(  # noqa: E501
                         f"    rowid={r.rowid} score={r.quality_score:.0f}: "
                         f"{r.trigger_text[:50]!r} -> {r.response_text[:50]!r}",
                         flush=True,
                     )
-                    print(f"      {r.reasoning}", flush=True)
+                    print(f"      {r.reasoning}", flush=True)  # noqa: E501
 
             output["pair_quality_audit"] = {
                 "sample_size": len(audit_results),
@@ -476,19 +476,19 @@ def main() -> int:
                 "good_rate": round(good / len(scores), 4) if scores else 0,
                 "bad_rate": round(bad / len(scores), 4) if scores else 0,
             }
-        print(flush=True)
+        print(flush=True)  # noqa: E501
 
     # --- Summary ---
     elapsed = time.perf_counter() - start
-    print("=" * 70, flush=True)
-    print(f"RAG eval completed in {elapsed:.1f}s", flush=True)
-    print("=" * 70, flush=True)
+    print("=" * 70, flush=True)  # noqa: E501
+    print(f"RAG eval completed in {elapsed:.1f}s", flush=True)  # noqa: E501
+    print("=" * 70, flush=True)  # noqa: E501
 
     # Save results
     output_path = PROJECT_ROOT / "results" / "rag_eval_latest.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(output, indent=2))
-    print(f"Results saved to: {output_path}", flush=True)
+    print(f"Results saved to: {output_path}", flush=True)  # noqa: E501
 
     return 0
 

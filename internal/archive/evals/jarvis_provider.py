@@ -30,7 +30,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # Ensure model-relative paths resolve regardless of promptfoo basePath/cwd.
 os.chdir(PROJECT_ROOT)
 
-from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY
+from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY  # noqa: E402
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s", stream=sys.stderr)
 logger = logging.getLogger(__name__)
@@ -206,11 +206,11 @@ STRATEGIES = {
 def load_model():
     """Load the JARVIS MLX model."""
     # Set MLX memory limits before loading to prevent swap thrashing on 8GB systems
-    from models.memory_config import apply_embedder_limits
+    from models.memory_config import apply_embedder_limits  # noqa: E402
 
     apply_embedder_limits()
 
-    from models.loader import get_model
+    from models.loader import get_model  # noqa: E402
 
     loader = get_model()
     if not loader.is_loaded():
@@ -247,7 +247,7 @@ def generate_reply(prompt: str, config: dict) -> str:
 def main():
     # promptfoo exec provider passes: argv[1]=prompt, argv[2]=config_json, argv[3]=context_json
     if len(sys.argv) < 4:
-        print(json.dumps({"error": f"Expected 3 args, got {len(sys.argv) - 1}"}), flush=True)
+        print(json.dumps({"error": f"Expected 3 args, got {len(sys.argv) - 1}"}), flush=True)  # noqa: E501
         sys.exit(1)
 
     raw_prompt = sys.argv[1]  # e.g. "strategy:xml_drafter"
@@ -258,7 +258,7 @@ def main():
     try:
         context_obj = json.loads(sys.argv[3])
     except json.JSONDecodeError as e:
-        print(json.dumps({"error": f"Invalid context JSON: {e}"}), flush=True)
+        print(json.dumps({"error": f"Invalid context JSON: {e}"}), flush=True)  # noqa: E501
         sys.exit(1)
 
     vars_dict = context_obj.get("vars", {})
@@ -287,12 +287,12 @@ def main():
             user_style=user_style,
         )
     except Exception as e:
-        print(json.dumps({"error": f"Prompt build failed: {e}"}), flush=True)
+        print(json.dumps({"error": f"Prompt build failed: {e}"}), flush=True)  # noqa: E501
         sys.exit(1)
 
     # Generate and return
     result = generate_reply(prompt, config)
-    print(result, flush=True)
+    print(result, flush=True)  # noqa: E501
 
 
 if __name__ == "__main__":

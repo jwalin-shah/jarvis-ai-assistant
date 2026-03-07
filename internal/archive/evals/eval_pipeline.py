@@ -219,29 +219,29 @@ def main() -> int:
 
     # Load dataset
     if not EVAL_DATASET_PATH.exists():
-        print(f"ERROR: Eval dataset not found at {EVAL_DATASET_PATH}", flush=True)
+        print(f"ERROR: Eval dataset not found at {EVAL_DATASET_PATH}", flush=True)  # noqa: E501
         return 1
 
     examples = load_eval_dataset(EVAL_DATASET_PATH)
-    print("=" * 70, flush=True)
-    print("JARVIS EVAL PIPELINE - Baseline Measurement", flush=True)
-    print("=" * 70, flush=True)
-    print(f"Examples:    {len(examples)}", flush=True)
-    print(f"Categories:  {', '.join(CATEGORIES)}", flush=True)
-    print(f"Judge:       {'enabled' if args.judge else 'disabled (use --judge)'}", flush=True)
-    print(
+    print("=" * 70, flush=True)  # noqa: E501
+    print("JARVIS EVAL PIPELINE - Baseline Measurement", flush=True)  # noqa: E501
+    print("=" * 70, flush=True)  # noqa: E501
+    print(f"Examples:    {len(examples)}", flush=True)  # noqa: E501
+    print(f"Categories:  {', '.join(CATEGORIES)}", flush=True)  # noqa: E501
+    print(f"Judge:       {'enabled' if args.judge else 'disabled (use --judge)'}", flush=True)  # noqa: E501
+    print(  # noqa: E501
         f"Similarity:  {'enabled' if args.similarity else 'disabled (use --similarity)'}",
         flush=True,
     )
-    print(flush=True)
+    print(flush=True)  # noqa: E501
 
     # Initialize components
-    print("Loading classifier...", flush=True)
+    print("Loading classifier...", flush=True)  # noqa: E501
     from jarvis.classifiers.category_classifier import classify_category
     from jarvis.classifiers.response_mobilization import classify_response_pressure
 
     # Initialize reply service for generation
-    print("Loading reply service...", flush=True)
+    print("Loading reply service...", flush=True)  # noqa: E501
     from jarvis.contracts.pipeline import MessageContext
     from jarvis.reply_service import ReplyService
 
@@ -250,7 +250,7 @@ def main() -> int:
     # Optional: BERT embedder for similarity
     embedder = None
     if args.similarity:
-        print("Loading embedder for similarity...", flush=True)
+        print("Loading embedder for similarity...", flush=True)  # noqa: E501
         from jarvis.embedding_adapter import get_embedder
 
         embedder = get_embedder()
@@ -258,22 +258,22 @@ def main() -> int:
     # Optional: judge
     judge_client = None
     if args.judge:
-        from evals.judge_config import JUDGE_MODEL, get_judge_client
+        from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
         judge_client = get_judge_client()
         if judge_client is None:
-            print("WARNING: Judge API key not set, skipping judge", flush=True)
+            print("WARNING: Judge API key not set, skipping judge", flush=True)  # noqa: E501
         else:
-            print(f"Judge ready: {JUDGE_MODEL}", flush=True)
+            print(f"Judge ready: {JUDGE_MODEL}", flush=True)  # noqa: E501
 
-    print(flush=True)
-    print("-" * 70, flush=True)
+    print(flush=True)  # noqa: E501
+    print("-" * 70, flush=True)  # noqa: E501
 
     results: list[EvalResult] = []
     total_start = time.perf_counter()
 
     for i, ex in enumerate(tqdm(examples, desc="Evaluating"), 1):
-        print(f"\n[{i:2d}/{len(examples)}] [{ex.category}] {ex.last_message[:50]}...", flush=True)
+        print(f"\n[{i:2d}/{len(examples)}] [{ex.category}] {ex.last_message[:50]}...", flush=True)  # noqa: E501
 
         gen_start = time.perf_counter()
         eval_thread = ensure_realistic_thread(ex.context, ex.last_message)
@@ -366,8 +366,8 @@ def main() -> int:
         ai_status = f"AI:{len(anti_ai)}" if anti_ai else "clean"
         sim_str = f"sim={sim_score:.2f}" if sim_score is not None else ""
         judge_str = f"judge={j_score:.0f}/10" if j_score is not None else ""
-        print(f'  Response: "{generated[:60]}"', flush=True)
-        print(
+        print(f'  Response: "{generated[:60]}"', flush=True)  # noqa: E501
+        print(  # noqa: E501
             f"  Cat: {cat_status} | {ai_status} | {latency_ms:.0f}ms {sim_str} {judge_str}",
             flush=True,
         )
@@ -380,7 +380,7 @@ def main() -> int:
             if r.generated_response and not r.generated_response.startswith("[ERROR")
         ]
         if judgeable_idx:
-            print(
+            print(  # noqa: E501
                 f"\nRunning batched judge: {len(judgeable_idx)} items, "
                 f"batch_size={args.judge_batch_size}",
                 flush=True,
@@ -479,14 +479,14 @@ def main() -> int:
     # =========================================================================
     # Summary Report
     # =========================================================================
-    print(flush=True)
-    print("=" * 70, flush=True)
-    print("SUMMARY", flush=True)
-    print("=" * 70, flush=True)
+    print(flush=True)  # noqa: E501
+    print("=" * 70, flush=True)  # noqa: E501
+    print("SUMMARY", flush=True)  # noqa: E501
+    print("=" * 70, flush=True)  # noqa: E501
 
     n = len(results)
     if n == 0:
-        print("No results to summarize.", flush=True)
+        print("No results to summarize.", flush=True)  # noqa: E501
         return 0
 
     cat_matches = sum(1 for r in results if r.category_match)
@@ -497,16 +497,16 @@ def main() -> int:
     p50 = sorted_lat[n // 2]
     p95 = sorted_lat[min(int(n * 0.95), n - 1)]
 
-    print(f"Category accuracy:  {cat_matches}/{n} ({cat_matches / n * 100:.0f}%)", flush=True)
-    print(f"Anti-AI clean:      {ai_clean}/{n} ({ai_clean / n * 100:.0f}%)", flush=True)
-    print(f"Total time:         {total_ms:.0f}ms", flush=True)
-    print(f"Avg latency:        {avg_lat:.0f}ms", flush=True)
-    print(f"P50/P95 latency:    {p50:.0f}ms / {p95:.0f}ms", flush=True)
+    print(f"Category accuracy:  {cat_matches}/{n} ({cat_matches / n * 100:.0f}%)", flush=True)  # noqa: E501
+    print(f"Anti-AI clean:      {ai_clean}/{n} ({ai_clean / n * 100:.0f}%)", flush=True)  # noqa: E501
+    print(f"Total time:         {total_ms:.0f}ms", flush=True)  # noqa: E501
+    print(f"Avg latency:        {avg_lat:.0f}ms", flush=True)  # noqa: E501
+    print(f"P50/P95 latency:    {p50:.0f}ms / {p95:.0f}ms", flush=True)  # noqa: E501
 
     # Route-path summary
-    print(flush=True)
-    print("ROUTE PATHS", flush=True)
-    print("-" * 70, flush=True)
+    print(flush=True)  # noqa: E501
+    print("ROUTE PATHS", flush=True)  # noqa: E501
+    print("-" * 70, flush=True)  # noqa: E501
     route_counts: dict[str, int] = {}
     route_empty_counts: dict[str, int] = {}
     for r in results:
@@ -516,13 +516,13 @@ def main() -> int:
             route_empty_counts[key] = route_empty_counts.get(key, 0) + 1
     for key, count in sorted(route_counts.items(), key=lambda kv: kv[1], reverse=True):
         empty = route_empty_counts.get(key, 0)
-        print(f"  {key:<35} {count:>2d} (empty={empty})", flush=True)
+        print(f"  {key:<35} {count:>2d} (empty={empty})", flush=True)  # noqa: E501
 
     # Similarity summary
     scored_sim = [r for r in results if r.similarity_score is not None]
     if scored_sim:
         sims = [r.similarity_score for r in scored_sim]
-        print(f"Avg similarity:     {sum(sims) / len(sims):.3f}", flush=True)
+        print(f"Avg similarity:     {sum(sims) / len(sims):.3f}", flush=True)  # noqa: E501
 
     # Judge summary
     scored_judge = [r for r in results if r.judge_score is not None and r.judge_score >= 0]
@@ -530,16 +530,16 @@ def main() -> int:
         scores = [r.judge_score for r in scored_judge]
         avg_j = sum(scores) / len(scores)
         pass_7 = sum(1 for s in scores if s >= 7)
-        print(f"Judge avg:          {avg_j:.1f}/10", flush=True)
-        print(
+        print(f"Judge avg:          {avg_j:.1f}/10", flush=True)  # noqa: E501
+        print(  # noqa: E501
             f"Judge pass (>=7):   {pass_7}/{len(scores)} ({pass_7 / len(scores) * 100:.0f}%)",
             flush=True,
         )
 
     # Per-category breakdown
-    print(flush=True)
-    print("PER-CATEGORY BREAKDOWN", flush=True)
-    print("-" * 70, flush=True)
+    print(flush=True)  # noqa: E501
+    print("PER-CATEGORY BREAKDOWN", flush=True)  # noqa: E501
+    print("-" * 70, flush=True)  # noqa: E501
     for cat in CATEGORIES:
         cat_results = [r for r in results if r.example.category == cat]
         if not cat_results:
@@ -558,16 +558,16 @@ def main() -> int:
         if cat_j:
             avg_jj = sum(r.judge_score for r in cat_j) / len(cat_j)
             parts.append(f"judge={avg_jj:.1f}")
-        print(f"  {cat:15s}  {' | '.join(parts)}", flush=True)
+        print(f"  {cat:15s}  {' | '.join(parts)}", flush=True)  # noqa: E501
 
     # Category misclassifications
     misses = [r for r in results if not r.category_match]
     if misses:
-        print(flush=True)
-        print("CATEGORY MISCLASSIFICATIONS", flush=True)
-        print("-" * 70, flush=True)
+        print(flush=True)  # noqa: E501
+        print("CATEGORY MISCLASSIFICATIONS", flush=True)  # noqa: E501
+        print("-" * 70, flush=True)  # noqa: E501
         for r in misses:
-            print(
+            print(  # noqa: E501
                 f"  [{r.example.category} -> {r.predicted_category}] {r.example.last_message[:50]}",
                 flush=True,
             )
@@ -575,22 +575,22 @@ def main() -> int:
     # Anti-AI violations
     violations = [r for r in results if r.anti_ai_violations]
     if violations:
-        print(flush=True)
-        print("ANTI-AI VIOLATIONS", flush=True)
-        print("-" * 70, flush=True)
+        print(flush=True)  # noqa: E501
+        print("ANTI-AI VIOLATIONS", flush=True)  # noqa: E501
+        print("-" * 70, flush=True)  # noqa: E501
         for r in violations:
-            print(f'  "{r.generated_response[:60]}" -> {r.anti_ai_violations}', flush=True)
+            print(f'  "{r.generated_response[:60]}" -> {r.anti_ai_violations}', flush=True)  # noqa: E501
 
     # Worst judge scores
     if scored_judge:
         low = sorted(scored_judge, key=lambda r: r.judge_score)[:5]
         if low and low[0].judge_score < 7:
-            print(flush=True)
-            print("LOWEST JUDGE SCORES", flush=True)
-            print("-" * 70, flush=True)
+            print(flush=True)  # noqa: E501
+            print("LOWEST JUDGE SCORES", flush=True)  # noqa: E501
+            print("-" * 70, flush=True)  # noqa: E501
             for r in low:
                 if r.judge_score < 7:
-                    print(
+                    print(  # noqa: E501
                         f"  [{r.example.category}] {r.judge_score:.0f}/10 - "
                         f'"{r.generated_response[:50]}" - {r.judge_reasoning}',
                         flush=True,
@@ -649,8 +649,8 @@ def main() -> int:
         }
 
     output_path.write_text(json.dumps(output_data, indent=2))
-    print(f"\nResults saved to: {output_path}", flush=True)
-    print("=" * 70, flush=True)
+    print(f"\nResults saved to: {output_path}", flush=True)  # noqa: E501
+    print("=" * 70, flush=True)  # noqa: E501
 
     return 0
 

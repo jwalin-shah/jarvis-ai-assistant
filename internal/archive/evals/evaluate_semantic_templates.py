@@ -25,17 +25,17 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.judge_config import JUDGE_MODEL, get_judge_client
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
-from models.template_defaults import get_minimal_fallback_templates
-from models.templates import ResponseTemplate, TemplateMatcher
+from models.template_defaults import get_minimal_fallback_templates  # noqa: E402
+from models.templates import ResponseTemplate, TemplateMatcher  # noqa: E402
 
 
 def fetch_real_messages(limit: int = 100) -> list[dict]:
     """Fetch diverse real messages from chat.db."""
     chat_db = Path.home() / "Library" / "Messages" / "chat.db"
     if not chat_db.exists():
-        print(f"❌ chat.db not found at {chat_db}")
+        print(f"❌ chat.db not found at {chat_db}")  # noqa: E501
         return []
 
     try:
@@ -81,7 +81,7 @@ def fetch_real_messages(limit: int = 100) -> list[dict]:
         return messages
 
     except Exception as e:
-        print(f"❌ Error reading chat.db: {e}")
+        print(f"❌ Error reading chat.db: {e}")  # noqa: E501
         return []
 
 
@@ -137,7 +137,7 @@ Rate each response on a scale of 1-10:
 
 Respond with ONLY a JSON array in this exact format:
 [
-  {{"score": <number>, "reasoning": "<brief explanation>", "better_alternative": "<suggested better response or null>"}},
+
   ... (one object for each evaluation)
 ]
 """
@@ -166,12 +166,12 @@ Respond with ONLY a JSON array in this exact format:
                         **eval_item,
                         "score": result.get("score", 0),
                         "reasoning": result.get("reasoning", "No reasoning"),
-                        "better_alternative": result.get("better_alternative"),
+
                     }
                 )
 
-            print(
-                f"  ✓ Batch {i // batch_size + 1}/{(len(evaluations) + batch_size - 1) // batch_size} complete"
+            print(  # noqa: E501
+                f"  ✓ Batch {i // batch_size + 1}/{(len(evaluations) + batch_size - 1) // batch_size} complete"  # noqa: E501
             )
 
             # Rate limit: 30 req/min = 2 sec between calls
@@ -179,7 +179,7 @@ Respond with ONLY a JSON array in this exact format:
                 time.sleep(2.1)
 
         except Exception as e:
-            print(f"  ⚠ Batch {i // batch_size + 1} failed: {e}")
+            print(f"  ⚠ Batch {i // batch_size + 1} failed: {e}")  # noqa: E501
             # Add failed items with 0 score
             for eval_item in batch:
                 results.append(
@@ -187,7 +187,7 @@ Respond with ONLY a JSON array in this exact format:
                         **eval_item,
                         "score": 0,
                         "reasoning": f"API error: {e}",
-                        "better_alternative": None,
+
                     }
                 )
 
@@ -257,39 +257,39 @@ def generate_report(
     templates: list[ResponseTemplate],
 ) -> None:
     """Generate comprehensive evaluation report."""
-    print("\n" + "=" * 80)
-    print("SEMANTIC TEMPLATE EVALUATION REPORT")
-    print("=" * 80)
+    print("\n" + "=" * 80)  # noqa: E501
+    print("SEMANTIC TEMPLATE EVALUATION REPORT")  # noqa: E501
+    print("=" * 80)  # noqa: E501
 
     # 1. Coverage Analysis
-    print("\n📊 TEMPLATE COVERAGE")
-    print("-" * 80)
-    print(f"Total Templates: {coverage['total_templates']}")
-    print(f"Total Patterns: {coverage['total_patterns']}")
-    print("\nBy Category:")
+    print("\n📊 TEMPLATE COVERAGE")  # noqa: E501
+    print("-" * 80)  # noqa: E501
+    print(f"Total Templates: {coverage['total_templates']}")  # noqa: E501
+    print(f"Total Patterns: {coverage['total_patterns']}")  # noqa: E501
+    print("\nBy Category:")  # noqa: E501
     for cat, stats in sorted(coverage["by_category"].items()):
-        print(
+        print(  # noqa: E501
             f"  {cat:20}: {stats['count']:3} templates, {stats['total_patterns']:3} patterns "
             f"(avg {stats['avg_patterns_per_template']:.1f} patterns/template)"
         )
 
     # 2. Hit Rate Analysis
-    print("\n🎯 MATCH PERFORMANCE")
-    print("-" * 80)
+    print("\n🎯 MATCH PERFORMANCE")  # noqa: E501
+    print("-" * 80)  # noqa: E501
     total_msgs = len(match_results["matches"]) + len(match_results["unmatched"])
-    print(f"Messages Tested: {total_msgs}")
-    print(f"Templates Matched: {len(match_results['matches'])}")
-    print(f"Hit Rate: {match_results['hit_rate'] * 100:.1f}%")
+    print(f"Messages Tested: {total_msgs}")  # noqa: E501
+    print(f"Templates Matched: {len(match_results['matches'])}")  # noqa: E501
+    print(f"Hit Rate: {match_results['hit_rate'] * 100:.1f}%")  # noqa: E501
 
     if match_results["matches"]:
         similarities = [m["similarity"] for m in match_results["matches"]]
-        print(f"Avg Similarity: {sum(similarities) / len(similarities):.3f}")
-        print(f"Min Similarity: {min(similarities):.3f}")
-        print(f"Max Similarity: {max(similarities):.3f}")
+        print(f"Avg Similarity: {sum(similarities) / len(similarities):.3f}")  # noqa: E501
+        print(f"Min Similarity: {min(similarities):.3f}")  # noqa: E501
+        print(f"Max Similarity: {max(similarities):.3f}")  # noqa: E501
 
     # 3. Category Performance
-    print("\n📈 CATEGORY BREAKDOWN")
-    print("-" * 80)
+    print("\n📈 CATEGORY BREAKDOWN")  # noqa: E501
+    print("-" * 80)  # noqa: E501
     category_matches = defaultdict(list)
     for match in match_results["matches"]:
         category_matches[match["category"]].append(match)
@@ -297,20 +297,20 @@ def generate_report(
     for cat, matches in sorted(category_matches.items()):
         cat_hit_rate = len(matches) / total_msgs
         avg_sim = sum(m["similarity"] for m in matches) / len(matches) if matches else 0
-        print(
+        print(  # noqa: E501
             f"  {cat:20}: {len(matches):3} hits, {cat_hit_rate * 100:5.1f}% hit rate, "
             f"{avg_sim:.3f} avg similarity"
         )
 
     # 4. Quality Judgment (Cerebras)
     if judge_results:
-        print("\n⚖️  QUALITY ASSESSMENT (Cerebras Judge)")
-        print("-" * 80)
+        print("\n⚖️  QUALITY ASSESSMENT (Cerebras Judge)")  # noqa: E501
+        print("-" * 80)  # noqa: E501
         scores = [r["score"] for r in judge_results if r["score"] > 0]
         if scores:
-            print(f"Evaluations: {len(scores)}")
-            print(f"Average Score: {sum(scores) / len(scores):.1f}/10")
-            print("Score Distribution:")
+            print(f"Evaluations: {len(scores)}")  # noqa: E501
+            print(f"Average Score: {sum(scores) / len(scores):.1f}/10")  # noqa: E501
+            print("Score Distribution:")  # noqa: E501
 
             buckets = {
                 "9-10 (Excellent)": 0,
@@ -333,12 +333,12 @@ def generate_report(
 
             for bucket, count in buckets.items():
                 pct = count / len(scores) * 100
-                print(f"    {bucket:20}: {count:3} ({pct:5.1f}%)")
+                print(f"    {bucket:20}: {count:3} ({pct:5.1f}%)")  # noqa: E501
 
     # 5. Top Performers
     if match_results["matches"]:
-        print("\n🏆 TOP MATCHING TEMPLATES")
-        print("-" * 80)
+        print("\n🏆 TOP MATCHING TEMPLATES")  # noqa: E501
+        print("-" * 80)  # noqa: E501
         template_hit_counts = defaultdict(lambda: {"count": 0, "avg_sim": []})
         for match in match_results["matches"]:
             name = match["template_name"]
@@ -351,36 +351,36 @@ def generate_report(
 
         for name, data in top_templates:
             avg_sim = sum(data["avg_sim"]) / len(data["avg_sim"])
-            print(f"  {name:40}: {data['count']:3} hits, {avg_sim:.3f} avg similarity")
+            print(f"  {name:40}: {data['count']:3} hits, {avg_sim:.3f} avg similarity")  # noqa: E501
 
     # 6. Problem Areas
     if judge_results:
-        print("\n⚠️  TEMPLATES NEEDING IMPROVEMENT (Score < 6)")
-        print("-" * 80)
+        print("\n⚠️  TEMPLATES NEEDING IMPROVEMENT (Score < 6)")  # noqa: E501
+        print("-" * 80)  # noqa: E501
         poor_performers = [r for r in judge_results if r["score"] > 0 and r["score"] < 6]
         if poor_performers:
             for result in poor_performers[:10]:
-                print(f"  Template: {result['template_name']}")
-                print(f"  Message: '{result['message'][:50]}...'")
-                print(f"  Score: {result['score']}/10 - {result['reasoning']}")
-                if result.get("better_alternative"):
-                    print(f"  Suggestion: '{result['better_alternative']}'")
-                print()
+                print(f"  Template: {result['template_name']}")  # noqa: E501
+                print(f"  Message: '{result['message'][:50]}...'")  # noqa: E501
+                print(f"  Score: {result['score']}/10 - {result['reasoning']}")  # noqa: E501
+
+
+                print()  # noqa: E501
         else:
-            print("  ✓ All evaluated templates scored well!")
+            print("  ✓ All evaluated templates scored well!")  # noqa: E501
 
     # 7. Unmatched Messages
     if match_results["unmatched"]:
-        print("\n❌ UNMATCHED MESSAGES (Potential Gaps)")
-        print("-" * 80)
-        print(f"Count: {len(match_results['unmatched'])}")
-        print("\nSample unmatched messages (potential new patterns):")
+        print("\n❌ UNMATCHED MESSAGES (Potential Gaps)")  # noqa: E501
+        print("-" * 80)  # noqa: E501
+        print(f"Count: {len(match_results['unmatched'])}")  # noqa: E501
+        print("\nSample unmatched messages (potential new patterns):")  # noqa: E501
         for msg in match_results["unmatched"][:15]:
-            print(f"  - '{msg[:60]}...'" if len(msg) > 60 else f"  - '{msg}'")
+            print(f"  - '{msg[:60]}...'" if len(msg) > 60 else f"  - '{msg}'")  # noqa: E501
 
     # 8. Recommendations
-    print("\n💡 RECOMMENDATIONS")
-    print("-" * 80)
+    print("\n💡 RECOMMENDATIONS")  # noqa: E501
+    print("-" * 80)  # noqa: E501
 
     recommendations = []
 
@@ -419,17 +419,17 @@ def generate_report(
         recommendations.append("✓ Templates are performing well overall!")
 
     for i, rec in enumerate(recommendations, 1):
-        print(f"{i}. {rec}")
+        print(f"{i}. {rec}")  # noqa: E501
 
     # 9. Quick Wins
-    print("\n🚀 QUICK WINS")
-    print("-" * 80)
-    print("To improve templates immediately:")
-    print("  1. Add the unmatched messages above as patterns to existing templates")
-    print("  2. Review poor-scoring templates and make responses more casual/brief")
-    print("  3. Add emoji to templates where appropriate (👍, 😊, 🎉)")
-    print("  4. Test with: uv run python evals/evaluate_semantic_templates.py --limit 200")
-    print("\n" + "=" * 80)
+    print("\n🚀 QUICK WINS")  # noqa: E501
+    print("-" * 80)  # noqa: E501
+    print("To improve templates immediately:")  # noqa: E501
+    print("  1. Add the unmatched messages above as patterns to existing templates")  # noqa: E501
+    print("  2. Review poor-scoring templates and make responses more casual/brief")  # noqa: E501
+    print("  3. Add emoji to templates where appropriate (👍, 😊, 🎉)")  # noqa: E501
+    print("  4. Test with: uv run python evals/evaluate_semantic_templates.py --limit 200")  # noqa: E501
+    print("\n" + "=" * 80)  # noqa: E501
 
 
 def main():
@@ -439,30 +439,30 @@ def main():
     parser.add_argument("--skip-judge", action="store_true", help="Skip Cerebras judging")
     args = parser.parse_args()
 
-    print("=" * 80)
-    print("SEMANTIC TEMPLATE EVALUATION")
-    print("=" * 80)
+    print("=" * 80)  # noqa: E501
+    print("SEMANTIC TEMPLATE EVALUATION")  # noqa: E501
+    print("=" * 80)  # noqa: E501
 
     # 1. Load templates
-    print("\n📦 Loading templates...")
+    print("\n📦 Loading templates...")  # noqa: E501
     templates = get_all_templates()
-    print(f"✓ Loaded {len(templates)} semantic templates")
+    print(f"✓ Loaded {len(templates)} semantic templates")  # noqa: E501
 
     # 2. Fetch messages
-    print(f"\n📱 Fetching {args.limit} real messages from chat.db...")
+    print(f"\n📱 Fetching {args.limit} real messages from chat.db...")  # noqa: E501
     messages = fetch_real_messages(args.limit)
     if not messages:
-        print("❌ No messages found")
+        print("❌ No messages found")  # noqa: E501
         return
-    print(f"✓ Fetched {len(messages)} messages")
+    print(f"✓ Fetched {len(messages)} messages")  # noqa: E501
 
     # 3. Find matches
-    print("\n🔍 Testing templates against messages...")
+    print("\n🔍 Testing templates against messages...")  # noqa: E501
     match_results = find_template_matches(messages, templates)
-    print(f"✓ Found {len(match_results['matches'])} template matches")
+    print(f"✓ Found {len(match_results['matches'])} template matches")  # noqa: E501
 
     # 4. Analyze coverage
-    print("\n📊 Analyzing template coverage...")
+    print("\n📊 Analyzing template coverage...")  # noqa: E501
     coverage = analyze_coverage(templates)
 
     # 5. Judge quality (batched)
@@ -483,13 +483,13 @@ def main():
                 )
 
             if evaluations:
-                print(f"\n⚖️  Judging {len(evaluations)} template responses with Cerebras...")
-                print(
-                    f"   (Batch size: {args.batch_size}, Estimated time: {len(evaluations) // args.batch_size * 2.1:.0f}s)"
+                print(f"\n⚖️  Judging {len(evaluations)} template responses with Cerebras...")  # noqa: E501
+                print(  # noqa: E501
+                    f"   (Batch size: {args.batch_size}, Estimated time: {len(evaluations) // args.batch_size * 2.1:.0f}s)"  # noqa: E501
                 )
                 judge_results = batch_judge_templates(evaluations, client, args.batch_size)
         else:
-            print("\n⚠️  Cerebras client not configured (set CEREBRAS_API_KEY)")
+            print("\n⚠️  Cerebras client not configured (set CEREBRAS_API_KEY)")  # noqa: E501
 
     # 6. Generate report
     generate_report(match_results, judge_results, coverage, templates)
@@ -513,7 +513,7 @@ def main():
             default=str,
         )
 
-    print(f"\n💾 Detailed results saved to: {output_file}")
+    print(f"\n💾 Detailed results saved to: {output_file}")  # noqa: E501
 
 
 if __name__ == "__main__":

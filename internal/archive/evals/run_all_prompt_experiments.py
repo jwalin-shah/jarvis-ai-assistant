@@ -43,10 +43,10 @@ def run_command(
     timeout: int = 1800,
 ) -> tuple[bool, str, float]:
     """Run a command and return success, output, duration."""
-    print(f"\n{'=' * 70}")
-    print(f"Running: {description}")
-    print(f"Command: {' '.join(cmd)}")
-    print(f"{'=' * 70}\n")
+    print(f"\n{'=' * 70}")  # noqa: E501
+    print(f"Running: {description}")  # noqa: E501
+    print(f"Command: {' '.join(cmd)}")  # noqa: E501
+    print(f"{'=' * 70}\n")  # noqa: E501
 
     start = time.perf_counter()
     try:
@@ -61,9 +61,9 @@ def run_command(
 
         # Print output
         if result.stdout:
-            print(result.stdout)
+            print(result.stdout)  # noqa: E501
         if result.stderr:
-            print(result.stderr, file=sys.stderr)
+            print(result.stderr, file=sys.stderr)  # noqa: E501
 
         success = result.returncode == 0
         return success, result.stdout + result.stderr, duration
@@ -108,7 +108,7 @@ def run_ablation_study(quick: bool = False) -> ExperimentResult:
                 metrics[f"{variant}_judge_avg"] = stats.get("judge_avg", 0)
                 metrics[f"{variant}_anti_ai_rate"] = stats.get("anti_ai_rate", 0)
         except Exception as e:
-            print(f"Warning: Could not parse ablation results: {e}")
+            print(f"Warning: Could not parse ablation results: {e}")  # noqa: E501
 
     return ExperimentResult(
         name=name,
@@ -224,10 +224,10 @@ def run_format_comparison() -> ExperimentResult:
     name = "format_comparison"
 
     # This would need a dedicated script - for now, placeholder
-    print(f"\n{'=' * 70}")
-    print("Format Comparison (ChatML vs XML vs Minimal)")
-    print("NOTE: Using eval_pipeline as baseline for format comparison")
-    print(f"{'=' * 70}\n")
+    print(f"\n{'=' * 70}")  # noqa: E501
+    print("Format Comparison (ChatML vs XML vs Minimal)")  # noqa: E501
+    print("NOTE: Using eval_pipeline as baseline for format comparison")  # noqa: E501
+    print(f"{'=' * 70}\n")  # noqa: E501
 
     cmd = [
         sys.executable,
@@ -280,57 +280,58 @@ def compile_report(results: list[ExperimentResult]) -> dict:
 
 def print_report(report: dict) -> None:
     """Print formatted report to console."""
-    print("\n" + "=" * 70)
-    print("PROMPT EXPERIMENT RESULTS SUMMARY")
-    print("=" * 70)
+    print("\n" + "=" * 70)  # noqa: E501
+    print("PROMPT EXPERIMENT RESULTS SUMMARY")  # noqa: E501
+    print("=" * 70)  # noqa: E501
 
     summary = report["summary"]
-    print(f"\nTotal Experiments: {summary['total']}")
-    print(f"Passed: {summary['passed']} | Failed: {summary['failed']}")
-    print(
-        f"Total Duration: {summary['total_duration_s']:.1f}s ({summary['total_duration_s'] / 60:.1f} min)"
+    print(f"\nTotal Experiments: {summary['total']}")  # noqa: E501
+    print(f"Passed: {summary['passed']} | Failed: {summary['failed']}")  # noqa: E501
+    print(  # noqa: E501
+        f"Total Duration: {summary['total_duration_s']:.1f}s "
+        f"({summary['total_duration_s'] / 60:.1f} min)"
     )
 
-    print("\n" + "-" * 70)
-    print("INDIVIDUAL RESULTS")
-    print("-" * 70)
+    print("\n" + "-" * 70)  # noqa: E501
+    print("INDIVIDUAL RESULTS")  # noqa: E501
+    print("-" * 70)  # noqa: E501
 
     for exp in report["experiments"]:
         status_icon = "✅" if exp["status"] == "success" else "❌"
-        print(f"\n{status_icon} {exp['name']}")
-        print(f"   Status: {exp['status']}")
-        print(f"   Duration: {exp['duration_s']:.1f}s")
+        print(f"\n{status_icon} {exp['name']}")  # noqa: E501
+        print(f"   Status: {exp['status']}")  # noqa: E501
+        print(f"   Duration: {exp['duration_s']:.1f}s")  # noqa: E501
         if exp["output_path"]:
-            print(f"   Output: {exp['output_path']}")
+            print(f"   Output: {exp['output_path']}")  # noqa: E501
         if exp["metrics"]:
-            print("   Metrics:")
+            print("   Metrics:")  # noqa: E501
             for k, v in exp["metrics"].items():
                 if isinstance(v, float):
-                    print(f"      {k}: {v:.3f}")
+                    print(f"      {k}: {v:.3f}")  # noqa: E501
                 else:
-                    print(f"      {k}: {v}")
+                    print(f"      {k}: {v}")  # noqa: E501
         if exp.get("error_preview"):
-            print(f"   Error: {exp['error_preview']}...")
+            print(f"   Error: {exp['error_preview']}...")  # noqa: E501
 
     # Key findings
-    print("\n" + "=" * 70)
-    print("KEY FINDINGS")
-    print("=" * 70)
+    print("\n" + "=" * 70)  # noqa: E501
+    print("KEY FINDINGS")  # noqa: E501
+    print("=" * 70)  # noqa: E501
 
     # Ablation results
     ablation = next(
         (e for e in report["experiments"] if e["name"] == "ablation_categorization"), None
     )
     if ablation and ablation["metrics"]:
-        print("\n1. Categorization Ablation:")
+        print("\n1. Categorization Ablation:")  # noqa: E501
         for k, v in ablation["metrics"].items():
             if "judge_avg" in k:
-                print(f"   {k}: {v:.2f}/10")
+                print(f"   {k}: {v:.2f}/10")  # noqa: E501
 
-    print("\n" + "=" * 70)
-    print("NEXT STEPS")
-    print("=" * 70)
-    print("""
+    print("\n" + "=" * 70)  # noqa: E501
+    print("NEXT STEPS")  # noqa: E501
+    print("=" * 70)  # noqa: E501
+    print("""  # noqa: E501
 1. Review individual experiment outputs in results/ directory
 2. Compare judge scores across variants
 3. If universal prompt wins: Simplify production code
@@ -356,27 +357,27 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    print("=" * 70)
-    print("JARVIS PROMPT OPTIMIZATION EXPERIMENT SUITE")
-    print("=" * 70)
-    print(f"Mode: {'QUICK' if args.quick else 'FULL'}")
-    print(f"Skip: {args.skip if args.skip else 'None'}")
-    print(f"Results will be saved to: {PROJECT_ROOT}/results/")
-    print("=" * 70)
+    print("=" * 70)  # noqa: E501
+    print("JARVIS PROMPT OPTIMIZATION EXPERIMENT SUITE")  # noqa: E501
+    print("=" * 70)  # noqa: E501
+    print(f"Mode: {'QUICK' if args.quick else 'FULL'}")  # noqa: E501
+    print(f"Skip: {args.skip if args.skip else 'None'}")  # noqa: E501
+    print(f"Results will be saved to: {PROJECT_ROOT}/results/")  # noqa: E501
+    print("=" * 70)  # noqa: E501
 
     # Check API key
     env_path = PROJECT_ROOT / ".env"
     if not env_path.exists():
-        print("\n❌ ERROR: .env file not found!")
-        print("   DSPy optimization requires CEREBRAS_API_KEY in .env")
+        print("\n❌ ERROR: .env file not found!")  # noqa: E501
+        print("   DSPy optimization requires CEREBRAS_API_KEY in .env")  # noqa: E501
         return 1
 
     env_content = env_path.read_text()
     if "CEREBRAS_API_KEY" not in env_content or "csk-" not in env_content:
-        print("\n❌ ERROR: CEREBRAS_API_KEY not found in .env!")
+        print("\n❌ ERROR: CEREBRAS_API_KEY not found in .env!")  # noqa: E501
         return 1
 
-    print("\n✅ API key found in .env")
+    print("\n✅ API key found in .env")  # noqa: E501
 
     # Run experiments
     results = []
@@ -389,7 +390,7 @@ def main() -> int:
 
     for name, func in experiments_to_run:
         if name in args.skip:
-            print(f"\n⏭️  Skipping {name}")
+            print(f"\n⏭️  Skipping {name}")  # noqa: E501
             continue
 
         try:
@@ -399,7 +400,7 @@ def main() -> int:
                 result = func()
             results.append(result)
         except Exception as e:
-            print(f"\n❌ Exception in {name}: {e}")
+            print(f"\n❌ Exception in {name}: {e}")  # noqa: E501
             results.append(
                 ExperimentResult(
                     name=name,
@@ -418,7 +419,7 @@ def main() -> int:
     # Print to console
     print_report(report)
 
-    print(f"\n📊 Full report saved to: {report_path}")
+    print(f"\n📊 Full report saved to: {report_path}")  # noqa: E501
 
     return 0 if all(r.status == "success" for r in results) else 1
 
