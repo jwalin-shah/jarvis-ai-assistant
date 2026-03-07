@@ -23,7 +23,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import psutil  # noqa: E402
 
-from models.loader import MLXModelLoader, ModelConfig  # noqa: E402
+from models.loader import MLXModelLoader, ModelConfig  # noqa: E402  # noqa: E402
 
 
 def mem_mb() -> str:
@@ -408,7 +408,7 @@ def run(
     sampling_configs = list(product(temps, top_ps, min_ps))
 
     n_calls = len(models) * len(prompt_names) * len(tests) * len(sampling_configs)
-    print(
+    print(  # noqa: E501
         f"\n{len(models)} models x {len(prompt_names)} prompts x "
         f"{len(tests)} tests x {len(sampling_configs)} sampling configs "
         f"= {n_calls} generations",
@@ -419,8 +419,8 @@ def run(
     all_results: dict = {}
 
     for model_id in models:
-        print(f"\n{'=' * 70}", flush=True)
-        print(f"[{mem_mb()}] Loading {model_id}...", flush=True)
+        print(f"\n{'=' * 70}", flush=True)  # noqa: E501
+        print(f"[{mem_mb()}] Loading {model_id}...", flush=True)  # noqa: E501
 
         try:
             t_load = time.monotonic()
@@ -428,9 +428,9 @@ def run(
             loader = MLXModelLoader(config=config)
             loader.load()
             load_s = time.monotonic() - t_load
-            print(f"[{mem_mb()}] Loaded in {load_s:.1f}s", flush=True)
+            print(f"[{mem_mb()}] Loaded in {load_s:.1f}s", flush=True)  # noqa: E501
         except Exception as e:
-            print(f"  FAILED: {e}", flush=True)
+            print(f"  FAILED: {e}", flush=True)  # noqa: E501
             all_results[model_id] = {}
             continue
 
@@ -438,7 +438,7 @@ def run(
 
         for temp, top_p, min_p in sampling_configs:
             sampling_key = f"t{temp}_p{top_p}_mp{min_p}"
-            print(f"\n  --- temp={temp} top_p={top_p} min_p={min_p} ---", flush=True)
+            print(f"\n  --- temp={temp} top_p={top_p} min_p={min_p} ---", flush=True)  # noqa: E501
             sampling_results: dict[str, dict[str, str]] = {}
 
             for pname in prompt_names:
@@ -462,7 +462,7 @@ def run(
                         text = result.text.strip().replace("\n", " ↵ ")
                         tps = result.tokens_generated / elapsed if elapsed > 0 else 0
                         display = text[:55] if len(text) > 55 else text
-                        print(
+                        print(  # noqa: E501
                             f"  {pname:>18} | {tc['label']:>14} | {display:<55} | {tps:.0f}t/s",
                             flush=True,
                         )
@@ -473,7 +473,7 @@ def run(
                             "elapsed_ms": round(elapsed * 1000, 1),
                         }
                     except Exception as e:
-                        print(f"  {pname:>18} | {tc['label']:>14} | ERROR: {e}", flush=True)
+                        print(f"  {pname:>18} | {tc['label']:>14} | ERROR: {e}", flush=True)  # noqa: E501
                         prompt_results[tc["label"]] = {
                             "text": f"[ERROR: {e}]",
                             "tps": 0,
@@ -487,7 +487,7 @@ def run(
 
         all_results[model_id] = model_results
         loader.unload()
-        print(f"[{mem_mb()}] Unloaded {model_id}", flush=True)
+        print(f"[{mem_mb()}] Unloaded {model_id}", flush=True)  # noqa: E501
 
     # ── Save results ────────────────────────────────────────────────────
     out_path = PROJECT_ROOT / "evals" / "results" / "comparison-raw.json"
@@ -506,8 +506,8 @@ def run(
             f,
             indent=2,
         )
-    print(f"\nResults saved to {out_path}", flush=True)
-    print(f"Total generations: {n_calls}", flush=True)
+    print(f"\nResults saved to {out_path}", flush=True)  # noqa: E501
+    print(f"Total generations: {n_calls}", flush=True)  # noqa: E501
 
 
 if __name__ == "__main__":
@@ -537,13 +537,13 @@ if __name__ == "__main__":
         for name in PROMPTS:
             sample = PROMPTS[name](TEST_CASES[0]["ctx"])
             last_line = sample.strip().split("\n")[-1]
-            print(f"  {name:>18}: ...{last_line}")
+            print(f"  {name:>18}: ...{last_line}")  # noqa: E501
         sys.exit(0)
 
     if args.list_tests:
         for i, tc in enumerate(TEST_CASES):
             ctx_preview = tc["ctx"].replace("\n", " | ")[:60]
-            print(f"  {i:>2}: {tc['label']:>14} | {ctx_preview}")
+            print(f"  {i:>2}: {tc['label']:>14} | {ctx_preview}")  # noqa: E501
         sys.exit(0)
 
     models = args.models.split(",") if args.models else DEFAULT_MODELS
@@ -555,11 +555,11 @@ if __name__ == "__main__":
     top_ps = [float(p) for p in args.top_ps.split(",")] if args.top_ps else DEFAULT_TOP_PS
     min_ps = [float(p) for p in args.min_ps.split(",")] if args.min_ps else DEFAULT_MIN_PS
 
-    print(f"Models: {', '.join(models)}", flush=True)
-    print(f"Prompts: {len(prompt_names)} strategies", flush=True)
-    print(f"Tests: {len(test_indices)} cases", flush=True)
-    print(f"Temps: {temps}", flush=True)
-    print(f"Top-p: {top_ps}", flush=True)
-    print(f"Min-p: {min_ps}", flush=True)
+    print(f"Models: {', '.join(models)}", flush=True)  # noqa: E501
+    print(f"Prompts: {len(prompt_names)} strategies", flush=True)  # noqa: E501
+    print(f"Tests: {len(test_indices)} cases", flush=True)  # noqa: E501
+    print(f"Temps: {temps}", flush=True)  # noqa: E501
+    print(f"Top-p: {top_ps}", flush=True)  # noqa: E501
+    print(f"Min-p: {min_ps}", flush=True)  # noqa: E501
 
     run(models, prompt_names, test_indices, temps, top_ps, min_ps, args.max_tokens)

@@ -9,11 +9,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from tqdm import tqdm
+from evals.eval_pipeline import EVAL_DATASET_PATH, EvalExample, load_eval_dataset  # noqa: E402
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
+from tqdm import tqdm  # noqa: E402
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, EvalExample, load_eval_dataset
-from evals.judge_config import JUDGE_MODEL, get_judge_client
-from models.loader import get_model
+from models.loader import get_model  # noqa: E402
 
 # Configuration
 NUM_EXAMPLES = 20  # Small batch for quick eval
@@ -112,10 +112,10 @@ Rating criteria:
 
 def evaluate_config(loader, client, examples: list, config: dict, config_name: str) -> dict:
     """Evaluate a configuration on examples."""
-    print(f"\n{'=' * 70}")
-    print(f"Evaluating: {config_name}")
-    print(f"Config: {config}")
-    print(f"{'=' * 70}")
+    print(f"\n{'=' * 70}")  # noqa: E501
+    print(f"Evaluating: {config_name}")  # noqa: E501
+    print(f"Config: {config}")  # noqa: E501
+    print(f"{'=' * 70}")  # noqa: E501
 
     results = []
     scores = []
@@ -170,23 +170,23 @@ def evaluate_config(loader, client, examples: list, config: dict, config_name: s
 
 
 def main():
-    print("=" * 70)
-    print("EVALUATING OPTIMIZED GENERATION SETTINGS")
-    print("=" * 70)
+    print("=" * 70)  # noqa: E501
+    print("EVALUATING OPTIMIZED GENERATION SETTINGS")  # noqa: E501
+    print("=" * 70)  # noqa: E501
 
     # Load model
     loader = get_model()
     if not loader.is_loaded():
-        print("Loading model...")
+        print("Loading model...")  # noqa: E501
         loader.load()
 
     # Load judge client
     client = get_judge_client()
-    print(f"Judge: {JUDGE_MODEL}")
+    print(f"Judge: {JUDGE_MODEL}")  # noqa: E501
 
     # Load examples
     examples = load_eval_dataset(EVAL_DATASET_PATH)[:NUM_EXAMPLES]
-    print(f"Loaded {len(examples)} examples")
+    print(f"Loaded {len(examples)} examples")  # noqa: E501
 
     # Evaluate baseline
     baseline_results = evaluate_config(loader, client, examples, BASELINE_CONFIG, "Baseline (old)")
@@ -197,28 +197,28 @@ def main():
     )
 
     # Summary
-    print(f"\n{'=' * 70}")
-    print("FINAL COMPARISON")
-    print(f"{'=' * 70}")
-    print("\n📊 Baseline (rep=1.05, max_tokens=50):")
-    print(f"   Average Score: {baseline_results['avg_score']:.2f}/10")
-    print(f"   Pass Rate: {baseline_results['pass_rate'] * 100:.1f}%")
-    print(f"   Avg Length: {baseline_results['avg_length']:.0f} chars")
-    print(f"   Avg Latency: {baseline_results['avg_latency_ms']:.0f}ms")
+    print(f"\n{'=' * 70}")  # noqa: E501
+    print("FINAL COMPARISON")  # noqa: E501
+    print(f"{'=' * 70}")  # noqa: E501
+    print("\n📊 Baseline (rep=1.05, max_tokens=50):")  # noqa: E501
+    print(f"   Average Score: {baseline_results['avg_score']:.2f}/10")  # noqa: E501
+    print(f"   Pass Rate: {baseline_results['pass_rate'] * 100:.1f}%")  # noqa: E501
+    print(f"   Avg Length: {baseline_results['avg_length']:.0f} chars")  # noqa: E501
+    print(f"   Avg Latency: {baseline_results['avg_latency_ms']:.0f}ms")  # noqa: E501
 
-    print("\n🚀 Optimized (rep=1.12, max_tokens=25):")
-    print(f"   Average Score: {optimized_results['avg_score']:.2f}/10")
-    print(f"   Pass Rate: {optimized_results['pass_rate'] * 100:.1f}%")
-    print(f"   Avg Length: {optimized_results['avg_length']:.0f} chars")
-    print(f"   Avg Latency: {optimized_results['avg_latency_ms']:.0f}ms")
+    print("\n🚀 Optimized (rep=1.12, max_tokens=25):")  # noqa: E501
+    print(f"   Average Score: {optimized_results['avg_score']:.2f}/10")  # noqa: E501
+    print(f"   Pass Rate: {optimized_results['pass_rate'] * 100:.1f}%")  # noqa: E501
+    print(f"   Avg Length: {optimized_results['avg_length']:.0f} chars")  # noqa: E501
+    print(f"   Avg Latency: {optimized_results['avg_latency_ms']:.0f}ms")  # noqa: E501
 
     score_improvement = optimized_results["avg_score"] - baseline_results["avg_score"]
     length_reduction = baseline_results["avg_length"] - optimized_results["avg_length"]
 
-    print("\n📈 Improvements:")
-    print(f"   Score: {score_improvement:+.2f} points")
-    print(
-        f"   Length: -{length_reduction:.0f} chars ({length_reduction / baseline_results['avg_length'] * 100:.0f}% shorter)"
+    print("\n📈 Improvements:")  # noqa: E501
+    print(f"   Score: {score_improvement:+.2f} points")  # noqa: E501
+    print(  # noqa: E501
+        f"   Length: -{length_reduction:.0f} chars ({length_reduction / baseline_results['avg_length'] * 100:.0f}% shorter)"  # noqa: E501
     )
 
     # Save results
@@ -235,7 +235,7 @@ def main():
     output_file = PROJECT_ROOT / "results" / "optimized_settings_eval.json"
     with open(output_file, "w") as f:
         json.dump(output, f, indent=2)
-    print(f"\n💾 Results saved to: {output_file}")
+    print(f"\n💾 Results saved to: {output_file}")  # noqa: E501
 
     return output
 

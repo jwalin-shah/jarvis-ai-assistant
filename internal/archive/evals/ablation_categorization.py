@@ -26,8 +26,12 @@ from tqdm import tqdm
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset  # noqa: E402
-from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
+from evals.eval_pipeline import (  # noqa: E402  # noqa: E402
+    EVAL_DATASET_PATH,
+    check_anti_ai,
+    load_eval_dataset,
+)
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402  # noqa: E402
 
 
 @dataclass
@@ -143,7 +147,7 @@ def run_ablation(
 ) -> list[AblationResult]:
     """Run ablation for a single variant."""
 
-    from models.loader import get_model
+    from models.loader import get_model  # noqa: E402
 
     loader = get_model()
     if not loader.is_loaded():
@@ -151,10 +155,10 @@ def run_ablation(
 
     results = []
 
-    print(f"\n{'=' * 70}")
-    print(f"Variant: {variant}")
-    print(f"Description: {VARIANT_CONFIGS[variant]['description']}")
-    print(f"{'=' * 70}\n")
+    print(f"\n{'=' * 70}")  # noqa: E501
+    print(f"Variant: {variant}")  # noqa: E501
+    print(f"Description: {VARIANT_CONFIGS[variant]['description']}")  # noqa: E501
+    print(f"{'=' * 70}\n")  # noqa: E501
 
     for i, ex in enumerate(tqdm(examples, desc=f"Running {variant}"), 1):
         # Generate response
@@ -221,7 +225,7 @@ def run_ablation(
         # Print progress
         status = "AI!" if anti_ai else "clean"
         judge_str = f" | Judge: {judge_score:.0f}/10" if judge_score else ""
-        print(f"[{i:2d}] [{ex.category:12s}] {status}{judge_str} -> {response[:50]}")
+        print(f"[{i:2d}] [{ex.category:12s}] {status}{judge_str} -> {response[:50]}")  # noqa: E501
 
     return results
 
@@ -281,20 +285,20 @@ def main() -> int:
 
     # Load dataset
     if not EVAL_DATASET_PATH.exists():
-        print(f"ERROR: Dataset not found at {EVAL_DATASET_PATH}")
+        print(f"ERROR: Dataset not found at {EVAL_DATASET_PATH}")  # noqa: E501
         return 1
 
     examples = load_eval_dataset(EVAL_DATASET_PATH)
-    print(f"Loaded {len(examples)} examples from {EVAL_DATASET_PATH}")
+    print(f"Loaded {len(examples)} examples from {EVAL_DATASET_PATH}")  # noqa: E501
 
     # Initialize judge
     judge_client = None
     if args.judge:
         judge_client = get_judge_client()
         if judge_client:
-            print(f"Judge ready: {JUDGE_MODEL}")
+            print(f"Judge ready: {JUDGE_MODEL}")  # noqa: E501
         else:
-            print("WARNING: Judge API key not set, skipping judge scoring")
+            print("WARNING: Judge API key not set, skipping judge scoring")  # noqa: E501
 
     # Determine variants to run
     variants = (
@@ -311,19 +315,19 @@ def main() -> int:
     analysis = analyze_results(all_results)
 
     # Print summary
-    print("\n" + "=" * 70)
-    print("ABLATION RESULTS SUMMARY")
-    print("=" * 70)
+    print("\n" + "=" * 70)  # noqa: E501
+    print("ABLATION RESULTS SUMMARY")  # noqa: E501
+    print("=" * 70)  # noqa: E501
 
     for variant, stats in analysis.items():
-        print(f"\n{variant.upper()}:")
-        print(f"  Judge avg:     {stats['judge_avg']:.2f}/10")
-        print(f"  Judge median:  {stats['judge_median']:.2f}/10")
-        print(f"  Anti-AI rate:  {stats['anti_ai_rate']:.1%}")
-        print(f"  Avg latency:   {stats['avg_latency_ms']:.0f}ms")
-        print("  By category:")
+        print(f"\n{variant.upper()}:")  # noqa: E501
+        print(f"  Judge avg:     {stats['judge_avg']:.2f}/10")  # noqa: E501
+        print(f"  Judge median:  {stats['judge_median']:.2f}/10")  # noqa: E501
+        print(f"  Anti-AI rate:  {stats['anti_ai_rate']:.1%}")  # noqa: E501
+        print(f"  Avg latency:   {stats['avg_latency_ms']:.0f}ms")  # noqa: E501
+        print("  By category:")  # noqa: E501
         for cat, cat_stats in stats["by_category"].items():
-            print(
+            print(  # noqa: E501
                 f"    {cat:12s}: avg={cat_stats['avg_score']:.1f}, anti_ai={cat_stats['anti_ai']}"
             )
 
@@ -350,7 +354,7 @@ def main() -> int:
     }
 
     output_path.write_text(json.dumps(output_data, indent=2))
-    print(f"\nResults saved to: {output_path}")
+    print(f"\nResults saved to: {output_path}")  # noqa: E501
 
     return 0
 

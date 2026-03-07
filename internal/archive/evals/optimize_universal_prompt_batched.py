@@ -23,8 +23,8 @@ from tqdm import tqdm
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset
-from evals.judge_config import JUDGE_MODEL, get_judge_client
+from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset  # noqa: E402
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
 # Test different universal prompt variations
 PROMPT_VARIANTS = {
@@ -147,7 +147,7 @@ Must have exactly {len(examples)} objects in the array.
         return results
 
     except Exception as e:
-        print(f"  Batch judge error: {e}")
+        print(f"  Batch judge error: {e}")  # noqa: E501
         # Return default scores
         return [(5.0, f"error: {e}")] * len(examples)
 
@@ -160,16 +160,16 @@ def test_prompt_variant_batched(
 ) -> PromptResult:
     """Test a single prompt variant with batching."""
 
-    from models.loader import get_model
+    from models.loader import get_model  # noqa: E402
 
     loader = get_model()
     if not loader.is_loaded():
         loader.load()
 
     # Generate all replies first
-    print(f"\n{'=' * 70}")
-    print(f"Testing: {name}")
-    print(f"{'=' * 70}\n")
+    print(f"\n{'=' * 70}")  # noqa: E501
+    print(f"Testing: {name}")  # noqa: E501
+    print(f"{'=' * 70}\n")  # noqa: E501
 
     replies = []
     latencies = []
@@ -198,7 +198,7 @@ def test_prompt_variant_batched(
         anti_ai_flags.append(bool(check_anti_ai(reply)))
 
     # Judge in batches
-    print(f"\nJudging in batches of {BATCH_SIZE}...")
+    print(f"\nJudging in batches of {BATCH_SIZE}...")  # noqa: E501
     all_scores = []
     all_reasonings = []
 
@@ -221,15 +221,15 @@ def test_prompt_variant_batched(
             all_scores.append(score)
             all_reasonings.append(reasoning)
 
-        print(f"  Batch {batch_idx + 1}/{num_batches} complete")
+        print(f"  Batch {batch_idx + 1}/{num_batches} complete")  # noqa: E501
 
     # Print results
-    print("\nResults:")
+    print("\nResults:")  # noqa: E501
     for i, (ex, reply, score, anti_ai) in enumerate(
         zip(examples, replies, all_scores, anti_ai_flags)
     ):
         status = "AI!" if anti_ai else "clean"
-        print(f"[{ex.category:12s}] {status} | Judge: {score:.0f}/10 | {reply[:50]}")
+        print(f"[{ex.category:12s}] {status} | Judge: {score:.0f}/10 | {reply[:50]}")  # noqa: E501
 
     # Calculate metrics
     avg_score = sum(all_scores) / len(all_scores) if all_scores else 0
@@ -262,8 +262,8 @@ def main() -> int:
 
     # Load dataset
     examples = load_eval_dataset(EVAL_DATASET_PATH)
-    print(f"Loaded {len(examples)} examples")
-    print(
+    print(f"Loaded {len(examples)} examples")  # noqa: E501
+    print(  # noqa: E501
         f"Batch size: {BATCH_SIZE} (only {len(examples) // BATCH_SIZE + 1} judge calls per variant)"
     )
 
@@ -272,8 +272,8 @@ def main() -> int:
     if args.judge:
         judge_client = get_judge_client()
         if judge_client:
-            print(f"Judge ready: {JUDGE_MODEL}")
-            print(f"Rate limit: 30 req/min, delay: {RATE_LIMIT_DELAY}s between calls")
+            print(f"Judge ready: {JUDGE_MODEL}")  # noqa: E501
+            print(f"Rate limit: 30 req/min, delay: {RATE_LIMIT_DELAY}s between calls")  # noqa: E501
 
     # Test each variant
     results = []
@@ -285,27 +285,27 @@ def main() -> int:
     results.sort(key=lambda r: r.avg_judge_score, reverse=True)
 
     # Print summary
-    print("\n" + "=" * 70)
-    print("PROMPT OPTIMIZATION RESULTS (BATCHED)")
-    print("=" * 70)
+    print("\n" + "=" * 70)  # noqa: E501
+    print("PROMPT OPTIMIZATION RESULTS (BATCHED)")  # noqa: E501
+    print("=" * 70)  # noqa: E501
 
     for i, r in enumerate(results, 1):
-        print(f"\n{i}. {r.name.upper()}")
-        print(f"   Judge Score: {r.avg_judge_score:.2f}/10")
-        print(f"   Anti-AI Rate: {r.anti_ai_rate:.1%}")
-        print(f"   Avg Latency: {r.avg_latency_ms:.0f}ms")
-        print("   By Category:")
+        print(f"\n{i}. {r.name.upper()}")  # noqa: E501
+        print(f"   Judge Score: {r.avg_judge_score:.2f}/10")  # noqa: E501
+        print(f"   Anti-AI Rate: {r.anti_ai_rate:.1%}")  # noqa: E501
+        print(f"   Avg Latency: {r.avg_latency_ms:.0f}ms")  # noqa: E501
+        print("   By Category:")  # noqa: E501
         for cat, score in sorted(r.per_category_scores.items()):
-            print(f"      {cat:12s}: {score:.2f}")
+            print(f"      {cat:12s}: {score:.2f}")  # noqa: E501
 
     # Winner
     winner = results[0]
-    print("\n" + "=" * 70)
-    print(f"🏆 WINNER: {winner.name.upper()}")
-    print("=" * 70)
-    print(f"Score: {winner.avg_judge_score:.2f}/10")
-    print(f"Anti-AI: {winner.anti_ai_rate:.1%}")
-    print(f"\nFull Prompt:\n{winner.prompt}")
+    print("\n" + "=" * 70)  # noqa: E501
+    print(f"🏆 WINNER: {winner.name.upper()}")  # noqa: E501
+    print("=" * 70)  # noqa: E501
+    print(f"Score: {winner.avg_judge_score:.2f}/10")  # noqa: E501
+    print(f"Anti-AI: {winner.anti_ai_rate:.1%}")  # noqa: E501
+    print(f"\nFull Prompt:\n{winner.prompt}")  # noqa: E501
 
     # Save results
     output_path = PROJECT_ROOT / "results" / "universal_prompt_optimization.json"
@@ -329,7 +329,7 @@ def main() -> int:
     }
 
     output_path.write_text(json.dumps(output_data, indent=2))
-    print(f"\n📊 Results saved to: {output_path}")
+    print(f"\n📊 Results saved to: {output_path}")  # noqa: E501
 
     return 0
 

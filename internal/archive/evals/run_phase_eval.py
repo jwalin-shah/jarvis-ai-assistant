@@ -17,7 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _run(cmd: list[str]) -> int:
-    print(f"[phase-eval] $ {' '.join(cmd)}")
+    print(f"[phase-eval] $ {' '.join(cmd)}")  # noqa: E501
     return subprocess.run(cmd, cwd=PROJECT_ROOT, check=False).returncode
 
 

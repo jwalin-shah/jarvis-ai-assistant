@@ -15,9 +15,10 @@ from tqdm import tqdm
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.dspy_reply import TRAIN_EXAMPLES, clean_reply, judge_metric
-from evals.judge_config import JUDGE_MODEL, get_judge_client
-from models.loader import get_model
+from evals.dspy_reply import TRAIN_EXAMPLES, clean_reply, judge_metric  # noqa: E402  # noqa: E402
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402  # noqa: E402
+
+from models.loader import get_model  # noqa: E402  # noqa: E402
 
 
 def generate_optimized_instruction(depth: int, judge_client):
@@ -88,9 +89,9 @@ def main():
     if not student_loader.is_loaded():
         student_loader.load()
 
-    print("=" * 70)
-    print("PIPELINE SWEEP: ChatML + Repetition Penalty")
-    print("=" * 70)
+    print("=" * 70)  # noqa: E501
+    print("PIPELINE SWEEP: ChatML + Repetition Penalty")  # noqa: E501
+    print("=" * 70)  # noqa: E501
 
     results = []
 
@@ -98,30 +99,30 @@ def main():
         instr = generate_optimized_instruction(depth, judge_client)
 
         for rp in penalties:
-            print(f"\n>>> TESTING DEPTH: {depth} | RP: {rp}")
+            print(f"\n>>> TESTING DEPTH: {depth} | RP: {rp}")  # noqa: E501
             avg_score = run_eval(depth, instr, TRAIN_EXAMPLES, student_loader, rp)
-            print(f"Average Score: {avg_score:.3f}")
+            print(f"Average Score: {avg_score:.3f}")  # noqa: E501
 
             results.append(
                 {"depth": depth, "repetition_penalty": rp, "instruction": instr, "score": avg_score}
             )
 
     # Summary
-    print("\n" + "=" * 70)
-    print("FINAL RESULTS")
-    print("=" * 70)
+    print("\n" + "=" * 70)  # noqa: E501
+    print("FINAL RESULTS")  # noqa: E501
+    print("=" * 70)  # noqa: E501
     results.sort(key=lambda x: x["score"], reverse=True)
     for r in results:
-        print(f"Depth {r['depth']}: {r['score']:.3f}")
+        print(f"Depth {r['depth']}: {r['score']:.3f}")  # noqa: E501
 
     winner = results[0]
-    print(f"\n🏆 WINNER: Depth {winner['depth']} with score {winner['score']:.3f}")
+    print(f"\n🏆 WINNER: Depth {winner['depth']} with score {winner['score']:.3f}")  # noqa: E501
 
     # Save winner
     output_path = Path("evals/optimized_pipeline_config.json")
     with open(output_path, "w") as f:
         json.dump(winner, f, indent=2)
-    print(f"Config saved to {output_path}")
+    print(f"Config saved to {output_path}")  # noqa: E501
 
 
 if __name__ == "__main__":

@@ -25,8 +25,8 @@ from tqdm import tqdm
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset
-from evals.judge_config import JUDGE_MODEL, get_judge_client
+from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset  # noqa: E402
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
 BATCH_SIZE = 10
 RATE_LIMIT_DELAY = 2.1
@@ -236,7 +236,7 @@ Exactly {len(examples)} objects.
         return results
 
     except Exception as e:
-        print(f"  Batch judge error: {e}")
+        print(f"  Batch judge error: {e}")  # noqa: E501
         return [(5.0, f"error: {e}")] * len(examples)
 
 
@@ -248,16 +248,16 @@ def run_variant(
 ) -> tuple[list[AblationResult], dict]:
     """Run ablation for a single variant."""
 
-    from models.loader import get_model
+    from models.loader import get_model  # noqa: E402
 
     loader = get_model()
     if not loader.is_loaded():
         loader.load()
 
-    print(f"\n{'=' * 70}")
-    print(f"Variant: {name}")
-    print(f"Config: {config}")
-    print(f"{'=' * 70}\n")
+    print(f"\n{'=' * 70}")  # noqa: E501
+    print(f"Variant: {name}")  # noqa: E501
+    print(f"Config: {config}")  # noqa: E501
+    print(f"{'=' * 70}\n")  # noqa: E501
 
     results = []
     num_batches = (len(examples) + BATCH_SIZE - 1) // BATCH_SIZE
@@ -296,8 +296,8 @@ def run_variant(
             results.append(result)
 
             status = "AI!" if anti_ai else "clean"
-            print(
-                f"[{start_idx + i + 1:2d}] [{ex.category:12s}] {status} | {score:.0f}/10 | {reply[:50]}"
+            print(  # noqa: E501
+                f"[{start_idx + i + 1:2d}] [{ex.category:12s}] {status} | {score:.0f}/10 | {reply[:50]}"  # noqa: E501
             )
 
     # Calculate summary
@@ -330,14 +330,14 @@ def main() -> int:
 
     # Load dataset
     examples = load_eval_dataset(EVAL_DATASET_PATH)
-    print(f"Loaded {len(examples)} examples")
+    print(f"Loaded {len(examples)} examples")  # noqa: E501
 
     # Initialize judge
     judge_client = None
     if args.judge:
         judge_client = get_judge_client()
         if judge_client:
-            print(f"Judge ready: {JUDGE_MODEL}")
+            print(f"Judge ready: {JUDGE_MODEL}")  # noqa: E501
 
     # Define variants to test
     variants = {
@@ -363,30 +363,30 @@ def main() -> int:
     all_summaries.sort(key=lambda s: s["avg_score"], reverse=True)
 
     # Print summary
-    print("\n" + "=" * 70)
-    print("CONTEXT & RAG ABLATION RESULTS")
-    print("=" * 70)
+    print("\n" + "=" * 70)  # noqa: E501
+    print("CONTEXT & RAG ABLATION RESULTS")  # noqa: E501
+    print("=" * 70)  # noqa: E501
 
     for s in all_summaries:
-        print(f"\n{s['name'].upper()}")
-        print(
-            f"  Config: context_depth={s['config']['context_depth']}, use_rag={s['config']['use_rag']}"
+        print(f"\n{s['name'].upper()}")  # noqa: E501
+        print(  # noqa: E501
+            f"  Config: context_depth={s['config']['context_depth']}, use_rag={s['config']['use_rag']}"  # noqa: E501
         )
-        print(f"  Avg Score: {s['avg_score']:.2f}/10")
-        print(f"  Anti-AI Rate: {s['anti_ai_rate']:.1%}")
-        print(f"  Avg Latency: {s['avg_latency']:.0f}ms")
-        print("  By Category:")
+        print(f"  Avg Score: {s['avg_score']:.2f}/10")  # noqa: E501
+        print(f"  Anti-AI Rate: {s['anti_ai_rate']:.1%}")  # noqa: E501
+        print(f"  Avg Latency: {s['avg_latency']:.0f}ms")  # noqa: E501
+        print("  By Category:")  # noqa: E501
         for cat, score in sorted(s["by_category"].items()):
-            print(f"    {cat:12s}: {score:.2f}")
+            print(f"    {cat:12s}: {score:.2f}")  # noqa: E501
 
     # Winner
     winner = all_summaries[0]
-    print("\n" + "=" * 70)
-    print(f"🏆 WINNER: {winner['name'].upper()}")
-    print("=" * 70)
-    print(f"Score: {winner['avg_score']:.2f}/10")
-    print(
-        f"Config: context_depth={winner['config']['context_depth']}, use_rag={winner['config']['use_rag']}"
+    print("\n" + "=" * 70)  # noqa: E501
+    print(f"🏆 WINNER: {winner['name'].upper()}")  # noqa: E501
+    print("=" * 70)  # noqa: E501
+    print(f"Score: {winner['avg_score']:.2f}/10")  # noqa: E501
+    print(  # noqa: E501
+        f"Config: context_depth={winner['config']['context_depth']}, use_rag={winner['config']['use_rag']}"  # noqa: E501
     )
 
     # Save results
@@ -412,7 +412,7 @@ def main() -> int:
     }
 
     output_path.write_text(json.dumps(output_data, indent=2))
-    print(f"\n📊 Results saved to: {output_path}")
+    print(f"\n📊 Results saved to: {output_path}")  # noqa: E501
 
     return 0
 

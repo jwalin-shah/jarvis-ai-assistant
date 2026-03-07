@@ -24,7 +24,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.batch_eval import TEST_CASES, build_prompt, check_result  # noqa: E402
+from evals.batch_eval import TEST_CASES, build_prompt, check_result  # noqa: E402  # noqa: E402
 
 
 @dataclass
@@ -92,19 +92,19 @@ def run_variant(
 
 def print_comparison(baseline: list[BenchmarkResult], speculative: list[BenchmarkResult]) -> None:
     """Print side-by-side comparison table."""
-    print()
-    print("=" * 80)
-    print("COMPARISON: Baseline vs Speculative Decoding")
-    print("=" * 80)
+    print()  # noqa: E501
+    print("=" * 80)  # noqa: E501
+    print("COMPARISON: Baseline vs Speculative Decoding")  # noqa: E501
+    print("=" * 80)  # noqa: E501
 
     # Per-case comparison
-    print(f"\n{'Test Case':<30} {'Baseline ms':>12} {'Spec ms':>12} {'Speedup':>8} {'Accept%':>8}")
-    print("-" * 80)
+    print(f"\n{'Test Case':<30} {'Baseline ms':>12} {'Spec ms':>12} {'Speedup':>8} {'Accept%':>8}")  # noqa: E501
+    print("-" * 80)  # noqa: E501
 
     for b, s in zip(baseline, speculative):
         speedup = b.latency_ms / s.latency_ms if s.latency_ms > 0 else 0
         accept_pct = f"{s.acceptance_rate * 100:.0f}%" if s.acceptance_rate > 0 else "-"
-        print(
+        print(  # noqa: E501
             f"{b.name:<30} {b.latency_ms:>10.0f}ms {s.latency_ms:>10.0f}ms "
             f"{speedup:>7.1f}x {accept_pct:>8}"
         )
@@ -134,22 +134,22 @@ def print_comparison(baseline: list[BenchmarkResult], speculative: list[Benchmar
     speedup_avg = b_sum["avg_latency"] / s_sum["avg_latency"] if s_sum["avg_latency"] > 0 else 0
     speedup_p95 = b_sum["p95_latency"] / s_sum["p95_latency"] if s_sum["p95_latency"] > 0 else 0
 
-    print()
-    print(f"{'Metric':<25} {'Baseline':>15} {'Speculative':>15} {'Delta':>10}")
-    print("-" * 65)
-    print(
+    print()  # noqa: E501
+    print(f"{'Metric':<25} {'Baseline':>15} {'Speculative':>15} {'Delta':>10}")  # noqa: E501
+    print("-" * 65)  # noqa: E501
+    print(  # noqa: E501
         f"{'Avg Latency':<25} {b_sum['avg_latency']:>13.0f}ms {s_sum['avg_latency']:>13.0f}ms "
         f"{speedup_avg:>8.1f}x"
     )
-    print(f"{'P50 Latency':<25} {b_sum['p50_latency']:>13.0f}ms {s_sum['p50_latency']:>13.0f}ms")
-    print(
+    print(f"{'P50 Latency':<25} {b_sum['p50_latency']:>13.0f}ms {s_sum['p50_latency']:>13.0f}ms")  # noqa: E501
+    print(  # noqa: E501
         f"{'P95 Latency':<25} {b_sum['p95_latency']:>13.0f}ms {s_sum['p95_latency']:>13.0f}ms "
         f"{speedup_p95:>8.1f}x"
     )
-    print(f"{'Avg tok/s':<25} {b_sum['avg_tps']:>14.1f} {s_sum['avg_tps']:>14.1f}")
-    print(f"{'Quality (local pass)':<25} {b_sum['pass_rate']:>14.0%} {s_sum['pass_rate']:>14.0%}")
-    print(f"{'Acceptance Rate':<25} {'N/A':>15} {s_sum['avg_acceptance']:>14.0%}")
-    print("=" * 80)
+    print(f"{'Avg tok/s':<25} {b_sum['avg_tps']:>14.1f} {s_sum['avg_tps']:>14.1f}")  # noqa: E501
+    print(f"{'Quality (local pass)':<25} {b_sum['pass_rate']:>14.0%} {s_sum['pass_rate']:>14.0%}")  # noqa: E501
+    print(f"{'Acceptance Rate':<25} {'N/A':>15} {s_sum['avg_acceptance']:>14.0%}")  # noqa: E501
+    print("=" * 80)  # noqa: E501
 
 
 def main() -> int:
@@ -164,46 +164,46 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    print("=" * 80)
-    print("SPECULATIVE DECODING BENCHMARK")
-    print("=" * 80)
-    print(f"Test cases:        {len(TEST_CASES)}")
-    print(f"Draft model:       {args.draft_model}")
-    print(f"Num draft tokens:  {args.num_draft_tokens}")
-    print()
+    print("=" * 80)  # noqa: E501
+    print("SPECULATIVE DECODING BENCHMARK")  # noqa: E501
+    print("=" * 80)  # noqa: E501
+    print(f"Test cases:        {len(TEST_CASES)}")  # noqa: E501
+    print(f"Draft model:       {args.draft_model}")  # noqa: E501
+    print(f"Num draft tokens:  {args.num_draft_tokens}")  # noqa: E501
+    print()  # noqa: E501
 
     # Load target model
-    from models.loader import MLXModelLoader
+    from models.loader import MLXModelLoader  # noqa: E402
 
     loader = MLXModelLoader()
-    print("Loading target model...")
+    print("Loading target model...")  # noqa: E501
     load_start = time.perf_counter()
     loader.load()
-    print(f"Target model loaded in {(time.perf_counter() - load_start) * 1000:.0f}ms")
+    print(f"Target model loaded in {(time.perf_counter() - load_start) * 1000:.0f}ms")  # noqa: E501
 
     # === Baseline run ===
-    print("\n--- Baseline (target only) ---")
+    print("\n--- Baseline (target only) ---")  # noqa: E501
     baseline_start = time.perf_counter()
     baseline_results = run_variant(loader, TEST_CASES, "baseline")
     baseline_total = (time.perf_counter() - baseline_start) * 1000
     n_pass_b = sum(1 for r in baseline_results if r.passed)
-    print(f"Baseline done: {n_pass_b}/{len(baseline_results)} passed, {baseline_total:.0f}ms total")
+    print(f"Baseline done: {n_pass_b}/{len(baseline_results)} passed, {baseline_total:.0f}ms total")  # noqa: E501
 
     # === Load draft model ===
-    print(f"\nLoading draft model ({args.draft_model})...")
+    print(f"\nLoading draft model ({args.draft_model})...")  # noqa: E501
     draft_start = time.perf_counter()
     if not loader.load_draft_model(args.draft_model):
-        print("FATAL: Failed to load draft model. Tokenizer mismatch?")
+        print("FATAL: Failed to load draft model. Tokenizer mismatch?")  # noqa: E501
         return 1
-    print(f"Draft model loaded in {(time.perf_counter() - draft_start) * 1000:.0f}ms")
+    print(f"Draft model loaded in {(time.perf_counter() - draft_start) * 1000:.0f}ms")  # noqa: E501
 
     # === Speculative run ===
-    print("\n--- Speculative (target + draft) ---")
+    print("\n--- Speculative (target + draft) ---")  # noqa: E501
     spec_start = time.perf_counter()
     speculative_results = run_variant(loader, TEST_CASES, "speculative")
     spec_total = (time.perf_counter() - spec_start) * 1000
     n_pass_s = sum(1 for r in speculative_results if r.passed)
-    print(
+    print(  # noqa: E501
         f"Speculative done: {n_pass_s}/{len(speculative_results)} passed, {spec_total:.0f}ms total"
     )
 
@@ -247,7 +247,7 @@ def main() -> int:
         },
     }
     output_path.write_text(json.dumps(output_data, indent=2))
-    print(f"\nResults saved to: {output_path}")
+    print(f"\nResults saved to: {output_path}")  # noqa: E501
 
     # Unload draft model
     loader.unload_draft_model()

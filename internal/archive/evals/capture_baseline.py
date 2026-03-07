@@ -43,7 +43,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.source.exists():
-        print(f"[capture-baseline] Source file missing: {args.source}")
+        print(f"[capture-baseline] Source file missing: {args.source}")  # noqa: E501
         return 2
 
     with args.source.open() as f:
@@ -51,7 +51,7 @@ def main() -> int:
 
     metrics = _extract_metrics(payload)
     if not metrics:
-        print("[capture-baseline] No supported metrics found in source file")
+        print("[capture-baseline] No supported metrics found in source file")  # noqa: E501
         return 2
 
     baseline = {
@@ -70,7 +70,7 @@ def main() -> int:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(baseline, indent=2) + "\n")
-    print(f"[capture-baseline] Wrote baseline to {args.output}")
+    print(f"[capture-baseline] Wrote baseline to {args.output}")  # noqa: E501
     return 0
 
 
