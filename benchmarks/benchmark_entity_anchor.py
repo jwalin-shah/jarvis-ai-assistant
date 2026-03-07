@@ -1,10 +1,12 @@
 import time
-import spacy
+
 from jarvis.topics.entity_anchor import EntityAnchorTracker
+
 
 def benchmark():
     tracker = EntityAnchorTracker()
-    texts = [f"This is sentence number {i} with a name like John and a noun like Apple." for i in range(1000)]
+    texts = [f"This is sentence number {i} with a name like John and a noun like Apple."
+             for i in range(1000)]
 
     start = time.time()
     for text in texts:

@@ -11,18 +11,19 @@ Usage:
     uv run python evals/evaluate_templates.py [--limit 50]
 """
 
-import argparse
-import json
-import random
-import sys
-import time
-from pathlib import Path
+import argparse  # noqa: E402
+import json  # noqa: E402
+import random  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.judge_config import JUDGE_MODEL, get_judge_client
-from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
+
+from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES  # noqa: E402
 
 
 def fetch_real_messages(limit: int = 50) -> list[dict]:
@@ -42,7 +43,7 @@ def fetch_real_messages(limit: int = 50) -> list[dict]:
         # Heuristic: short messages (2-15 chars) or common patterns
         cursor.execute(
             """
-            SELECT 
+            SELECT
                 m.text,
                 m.date,
                 c.display_name,
@@ -125,7 +126,7 @@ Rate this response on a scale of 1-10:
 - 1-2: Very bad, completely wrong
 
 Respond with ONLY a JSON object:
-{{"score": <number>, "reasoning": "<brief explanation>", "better_alternative": "<suggested better response or null>"}}
+{{"score": <number>, "reasoning": "<brief explanation>", "better_alternative": "<suggestion>"}}
 """
 
     try:
