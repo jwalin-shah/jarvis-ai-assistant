@@ -17,20 +17,20 @@ Usage:
     echo '{"vars": {"context": "...", "strategy": "xml_drafter"}}' | python jarvis_provider.py
 """
 
-from __future__ import annotations  # noqa: E402
+from __future__ import annotations
 
-import json  # noqa: E402
-import logging  # noqa: E402
-import os  # noqa: E402
-import sys  # noqa: E402
-from pathlib import Path  # noqa: E402
+import json
+import logging
+import os
+import sys
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 # Ensure model-relative paths resolve regardless of promptfoo basePath/cwd.
 os.chdir(PROJECT_ROOT)
 
-from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY  # noqa: E402
+from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s", stream=sys.stderr)
 logger = logging.getLogger(__name__)
@@ -170,7 +170,7 @@ def strategy_md_persona(context: str, last_message: str, tone: str, user_style: 
     return _md_strategy("persona", context, last_message, tone, user_style, **kw)
 
 
-def strategy_md_completer(context: str, last_message: str, tone: str, user_style: str, **kw) -> str:  # noqa: E501
+def strategy_md_completer(context: str, last_message: str, tone: str, user_style: str, **kw) -> str:
     """Markdown structure + completer framing."""
     return _md_strategy("completer", context, last_message, tone, user_style, **kw)
 

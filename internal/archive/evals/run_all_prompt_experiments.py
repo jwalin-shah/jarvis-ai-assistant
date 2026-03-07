@@ -13,16 +13,16 @@ Usage:
     uv run python evals/run_all_prompt_experiments.py --full   # Complete (slow)
 """
 
-from __future__ import annotations  # noqa: E402
+from __future__ import annotations
 
-import argparse  # noqa: E402
-import json  # noqa: E402
-import subprocess  # noqa: E402
-import sys  # noqa: E402
-import time  # noqa: E402
-from dataclasses import dataclass, field  # noqa: E402
-from pathlib import Path  # noqa: E402
-from typing import Any  # noqa: E402
+import argparse
+import json
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).parent.parent
 
@@ -288,7 +288,7 @@ def print_report(report: dict) -> None:
     print(f"\nTotal Experiments: {summary['total']}")
     print(f"Passed: {summary['passed']} | Failed: {summary['failed']}")
     print(
-        f"Total Duration: {summary['total_duration_s']:.1f}s ({summary['total_duration_s'] / 60:.1f} min)"  # noqa: E501
+        f"Total Duration: {summary['total_duration_s']:.1f}s ({summary['total_duration_s'] / 60:.1f} min)"
     )
 
     print("\n" + "-" * 70)

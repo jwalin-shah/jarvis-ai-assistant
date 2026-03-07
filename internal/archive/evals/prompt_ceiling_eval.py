@@ -6,20 +6,20 @@ Usage:
     uv run python evals/prompt_ceiling_eval.py --dataset real --prompt clean --limit 20
 """
 
-from __future__ import annotations  # noqa: E402
+from __future__ import annotations
 
-import json  # noqa: E402
-import logging  # noqa: E402
-import os  # noqa: E402
-import re  # noqa: E402
-import sys  # noqa: E402
-import time  # noqa: E402
-from dataclasses import dataclass  # noqa: E402
-from datetime import UTC, datetime  # noqa: E402
-from pathlib import Path  # noqa: E402
-from typing import Any  # noqa: E402
+import json
+import logging
+import os
+import re
+import sys
+import time
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
-from tqdm import tqdm  # noqa: E402
+from tqdm import tqdm
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -104,7 +104,7 @@ def clean_message(text: str) -> str:
     text = text.replace('\ufffc', '')
 
     # Remove reaction prefixes
-    text = re.sub(r'^(liked|loved|laughed at|emphasized|questioned)\s+["\']?', '', text, flags=re.IGNORECASE)  # noqa: E501
+    text = re.sub(r'^(liked|loved|laughed at|emphasized|questioned)\s+["\']?', '', text, flags=re.IGNORECASE)
 
     # Strip whitespace
     text = text.strip()
@@ -547,7 +547,7 @@ def save_results(results: list[EvalResult], variant: str) -> Path:
             "n_examples": len(results),
             "avg_latency_ms": round(sum(r.latency_ms for r in results) / len(results), 1),
             "judge_avg": round(sum(r.judge_score for r in scored) / len(scored), 2),
-            "judge_pass_rate": round(sum(1 for r in scored if r.judge_score >= 7) / len(scored), 3),  # noqa: E501
+            "judge_pass_rate": round(sum(1 for r in scored if r.judge_score >= 7) / len(scored), 3),
         }
 
     output_path.write_text(json.dumps(output_data, indent=2))
@@ -602,7 +602,7 @@ def main() -> int:
         print(f"Loading real test set: {real_test_path}")
         examples = load_training_format_dataset(real_test_path)
     else:
-        print("ERROR: Synthetic dataset not supported in this version", file=sys.stderr)
+        print(f"ERROR: Synthetic dataset not supported in this version", file=sys.stderr)
         return 1
 
     if args.limit:
