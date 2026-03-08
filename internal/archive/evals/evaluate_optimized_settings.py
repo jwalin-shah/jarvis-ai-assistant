@@ -1,3 +1,4 @@
+# noqa: E402
 #!/usr/bin/env python3
 """Evaluate optimized generation settings with Cerebras judge."""
 
@@ -9,10 +10,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from tqdm import tqdm
-
+# noqa: E402
 from evals.eval_pipeline import EVAL_DATASET_PATH, EvalExample, load_eval_dataset
 from evals.judge_config import JUDGE_MODEL, get_judge_client
+from tqdm import tqdm
+
 from models.loader import get_model
 
 # Configuration

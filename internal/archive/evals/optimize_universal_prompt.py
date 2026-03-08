@@ -1,3 +1,4 @@
+# noqa: E402
 #!/usr/bin/env python3
 """Pipeline optimization: Sweep through context depths and optimize prompts via MIPROv2.
 
@@ -17,6 +18,7 @@ import dspy
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# noqa: E402
 from evals.dspy_client import DSPYMLXClient
 from evals.dspy_reply import (
     TRAIN_EXAMPLES,

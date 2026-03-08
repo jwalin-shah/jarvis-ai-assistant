@@ -1,5 +1,6 @@
-import timeit
 import re
+import timeit
+
 
 def _is_emoji_old(text: str) -> bool:
     for char in text:

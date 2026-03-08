@@ -1,3 +1,4 @@
+# noqa: E402
 #!/usr/bin/env python3
 """Master script to run all prompt optimization experiments.
 
