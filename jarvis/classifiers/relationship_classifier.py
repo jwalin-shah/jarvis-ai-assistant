@@ -53,6 +53,10 @@ with open(_CATEGORIES_PATH) as f:
 # Pre-compiled pattern for display name tokenization
 _NAME_SPLIT_RE = re.compile(r"[\s\-_]+")
 
+# Pre-compiled regex for emoji detection
+# Covers: 1F300-1F9FF (most emoji), 2600-27BF (misc symbols),
+# 1F000-1F02F (mahjong/dominoes), 2B50 (star)
+_EMOJI_RE = re.compile("[\U0001f300-\U0001f9ff\u2600-\u27bf\U0001f000-\U0001f02f\u2b50]")
 
 # =============================================================================
 # Helper Functions
@@ -71,14 +75,7 @@ def _is_emoji(text: str) -> bool:
     Returns:
         True if any character in text is an emoji.
     """
-    for char in text:
-        code = ord(char)
-        # Emoji ranges: 0x1F300-0x1F9FF covers most emoji
-        # 0x2600-0x27BF covers miscellaneous symbols including emoji
-        # 0x1F000-0x1F02F covers mahjong and dominoes
-        if 0x1F300 <= code <= 0x1F9FF or 0x2600 <= code <= 0x27BF or 0x1F000 <= code <= 0x1F02F:
-            return True
-    return False
+    return bool(_EMOJI_RE.search(text))
 
 
 # =============================================================================
@@ -443,7 +440,7 @@ class RelationshipClassifier:
                 hours.append(msg.date.hour)
 
             # Count emojis using robust detection
-            emoji_chars = sum(1 for c in text if _is_emoji(c))
+            emoji_chars = len(_EMOJI_RE.findall(text))
             emoji_count += emoji_chars
 
             # Formal vs informal indicators
