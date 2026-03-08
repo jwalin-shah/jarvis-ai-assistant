@@ -1,4 +1,3 @@
-# noqa: E402
 """Latency benchmark implementation and CLI entrypoint.
 
 Workstream 4: Latency Benchmark
@@ -17,6 +16,8 @@ from pathlib import Path
 from statistics import mean, stdev
 
 import numpy as np
+
+from jarvis.contracts.latency import LatencyBenchmarkResult, LatencyResult
 from evals.benchmarks.latency.scenarios import (
     Scenario,
     get_scenario_by_type,
@@ -26,8 +27,6 @@ from evals.benchmarks.latency.timer import (
     force_model_unload,
     warmup_timer,
 )
-
-from jarvis.contracts.latency import LatencyBenchmarkResult, LatencyResult
 
 # Conditional MLX imports for environments without Apple Silicon
 try:

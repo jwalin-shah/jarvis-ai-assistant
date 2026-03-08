@@ -1,4 +1,3 @@
-# noqa: E402
 #!/usr/bin/env python3
 """Promptfoo provider for JARVIS MLX model.
 

@@ -18,6 +18,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from jarvis.core.health import reset_degradation_controller
+from jarvis.core.memory import reset_memory_controller
 from jarvis.config import (
     CONFIG_VERSION,
     JarvisConfig,
@@ -26,8 +28,6 @@ from jarvis.config import (
     reset_config,
     save_config,
 )
-from jarvis.core.health import reset_degradation_controller
-from jarvis.core.memory import reset_memory_controller
 
 # Get actual defaults from config models to avoid hardcoding
 _DEFAULT_CONFIG = JarvisConfig()

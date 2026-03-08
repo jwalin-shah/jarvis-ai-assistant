@@ -1,4 +1,3 @@
-# noqa: E402
 #!/usr/bin/env python3
 """Evaluate template responses against real iMessage data.
 
@@ -22,9 +21,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# noqa: E402
 from evals.judge_config import JUDGE_MODEL, get_judge_client
-
 from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES
 
 

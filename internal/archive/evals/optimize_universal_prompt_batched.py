@@ -1,4 +1,3 @@
-# noqa: E402
 #!/usr/bin/env python3
 """Batched universal prompt optimization.
 
@@ -24,7 +23,6 @@ from tqdm import tqdm
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# noqa: E402
 from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset
 from evals.judge_config import JUDGE_MODEL, get_judge_client
 
