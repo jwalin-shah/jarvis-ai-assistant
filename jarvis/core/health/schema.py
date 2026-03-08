@@ -11,10 +11,10 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from jarvis.contracts.health import SchemaInfo
 from integrations.imessage.queries import QUERIES
 from integrations.imessage.queries import detect_schema_version as imessage_detect_version
 from integrations.imessage.queries import get_query as imessage_get_query
+from jarvis.contracts.health import SchemaInfo
 
 logger = logging.getLogger(__name__)
 

@@ -8,8 +8,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from jarvis.core.health import reset_degradation_controller
-from jarvis.core.memory import reset_memory_controller
 from jarvis.cli import (
     FEATURE_CHAT,
     FEATURE_IMESSAGE,
@@ -19,6 +17,8 @@ from jarvis.cli import (
     initialize_system,
     main,
 )
+from jarvis.core.health import reset_degradation_controller
+from jarvis.core.memory import reset_memory_controller
 
 
 @pytest.fixture(autouse=True)
