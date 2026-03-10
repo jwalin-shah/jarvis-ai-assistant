@@ -121,6 +121,11 @@ def segment_conversation(
 
     anchor_tracker = get_tracker()
 
+    # Pre-calculate entity anchors for all messages in a single batch
+    # This avoids N+1 overhead of calling nlp(text) in the loop below
+    all_texts = [m.text or "" for m in messages]
+    all_anchors = anchor_tracker.get_anchors_batch(all_texts)
+
     # Load config with defaults
     cfg = _get_segmentation_config()
     topic_shift_weight = cfg.topic_shift_weight
@@ -147,7 +152,7 @@ def segment_conversation(
 
     segments: list[TopicSegment] = []
     current_chunk: list[Message] = [messages[0]]
-    current_segment_anchors: set[str] = anchor_tracker.get_anchors(messages[0].text or "")
+    current_segment_anchors: set[str] = all_anchors[0] if all_anchors else set()
 
     # Pre-compute drifts vectorized to avoid np.linalg.norm in loop
     drifts = np.zeros(n, dtype=np.float32)
@@ -191,7 +196,7 @@ def segment_conversation(
 
         # Signal 2: Entity Continuity (Jaccard) - are we still talking about same things?
         msg_text = curr_msg.text or ""
-        msg_anchors = anchor_tracker.get_anchors(msg_text)
+        msg_anchors = all_anchors[i]
 
         if current_segment_anchors and msg_anchors:
             intersection = len(msg_anchors & current_segment_anchors)
