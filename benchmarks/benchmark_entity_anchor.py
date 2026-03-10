@@ -1,5 +1,7 @@
 import time
+
 from jarvis.topics.entity_anchor import EntityAnchorTracker
+
 
 def run_benchmark():
     tracker = EntityAnchorTracker()
@@ -7,12 +9,12 @@ def run_benchmark():
 
     print("Running sequential...")
     start = time.time()
-    res1 = [tracker.get_anchors(t) for t in texts]
+    [tracker.get_anchors(t) for t in texts]
     seq_time = time.time() - start
 
     print("Running batch...")
     start = time.time()
-    res2 = tracker.get_anchors_batch(texts)
+    tracker.get_anchors_batch(texts)
     batch_time = time.time() - start
 
     print(f"Sequential: {seq_time:.4f}s")
