@@ -25,6 +25,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from api.errors import register_exception_handlers
+from api.middleware import SecurityHeadersMiddleware
 from api.ratelimit import limiter, rate_limit_exceeded_handler
 from jarvis.metrics import get_latency_histogram, get_request_counter
 
@@ -352,6 +353,10 @@ def _configure_middleware(app_instance: FastAPI) -> None:
         response.headers["X-Response-Time"] = f"{duration:.4f}s"
 
         return response
+
+    # Add Security Headers Middleware
+    # It needs to be the outermost middleware (added last) so it applies to all responses
+    app_instance.add_middleware(SecurityHeadersMiddleware)
 
 
 def _register_routers(app_instance: FastAPI) -> None:
