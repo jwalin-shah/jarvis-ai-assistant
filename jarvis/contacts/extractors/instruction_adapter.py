@@ -11,6 +11,7 @@ from typing import Any
 
 from jarvis.contacts.extractors.base import ExtractedCandidate, ExtractorAdapter, register_extractor
 from jarvis.contacts.instruction_extractor import get_instruction_extractor
+from jarvis.contracts.imessage import Message
 from jarvis.topics.topic_segmenter import TopicSegment
 
 logger = logging.getLogger(__name__)
@@ -58,20 +59,26 @@ class InstructionExtractorAdapter(ExtractorAdapter):
         if not text:
             return []
 
-        # Mock a message object
-        class MockMessage:
-            def __init__(self, text: str, is_from_me: bool) -> None:
-                self.text = text
-                self.is_from_me = is_from_me
-                self.sender_name = "User" if is_from_me else "Contact"
-                self.id = message_id
+        # Create a compliant Message object
+        now = datetime.now()
+        message = Message(
+            text=text,
+            is_from_me=is_from_me,
+            sender="User" if is_from_me else "Contact",
+            sender_name="User" if is_from_me else "Contact",
+            date=now,
+            chat_id="eval_chat",
+            id=message_id,
+            attachments=[],
+            date_delivered=None,
+            date_read=None,
+        )
 
         # Wrap in a segment
-        now = datetime.now()
         segment = TopicSegment(
             chat_id="eval_chat",
             contact_id="eval_contact",
-            messages=[MockMessage(text, is_from_me)],
+            messages=[message],
             start_time=now,
             end_time=now,
             message_count=1,
