@@ -39,7 +39,7 @@ if _env_path.exists():
             key, _, val = line.partition("=")
             os.environ.setdefault(key.strip(), val.strip())
 
-from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
+from internal.archive.evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -86,7 +86,7 @@ class PairAuditResult:
 # ---------------------------------------------------------------------------
 
 
-# get_judge_client imported from evals.judge_config
+# get_judge_client imported from internal.archive.evals.judge_config
 
 
 def judge_call(client, prompt: str) -> tuple[float, str]:
