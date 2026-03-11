@@ -343,3 +343,51 @@ def clean_imports():
     after other tests due to module state pollution affecting numpy behavior.
     """
     yield
+
+
+@pytest.fixture(autouse=True)
+def reset_singletons():
+    """Reset all critical singletons between tests to prevent state leakage.
+
+    Uses try/except per reset so a missing optional module doesn't fail all
+    tests that rely on this fixture.
+    """
+    yield  # Run the test first
+
+    # Reset after each test so the next test starts clean
+    _safe_reset_all()
+
+
+def _safe_reset_all() -> None:
+    """Reset all known singletons, ignoring import errors for optional modules."""
+    resets = [
+        ("jarvis.classifiers.cascade", "reset_mobilization_cascade"),
+        ("jarvis.classifiers.category_classifier", "reset_category_classifier"),
+        ("jarvis.prefetch", "reset_prefetch_manager"),
+        ("jarvis.prefetch.executor", "reset_executor"),
+        ("jarvis.prefetch.cache", "reset_cache"),
+        ("jarvis.prefetch.predictor", "reset_predictor"),
+        ("jarvis.prefetch.invalidation", "reset_invalidator"),
+        ("jarvis.observability.metrics_router", "reset_routing_metrics_store"),
+        ("jarvis.metrics", "reset_metrics"),
+        ("jarvis.model_warmer", "reset_model_warmer"),
+        ("jarvis.threading", "reset_thread_analyzer"),
+        ("jarvis.topics.topic_segmenter", "reset_segmenter"),
+        ("jarvis.topics.segment_labeler", "reset_labeler"),
+        ("jarvis.priority", "reset_priority_scorer"),
+        ("jarvis.core.health.degradation", "reset_degradation_controller"),
+        ("jarvis.core.health.permissions", "reset_permission_monitor"),
+        ("jarvis.core.memory.controller", "reset_memory_controller"),
+        ("jarvis.tasks.queue", "reset_task_queue"),
+        ("jarvis.tasks.worker", "reset_worker"),
+    ]
+    for module_path, func_name in resets:
+        try:
+            import importlib
+
+            mod = importlib.import_module(module_path)
+            reset_fn = getattr(mod, func_name, None)
+            if reset_fn is not None:
+                reset_fn()
+        except Exception:  # noqa: BLE001
+            pass  # Optional module or reset failed — don't break other tests

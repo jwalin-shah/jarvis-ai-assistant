@@ -192,9 +192,8 @@ source = ["jarvis", "api", "models", "core", "integrations", "contracts", "bench
 omit = ["tests/*", "*/test_*.py"]
 
 [tool.coverage.report]
-# Current repository baseline is ~47%; incrementally raising to 75%+ for portfolio quality.
-# Target: 45% → 50% → 60% → 75%+
-fail_under = 45
+# Raised from 45% → 65% as part of audit Sprint 1; target is 75%+
+fail_under = 65
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",

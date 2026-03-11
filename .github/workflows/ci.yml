@@ -32,6 +32,27 @@ jobs:
       - name: Type check
         run: uv run mypy jarvis/ models/ api/ --ignore-missing-imports
 
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v2
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Install security tools
+        run: uv pip install bandit pip-audit
+
+      - name: Bandit security scan
+        run: uv run bandit -r jarvis/ api/ models/ -ll -x tests/
+
+      - name: Dependency vulnerability scan
+        run: uv run pip-audit --ignore-vuln GHSA-jfh8-c2jp-5pjc
+
   test:
     runs-on: ubuntu-latest
     steps:

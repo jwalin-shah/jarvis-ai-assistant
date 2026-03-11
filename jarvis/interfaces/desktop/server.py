@@ -54,6 +54,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _log_task_exception(task: asyncio.Task[Any]) -> None:
+    """Callback to log unhandled exceptions from background tasks."""
+    if not task.cancelled() and (exc := task.exception()):
+        logger.error("Unhandled exception in background task %s: %s", task.get_name(), exc)
+
+
 def _record_rpc_latency(method: str, elapsed_ms: float) -> None:
     """Record RPC call latency to the global latency tracker."""
     from jarvis.utils.latency_tracker import OPERATION_BUDGETS, LatencyRecord, get_tracker
@@ -634,7 +640,8 @@ class JarvisSocketServer:
                         )
                         await writer.drain()
                     else:
-                        asyncio.create_task(self._process_and_respond(line.decode(), writer, peer))
+                        task = asyncio.create_task(self._process_and_respond(line.decode(), writer, peer))
+                        task.add_done_callback(_log_task_exception)
                 except TimeoutError:
                     break
         except Exception as e:
@@ -679,9 +686,10 @@ class JarvisSocketServer:
                         error_response(None, INVALID_REQUEST, "Rate limit exceeded")
                     )
                 else:
-                    asyncio.create_task(
+                    ws_task = asyncio.create_task(
                         self._process_and_respond(str(message), websocket, websocket.remote_address)
                     )
+                    ws_task.add_done_callback(_log_task_exception)
         except Exception as e:
             logger.debug(f"Websocket handler error: {e}")
         finally:

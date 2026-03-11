@@ -9,6 +9,7 @@ Flow:
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 
 from jarvis.classifiers.factory import SingletonFactory
@@ -116,9 +117,19 @@ class MobilizationCascade:
         self._confidence_threshold = confidence_threshold
         self._should_reply_threshold = should_reply_threshold
         self._intent_fallback_disabled = False
+        # Circuit breaker: re-enable fallback after cooldown period
+        self._fallback_disabled_at: float = 0.0
+        self._fallback_cooldown_s: float = 60.0
 
     def classify(self, text: str) -> MobilizationResult:
         """Classify mobilization using two-step gate -> intent cascade."""
+        # Reset circuit breaker after cooldown so transient failures don't disable fallback forever
+        if self._intent_fallback_disabled and (
+            time.monotonic() - self._fallback_disabled_at > self._fallback_cooldown_s
+        ):
+            self._intent_fallback_disabled = False
+            logger.info("Intent fallback re-enabled after cooldown")
+
         rule_result = classify_response_pressure(text)
 
         # Step 1: should we reply?
@@ -135,6 +146,7 @@ class MobilizationCascade:
                 )
             except Exception as exc:  # pragma: no cover - defensive fallback
                 self._intent_fallback_disabled = True
+                self._fallback_disabled_at = time.monotonic()
                 logger.warning("Should-reply fallback failed, using rule gate: %s", exc)
 
         if not gate.should_reply:
@@ -164,6 +176,7 @@ class MobilizationCascade:
             )
         except Exception as exc:  # pragma: no cover - defensive fallback
             self._intent_fallback_disabled = True
+            self._fallback_disabled_at = time.monotonic()
             logger.warning("Intent fallback failed, using rule result: %s", exc)
             return rule_result
 

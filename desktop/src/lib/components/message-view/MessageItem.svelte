@@ -1,6 +1,17 @@
 <script module lang="ts">
   // Avoid repeated 404 thumbnail fetches for known-missing files.
+  // Capped at 500 entries to prevent unbounded growth in long-running sessions.
+  const MAX_FAILED_THUMBNAIL_CACHE = 500;
   const failedThumbnailUrls = new Set<string>();
+
+  function markThumbnailFailed(url: string): void {
+    if (failedThumbnailUrls.size >= MAX_FAILED_THUMBNAIL_CACHE) {
+      // Evict the oldest entry (first inserted in iteration order)
+      const first = failedThumbnailUrls.values().next().value;
+      if (first !== undefined) failedThumbnailUrls.delete(first);
+    }
+    failedThumbnailUrls.add(url);
+  }
 </script>
 
 <script lang="ts">
@@ -111,7 +122,7 @@
     const img = event.currentTarget as HTMLImageElement;
     const failedSrc = img.currentSrc || img.src || img.dataset.src;
     if (failedSrc) {
-      failedThumbnailUrls.add(failedSrc);
+      markThumbnailFailed(failedSrc);
     }
     img.style.display = 'none';
     img.nextElementSibling?.classList.remove('hidden');

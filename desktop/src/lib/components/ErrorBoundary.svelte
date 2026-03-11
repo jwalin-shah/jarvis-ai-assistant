@@ -125,10 +125,12 @@
       {#if errorId}
         <p class="error-id">Error ID: {errorId}</p>
       {/if}
-      <details class="error-details">
-        <summary>Technical Details</summary>
-        <pre>{componentStack}</pre>
-      </details>
+      {#if import.meta.env.DEV}
+        <details class="error-details">
+          <summary>Technical Details</summary>
+          <pre>{componentStack}</pre>
+        </details>
+      {/if}
       <div class="error-actions">
         {#if allowReset}
           <button class="retry-btn" onclick={reset}>

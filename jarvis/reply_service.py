@@ -61,40 +61,6 @@ from jarvis.reply_service_generation import (
 from jarvis.reply_service_generation import (
     to_model_generation_request as to_model_generation_request_payload,
 )
-# Legacy helpers inlined from reply_service_legacy.py
-from datetime import UTC, datetime as _datetime
-from typing import cast as _cast
-
-
-def route_legacy_payload(
-    service: Any,
-    *,
-    incoming: str,
-    contact_id: int | None = None,
-    thread: list[str] | None = None,
-    chat_id: str | None = None,
-    conversation_messages: list[Any] | None = None,
-    context: MessageContext | None = None,
-) -> dict[str, Any]:
-    """Compatibility route API used by socket/api handlers and tests."""
-    if context is None:
-        context = MessageContext(
-            chat_id=chat_id or "",
-            message_text=incoming or "",
-            is_from_me=False,
-            timestamp=_datetime.now(UTC),
-            metadata={"thread": thread or [], "contact_id": contact_id},
-        )
-    if not thread and conversation_messages:
-        context.metadata["thread"] = service._build_thread_context(conversation_messages)
-
-    response = service.generate_reply(context, classification=None)
-    return _cast(dict[str, Any], service._to_legacy_response(response))
-
-
-def get_routing_stats_payload(service: Any) -> dict[str, Any]:
-    """Return legacy routing stats payload."""
-    return {"db_stats": service.db.get_stats(), "index_available": True}
 from jarvis.reply_service_utils import (
     build_mobilization_hint,
     build_thread_context,
@@ -315,18 +281,24 @@ class ReplyService:
         conversation_messages: list[Any] | None = None,
         context: MessageContext | None = None,
     ) -> dict[str, Any]:
-        return route_legacy_payload(
-            self,
-            incoming=incoming,
-            contact_id=contact_id,
-            thread=thread,
-            chat_id=chat_id,
-            conversation_messages=conversation_messages,
-            context=context,
-        )
+        from datetime import UTC, datetime
+        from typing import cast
+
+        if context is None:
+            context = MessageContext(
+                chat_id=chat_id or "",
+                message_text=incoming or "",
+                is_from_me=False,
+                timestamp=datetime.now(UTC),
+                metadata={"thread": thread or [], "contact_id": contact_id},
+            )
+        if not thread and conversation_messages:
+            context.metadata["thread"] = self._build_thread_context(conversation_messages)
+        response = self.generate_reply(context, classification=None)
+        return cast(dict[str, Any], self._to_legacy_response(response))
 
     def get_routing_stats(self) -> dict[str, Any]:
-        return get_routing_stats_payload(self)
+        return {"db_stats": self.db.get_stats(), "index_available": True}
 
     def prepare_streaming_context(
         self,
@@ -595,8 +567,10 @@ class ReplyService:
                         "reason": f"template_match:{match.template.name}",
                     },
                 )
-        except (AttributeError, ValueError, TypeError) as e:
-            logger.debug("Semantic template matching failed: %s", e)
+        except (ValueError, TypeError) as e:
+            logger.warning("Semantic template matching failed: %s", e)
+        except AttributeError as e:
+            logger.error("Semantic template matching bug (AttributeError): %s", e, exc_info=True)
 
         return None
 
@@ -702,8 +676,12 @@ class ReplyService:
             incoming_text = context.message_text or ""
             facts = search_relevant_facts(incoming_text, chat_id, limit=5)
             context.metadata["contact_facts"] = format_facts_for_prompt(facts)
-        except (ImportError, AttributeError, ValueError) as e:
-            logger.debug(f"Optional fact fetch failed: {e}")
+        except ImportError:
+            logger.debug("Optional fact index not available")
+        except (ValueError, TypeError) as e:
+            logger.debug("Optional fact fetch failed: %s", e)
+        except AttributeError as e:
+            logger.error("Fact fetch bug (AttributeError): %s", e, exc_info=True)
 
     def _fetch_graph_context(self, context: MessageContext, chat_id: str) -> None:
         try:
@@ -712,8 +690,12 @@ class ReplyService:
             graph_ctx = get_graph_context(contact_id=chat_id, chat_id=chat_id)
             if graph_ctx:
                 context.metadata["relationship_graph"] = graph_ctx
-        except (ImportError, AttributeError, ValueError) as e:
-            logger.debug(f"Optional graph context fetch failed: {e}")
+        except ImportError:
+            logger.debug("Optional graph context not available")
+        except (ValueError, TypeError) as e:
+            logger.debug("Optional graph context fetch failed: %s", e)
+        except AttributeError as e:
+            logger.error("Graph context fetch bug (AttributeError): %s", e, exc_info=True)
 
     def _resolve_instruction(
         self,

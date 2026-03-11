@@ -1,69 +1,23 @@
 from __future__ import annotations
 
-import subprocess
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from jarvis.handlers.base import BaseHandler, rpc_handler
-
-if TYPE_CHECKING:
-    pass
+from jarvis.services.health_service import (
+    check_imessage_access,
+    check_model_loaded,
+    get_memory_mode,
+    get_memory_stats,
+    get_model_info,
+    get_process_memory,
+    get_recommended_model,
+)
 
 # Cache health status for 5 seconds to avoid expensive lookups
 _HEALTH_CACHE_TTL = 5.0
 _cached_health: dict[str, Any] | None = None
 _cache_timestamp: float = 0.0
-
-
-def _get_memory_fast() -> tuple[float, float, float]:
-    """Get system memory using native macOS command (much faster than psutil)."""
-    import logging
-
-    logger = logging.getLogger(__name__)
-    try:
-        result = subprocess.run(
-            ["vm_stat"],
-            capture_output=True,
-            text=True,
-            timeout=2,
-        )
-        if result.returncode != 0:
-            raise RuntimeError("vm_stat failed")
-
-        lines = result.stdout.strip().split("\n")
-        stats = {}
-        for line in lines:
-            if ":" in line:
-                key, value = line.split(":", 1)
-                try:
-                    stats[key.strip()] = int(value.strip().rstrip("."))
-                except ValueError:
-                    continue
-
-        page_size = 4096
-        wired = stats.get("Pages wired:", 0) * page_size
-        active = stats.get("Pages active:", 0) * page_size
-        free = stats.get("Pages free:", 0) * page_size
-        total = wired + active + free
-
-        bytes_per_gb = 1024**3
-        total_gb = total / bytes_per_gb
-        used_gb = (wired + active) / bytes_per_gb
-        available_gb = free / bytes_per_gb
-
-        return available_gb, used_gb, total_gb
-    except Exception as e:
-        logger.warning(f"vm_stat failed: {e}")
-        # Fallback - still use psutil but log it
-        import psutil
-
-        memory = psutil.virtual_memory()
-        bytes_per_gb = 1024**3
-        return (
-            memory.available / bytes_per_gb,
-            memory.used / bytes_per_gb,
-            memory.total / bytes_per_gb,
-        )
 
 
 class HealthHandler(BaseHandler):
@@ -99,24 +53,14 @@ class HealthHandler(BaseHandler):
 
         from starlette.concurrency import run_in_threadpool
 
-        from api.routers.health_readiness import (
-            _check_imessage_access,
-            _check_model_loaded,
-            _get_memory_mode,
-            _get_model_info,
-            _get_process_memory,
-            _get_recommended_model,
-        )
+        available_gb, used_gb, total_gb = get_memory_stats()
 
-        # Use fast native command instead of slow psutil
-        available_gb, used_gb, total_gb = _get_memory_fast()
-
-        jarvis_rss_mb, jarvis_vms_mb = _get_process_memory()
-        imessage_access = await run_in_threadpool(_check_imessage_access)
-        memory_mode = _get_memory_mode(available_gb)
-        model_loaded = _check_model_loaded()
-        model_info = _get_model_info()
-        recommended_model = _get_recommended_model(total_gb)
+        jarvis_rss_mb, jarvis_vms_mb = get_process_memory()
+        imessage_access = await run_in_threadpool(check_imessage_access)
+        memory_mode = get_memory_mode(available_gb)
+        model_loaded = check_model_loaded()
+        model_info = get_model_info()
+        recommended_model = get_recommended_model(total_gb)
 
         details: dict[str, str] = {}
         if not imessage_access:
@@ -131,7 +75,7 @@ class HealthHandler(BaseHandler):
             status = "degraded"
 
         # Construct response matching HealthResponse schema
-        result = {
+        result: dict[str, Any] = {
             "status": status,
             "imessage_access": imessage_access,
             "memory_available_gb": round(available_gb, 2),
@@ -146,15 +90,9 @@ class HealthHandler(BaseHandler):
             "system_ram_gb": round(total_gb, 2),
         }
 
-        # Add model info if available
+        # Add model info if available (already a dict from health_service)
         if model_info:
-            result["model"] = {
-                "id": model_info.id,
-                "display_name": model_info.display_name,
-                "loaded": model_info.loaded,
-                "memory_usage_mb": model_info.memory_usage_mb,
-                "quality_tier": model_info.quality_tier,
-            }
+            result["model"] = model_info
 
         # Cache the result
         _cached_health = result
