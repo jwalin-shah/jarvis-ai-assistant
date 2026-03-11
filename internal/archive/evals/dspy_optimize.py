@@ -43,8 +43,8 @@ if _env_path.exists():
 
 import dspy  # noqa: E402
 
-from evals.dspy_client import DSPYMLXClient  # noqa: E402
-from evals.dspy_reply import (  # noqa: E402
+from internal.archive.evals.dspy_client import DSPYMLXClient  # noqa: E402
+from internal.archive.evals.dspy_reply import (  # noqa: E402
     TRAIN_EXAMPLES,
     CategoryReplyModule,
     ReplyModule,
@@ -61,7 +61,7 @@ CATEGORY_SAVE_DIR = PROJECT_ROOT / "evals" / "optimized_categories"
 
 def build_teacher_lm() -> dspy.LM:
     """Cerebras ZAI GLM 4.7 as the teacher/demo generator."""
-    from evals.judge_config import JUDGE_BASE_URL, JUDGE_MODEL, get_judge_api_key
+    from internal.archive.evals.judge_config import JUDGE_BASE_URL, JUDGE_MODEL, get_judge_api_key
 
     key = get_judge_api_key()
     return dspy.LM(
