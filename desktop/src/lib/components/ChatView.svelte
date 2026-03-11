@@ -126,8 +126,8 @@
 
   <div class="messages-area" bind:this={messagesAreaRef}>
     {#if messages.length === 0 && !streamingContent}
-      <div class="empty-state">
-        <div class="empty-icon">
+      <div class="empty-state" role="status">
+        <div class="empty-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
