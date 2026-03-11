@@ -175,9 +175,7 @@ Respond with ONLY a JSON array in this exact format:
                 )
 
             num_batches = (len(evaluations) + batch_size - 1) // batch_size
-            print(
-                f"  ✓ Batch {i // batch_size + 1}/{num_batches} complete"
-            )
+            print(f"  ✓ Batch {i // batch_size + 1}/{num_batches} complete")
 
             # Rate limit: 30 req/min = 2 sec between calls
             if i + batch_size < len(evaluations):
@@ -490,9 +488,7 @@ def main():
             if evaluations:
                 print(f"\n⚖️  Judging {len(evaluations)} template responses with Cerebras...")
                 est_time = len(evaluations) // args.batch_size * 2.1
-                print(
-                    f"   (Batch size: {args.batch_size}, Estimated time: {est_time:.0f}s)"
-                )
+                print(f"   (Batch size: {args.batch_size}, Estimated time: {est_time:.0f}s)")
                 judge_results = batch_judge_templates(evaluations, client, args.batch_size)
         else:
             print("\n⚠️  Cerebras client not configured (set CEREBRAS_API_KEY)")
