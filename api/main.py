@@ -25,6 +25,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from api.errors import register_exception_handlers
+from api.middleware import SecurityHeadersMiddleware
 from api.ratelimit import limiter, rate_limit_exceeded_handler
 from jarvis.metrics import get_latency_histogram, get_request_counter
 
@@ -305,6 +306,9 @@ def _create_openapi_generator(app_instance: FastAPI) -> callable:  # type: ignor
 
 def _configure_middleware(app_instance: FastAPI) -> None:
     """Configure middleware for the FastAPI application."""
+    # Add Security Headers Middleware
+    app_instance.add_middleware(SecurityHeadersMiddleware)
+
     # Configure CORS for Tauri and development
     app_instance.add_middleware(
         CORSMiddleware,

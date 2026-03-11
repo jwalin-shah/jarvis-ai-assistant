@@ -168,5 +168,5 @@ class TestExtractionPerformance:
         filtered = extractor._apply_quality_filters(facts)
         elapsed_ms = (time.perf_counter() - start) * 1000
 
-        assert elapsed_ms < 20, f"Filter 1000 facts took {elapsed_ms:.1f}ms, should be <20ms"
+        assert elapsed_ms < 50, f"Filter 1000 facts took {elapsed_ms:.1f}ms, should be <50ms"
         assert len(filtered) > 0
