@@ -128,6 +128,16 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         description="Qwen3.5 0.8B with 4-bit quantization. Excellent instruction following for iMessage replies.",
         recommended_for=["quick_replies", "natural_conversation", "drafting", "iMessage"],
     ),
+    "qwen3-4b": ModelSpec(
+        id="qwen3-4b",
+        path="mlx-community/Qwen3.5-4B-4bit",
+        display_name="Qwen3.5 4B (4-bit)",
+        size_gb=3.0,
+        min_ram_gb=12,
+        quality_tier="excellent",
+        description="Qwen3.5 4B with 4-bit quantization. Highest quality for complex reasoning and long contexts.",
+        recommended_for=["quick_replies", "natural_conversation", "drafting", "long_context", "iMessage"],
+    ),
 }
 
 # Default model ID when none specified
@@ -173,6 +183,18 @@ def get_recommended_model(available_ram_gb: float) -> ModelSpec:
     Returns:
         The recommended ModelSpec for the system.
     """
+    # Prioritize qwen3-4b for systems with 16GB+ RAM (higher quality for complex tasks)
+    if available_ram_gb >= 16:
+        qwen_4b = get_model_spec("qwen3-4b")
+        if qwen_4b and available_ram_gb >= qwen_4b.min_ram_gb + 2:
+            logger.debug(
+                "Recommended model %s for %.1fGB RAM (min: %dGB)",
+                qwen_4b.id,
+                available_ram_gb,
+                qwen_4b.min_ram_gb,
+            )
+            return qwen_4b
+
     # Sort models by quality tier (descending: excellent -> good -> basic),
     # breaking ties by min_ram_gb ascending (prefer more efficient model),
     # then by DEFAULT_MODEL_ID preference.
