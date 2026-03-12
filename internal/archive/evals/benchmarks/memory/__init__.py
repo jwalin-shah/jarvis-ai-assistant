@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """Memory profiling benchmark (Workstream 1).
 
 This module provides memory profiling for MLX models to validate

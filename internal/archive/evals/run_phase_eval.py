@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """Phase eval runner for reply pipeline.
 

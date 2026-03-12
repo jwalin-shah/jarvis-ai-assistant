@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """Enhanced DSPy modules with better signatures for text message generation.
 

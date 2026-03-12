@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """Test dataset generation for HHEM hallucination evaluation.
 
 Workstream 2: HHEM Hallucination Benchmark

@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """Batch evaluation: generate responses and judge quality with LLM.
 
@@ -737,6 +739,7 @@ def main() -> int:
         load_start = time.perf_counter()
         try:
             import dspy
+
             from evals.dspy_client import DSPYMLXClient
             from evals.dspy_reply import ReplyModule
 

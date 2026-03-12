@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """DSPy optimization: compile better prompts + few-shot examples.
 
@@ -42,6 +44,7 @@ if _env_path.exists():
             os.environ.setdefault(key.strip(), val.strip())
 
 import dspy  # noqa: E402
+
 from evals.dspy_client import DSPYMLXClient  # noqa: E402
 from evals.dspy_reply import (  # noqa: E402
     TRAIN_EXAMPLES,

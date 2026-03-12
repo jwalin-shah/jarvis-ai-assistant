@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """Topic Segmentation Evaluation - Measures boundary detection quality.
 
 Compares TopicSegmenter output against a 'gold' dataset of human-segmented

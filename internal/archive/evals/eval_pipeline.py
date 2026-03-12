@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """Baseline evaluation pipeline for the 6-category reply generation system.
 

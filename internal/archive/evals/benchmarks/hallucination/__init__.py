@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """HHEM hallucination evaluation benchmark (Workstream 2).
 
 This module implements the HallucinationEvaluator protocol using the

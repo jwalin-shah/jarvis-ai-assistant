@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """Template mining from iMessage conversations using clustering and semantic similarity.
 

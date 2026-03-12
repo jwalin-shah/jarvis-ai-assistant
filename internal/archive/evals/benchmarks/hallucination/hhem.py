@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """HHEM hallucination evaluator implementation.
 
 Workstream 2: HHEM Hallucination Benchmark

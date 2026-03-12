@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """Quality benchmarking suite for JARVIS.
 
 Provides:

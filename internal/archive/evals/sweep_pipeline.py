@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """Pipeline Sweep: Systematically test context depths and optimized prompts.
 
@@ -17,7 +19,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from evals.dspy_reply import TRAIN_EXAMPLES, clean_reply, judge_metric
 from evals.judge_config import JUDGE_MODEL, get_judge_client
-
 from models.loader import get_model
 
 

@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """CLI for running memory profiling benchmark.
 
 Usage: python -m benchmarks.memory.run --output results/memory.json
