@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """Response Classifier Benchmarking Suite.
 
 Measures performance of the response classifier:

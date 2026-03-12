@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """Test scenario definitions for latency benchmarking.
 
 Workstream 4: Latency Benchmark

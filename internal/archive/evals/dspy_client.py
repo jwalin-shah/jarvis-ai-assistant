@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """DSPy Client Adapter for MLX Generator.
 
 Wraps the local MLXModelLoader to be compatible with DSPy 3.x (BaseLM.forward API).

@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """Centralized LLM judge configuration for evals and scripts.
 
 All eval/script files should import from here instead of hardcoding

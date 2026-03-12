@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """Ablation study: Context depth and RAG impact on reply quality.
 

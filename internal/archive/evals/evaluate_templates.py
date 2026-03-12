@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """Evaluate template responses against real iMessage data.
 
@@ -42,7 +44,7 @@ def fetch_real_messages(limit: int = 50) -> list[dict]:
         # Heuristic: short messages (2-15 chars) or common patterns
         cursor.execute(
             """
-            SELECT 
+            SELECT
                 m.text,
                 m.date,
                 c.display_name,

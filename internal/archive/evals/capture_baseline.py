@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """Capture normalized Phase-0 baseline metrics from an eval output JSON."""
 

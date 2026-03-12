@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """Model configurations for memory profiling.
 
 Workstream 1: Memory Profiler

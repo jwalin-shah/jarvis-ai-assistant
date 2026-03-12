@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """DSPy signature, module, metric, and training data for reply generation.
 
 Defines the optimization target that DSPy compiles against:

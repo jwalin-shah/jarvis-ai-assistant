@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """Brute-force model x prompt x sampling comparison. Prints raw outputs for human eval.
 

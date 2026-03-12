@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """Template mining and analysis benchmarks.
 
 This module provides tools for discovering common message patterns

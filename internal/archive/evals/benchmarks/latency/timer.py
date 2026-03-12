@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """High-precision timing utilities for latency benchmarking.
 
 Workstream 4: Latency Benchmark

@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """Latency benchmark implementation and CLI entrypoint.
 
 Workstream 4: Latency Benchmark

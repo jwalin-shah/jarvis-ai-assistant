@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """Pipeline Sweep: Systematically test context depths and optimized prompts.
 

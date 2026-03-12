@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """Memory profiler implementation for MLX models.
 
 Workstream 1: Memory Profiler

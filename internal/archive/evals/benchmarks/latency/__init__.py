@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """Latency benchmarking (Workstream 4).
 
 This module provides latency measurement tools for MLX models.

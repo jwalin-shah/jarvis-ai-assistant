@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """A/B benchmark: baseline vs speculative decoding.
 

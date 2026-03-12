@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """Pipeline optimization: Sweep through context depths and optimize prompts via MIPROv2.
 

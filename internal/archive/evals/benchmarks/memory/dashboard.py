@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """Memory profiling dashboard for visualization.
 
 Provides utilities for:

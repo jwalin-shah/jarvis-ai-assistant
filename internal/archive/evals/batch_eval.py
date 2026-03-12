@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """Batch evaluation: generate responses and judge quality with LLM.
 

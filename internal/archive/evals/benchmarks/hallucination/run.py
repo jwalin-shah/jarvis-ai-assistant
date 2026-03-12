@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 """CLI for running HHEM hallucination evaluation benchmark.
 
 Usage: python -m benchmarks.hallucination.run --output results/hhem.json

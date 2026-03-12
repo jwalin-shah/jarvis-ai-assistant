@@ -1,3 +1,5 @@
+# type: ignore
+# ruff: noqa
 #!/usr/bin/env python3
 """DSPy optimization: compile better prompts + few-shot examples.
 
