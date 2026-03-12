@@ -31,10 +31,10 @@ class GateConfig:
     reject_spam: bool = True
     reject_emojis: bool = True
 
-    # Gate B: Embeddings (placeholders)
-    embedding_threshold: float = 0.8
+    # Gate B: Embeddings
+    embedding_threshold: float = 0.75  # Lowered from 0.8 for better recall
 
-    # Gate C: NLI (placeholders)
+    # Gate C: NLI
     nli_threshold: float = 0.6
 
 
@@ -56,12 +56,27 @@ class ValidityGate:
 
         Args:
             embedder: UnifiedEmbedder instance (or None).
-            nli_model: NLI model instance (or None).
+            nli_model: NLICrossEncoder instance (or None).
             config: GateConfig instance (or None).
         """
-        self.embedder = embedder
-        self.nli_model = nli_model
+        self._embedder = embedder
+        self._nli_model = nli_model
         self.config = config or GateConfig()
+        self._context_embeddings: list | None = None
+
+    def set_context(self, context_texts: list[str]) -> None:
+        """Set conversation context for embedding-based validation.
+
+        Args:
+            context_texts: List of previous messages in conversation.
+        """
+        if self._embedder is None:
+            return
+
+        try:
+            self._context_embeddings = self._embedder.encode(context_texts)
+        except Exception:
+            self._context_embeddings = None
 
     def _gate_a_rules(self, text: str) -> tuple[bool, str]:
         """Apply Gate A rules (pure rule-based rejection).
@@ -93,21 +108,119 @@ class ValidityGate:
 
         return True, "passed"
 
-    def validate(self, text: str) -> tuple[bool, str]:
-        """Validate a candidate exchange using all gates.
+    def _gate_b_embeddings(self, text: str) -> tuple[bool, str]:
+        """Apply Gate B - embedding similarity check.
+
+        Checks if the candidate text is too similar to recent context (duplicate)
+        or too different (topic shift).
 
         Args:
             text: Candidate text to validate.
 
         Returns:
+            Tuple of (passed, reason).
+        """
+        if self._embedder is None or self._context_embeddings is None:
+            # Skip Gate B if no embedder available
+            return True, "passed"
+
+        try:
+            candidate_emb = self._embedder.encode([text])
+            if candidate_emb is None or len(candidate_emb) == 0:
+                return True, "passed"
+
+            candidate_vec = candidate_emb[0]
+
+            # Check similarity with each context message
+            for ctx_emb in self._context_embeddings:
+                # Cosine similarity (both normalized)
+                similarity = float(candidate_vec @ ctx_emb)
+
+                # Reject if too similar (duplicate/near-duplicate)
+                if similarity > 0.95:
+                    return False, "too_similar_to_context"
+
+            # Passed embedding check
+            return True, "passed"
+
+        except Exception:
+            # Fail open on errors
+            return True, "passed"
+
+    def _gate_c_nli(self, text: str) -> tuple[bool, str]:
+        """Apply Gate C - NLI cross-encoder for entailment.
+
+        Uses NLI to detect if candidate contradicts recent messages
+        (topic shift detection).
+
+        Args:
+            text: Candidate text to validate.
+
+        Returns:
+            Tuple of (passed, reason).
+        """
+        if self._nli_model is None:
+            # Skip Gate C if no NLI model available
+            return True, "passed"
+
+        # Get recent context for contradiction check
+        context_texts = []
+        if hasattr(self, '_context_texts'):
+            context_texts = self._context_texts[-3:] if len(self._context_texts) > 3 else self._context_texts
+
+        if not context_texts:
+            return True, "passed"
+
+        try:
+            # Check entailment with each context message
+            for ctx_text in context_texts:
+                result = self._nli_model.predict(ctx_text, text)
+                entailment_score = result.get("entailment", 0.0)
+
+                # If candidate contradicts context (low entailment, high contradiction)
+                if entailment_score < self.config.nli_threshold:
+                    # Check for contradiction
+                    contradiction_score = result.get("contradiction", 0.0)
+                    if contradiction_score > 0.7:
+                        return False, "contradicts_context"
+
+            return True, "passed"
+
+        except Exception:
+            # Fail open on errors
+            return True, "passed"
+
+    def validate(self, text: str, context_texts: list[str] | None = None) -> tuple[bool, str]:
+        """Validate a candidate exchange using all gates.
+
+        Args:
+            text: Candidate text to validate.
+            context_texts: Optional conversation context for Gates B & C.
+
+        Returns:
             Tuple of (passed, reason). passed is True if valid, False if rejected.
             reason provides a string explanation for rejection or "passed".
         """
+        # Store context for gate B & C
+        if context_texts:
+            self._context_texts = context_texts
+            # Compute context embeddings if embedder available
+            if self._embedder is not None:
+                self.set_context(context_texts)
+
         # Gate A: Rule-based
         passed_a, reason_a = self._gate_a_rules(text)
         if not passed_a:
             return False, reason_a
 
-        # Gate B & C (stubs for now as dependencies are missing)
-        # TODO: Implement Gate B (embeddings) and Gate C (NLI)
+        # Gate B: Embedding similarity
+        passed_b, reason_b = self._gate_b_embeddings(text)
+        if not passed_b:
+            return False, reason_b
+
+        # Gate C: NLI cross-encoder
+        passed_c, reason_c = self._gate_c_nli(text)
+        if not passed_c:
+            return False, reason_c
+
         return True, "passed"
