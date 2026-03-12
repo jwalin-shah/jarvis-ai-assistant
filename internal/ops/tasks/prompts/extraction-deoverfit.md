@@ -1,6 +1,6 @@
 # Fix Extraction Overfitting
 
-You are working in the extraction-opt worktree at `/Users/jwalinshah/projects/jarvis-ai-assistant-extraction-opt`.
+You are working in the extraction-opt worktree at `/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant`.
 
 ## Problem
 

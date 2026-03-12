@@ -364,7 +364,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -538,7 +538,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -712,7 +712,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -886,7 +886,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -1060,7 +1060,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -1234,7 +1234,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -1408,7 +1408,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -1582,7 +1582,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -1756,7 +1756,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -1930,7 +1930,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -2104,7 +2104,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -2278,7 +2278,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -2452,7 +2452,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -2625,7 +2625,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -2798,7 +2798,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -2971,7 +2971,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -3144,7 +3144,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -3317,7 +3317,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -3473,7 +3473,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -3632,7 +3632,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -3790,7 +3790,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -3948,7 +3948,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -4106,7 +4106,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -4264,7 +4264,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -4425,7 +4425,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -4599,7 +4599,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -4773,7 +4773,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -4947,7 +4947,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -5121,7 +5121,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -5295,7 +5295,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -5489,7 +5489,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -5693,7 +5693,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -5897,7 +5897,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -6101,7 +6101,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -6305,7 +6305,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -6509,7 +6509,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -6703,7 +6703,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -6892,7 +6892,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -7081,7 +7081,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -7269,7 +7269,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -7457,7 +7457,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -7645,7 +7645,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -7824,7 +7824,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -7998,7 +7998,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -8172,7 +8172,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -8346,7 +8346,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -8512,7 +8512,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -8685,7 +8685,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -8869,7 +8869,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -9058,7 +9058,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -9247,7 +9247,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -9435,7 +9435,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -9623,7 +9623,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -9811,7 +9811,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -9990,7 +9990,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -10156,7 +10156,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -10330,7 +10330,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -10504,7 +10504,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -10678,7 +10678,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -10851,7 +10851,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -11025,7 +11025,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -11199,7 +11199,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -11372,7 +11372,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -11545,7 +11545,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -11718,7 +11718,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -11891,7 +11891,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -12075,7 +12075,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -12264,7 +12264,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -12453,7 +12453,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -12641,7 +12641,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -12829,7 +12829,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -13017,7 +13017,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -13188,7 +13188,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -13362,7 +13362,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -13536,7 +13536,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -13710,7 +13710,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -13884,7 +13884,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -14058,7 +14058,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -14224,7 +14224,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -14398,7 +14398,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -14571,7 +14571,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -14744,7 +14744,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -14917,7 +14917,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -15090,7 +15090,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -15264,7 +15264,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -15438,7 +15438,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -15612,7 +15612,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -15786,7 +15786,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -15960,7 +15960,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -16134,7 +16134,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -16328,7 +16328,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -16532,7 +16532,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -16736,7 +16736,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -16932,7 +16932,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -17136,7 +17136,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -17340,7 +17340,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -17524,7 +17524,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 0,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
           "label": "LFM2 350M"
         },
         "response": {
@@ -17698,7 +17698,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 1,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
           "label": "LFM2 700M (8bit)"
         },
         "response": {
@@ -17872,7 +17872,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 2,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
           "label": "LFM2.5 1.2B Instruct (current)"
         },
         "response": {
@@ -18046,7 +18046,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 3,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
           "label": "LFM2.5 1.2B Base"
         },
         "response": {
@@ -18220,7 +18220,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 4,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
           "label": "Qwen2.5 1.5B"
         },
         "response": {
@@ -18394,7 +18394,7 @@
         "promptId": "d68696b90244d62eee6da951be47850bcc646e72532f42df53257e5b16e721ee",
         "promptIdx": 5,
         "provider": {
-          "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+          "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
           "label": "Gemma-2 2B"
         },
         "response": {
@@ -18506,7 +18506,7 @@
     ],
     "providers": [
       {
-        "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
+        "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.3b",
         "label": "LFM2 350M",
         "config": {
           "temperature": 0.1,
@@ -18514,7 +18514,7 @@
         }
       },
       {
-        "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
+        "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-0.7b",
         "label": "LFM2 700M (8bit)",
         "config": {
           "temperature": 0.1,
@@ -18522,7 +18522,7 @@
         }
       },
       {
-        "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
+        "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b",
         "label": "LFM2.5 1.2B Instruct (current)",
         "config": {
           "temperature": 0.1,
@@ -18530,7 +18530,7 @@
         }
       },
       {
-        "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
+        "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model lfm-1.2b-base",
         "label": "LFM2.5 1.2B Base",
         "config": {
           "temperature": 0.1,
@@ -18538,7 +18538,7 @@
         }
       },
       {
-        "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
+        "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model qwen-1.5b",
         "label": "Qwen2.5 1.5B",
         "config": {
           "temperature": 0.1,
@@ -18546,7 +18546,7 @@
         }
       },
       {
-        "id": "exec:/Users/jwalinshah/projects/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
+        "id": "exec:/Users/jwalinshah/projects/assistant-stack/jarvis-ai-assistant/.venv/bin/python3 jarvis_provider.py --model gemma-2-2b",
         "label": "Gemma-2 2B",
         "config": {
           "temperature": 0.1,
