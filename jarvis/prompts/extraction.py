@@ -11,6 +11,8 @@ EXTRACTION_MODELS: dict[str, str] = {
     "1.2b": "models/lfm2-1.2b-extract-mlx-4bit",
     "0.7b": "models/lfm-0.7b-4bit",
     "350m": "models/lfm2-350m-extract-mlx-4bit",
+    # Qwen3.5 0.8B — general-purpose, available from HF cache
+    "qwen3": "mlx-community/Qwen3.5-0.8B-4bit",
 }
 
 # --- Single-Pass Triple Extraction ---

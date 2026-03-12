@@ -58,8 +58,9 @@ dependencies = [
 [project.optional-dependencies]
 macos = [
     "mlx>=0.22.0",
-    "mlx-lm>=0.30.6",
+    "mlx-lm>=0.31.1",
     "pyobjc>=12.1",
+    "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
 ]
 dev = [
     "pytest>=9.0.2",
@@ -118,6 +119,9 @@ Issues = "https://github.com/jwalinshah/jarvis-ai-assistant/issues"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["integrations", "models", "benchmarks", "jarvis", "api"]

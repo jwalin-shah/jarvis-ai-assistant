@@ -53,12 +53,12 @@ def get_memory_stats() -> tuple[float, float, float]:
                 except ValueError:
                     continue
 
-        free = stats.get("Pages free:", 0) * page_size
-        inactive = stats.get("Pages inactive:", 0) * page_size
-        speculative = stats.get("Pages speculative:", 0) * page_size
-        active = stats.get("Pages active:", 0) * page_size
-        wired = (stats.get("Pages wired down:", 0) or stats.get("Pages wired:", 0)) * page_size
-        compressed = stats.get("Pages occupied by compressor:", 0) * page_size
+        free = stats.get("Pages free", 0) * page_size
+        inactive = stats.get("Pages inactive", 0) * page_size
+        speculative = stats.get("Pages speculative", 0) * page_size
+        active = stats.get("Pages active", 0) * page_size
+        wired = (stats.get("Pages wired down", 0) or stats.get("Pages wired", 0)) * page_size
+        compressed = stats.get("Pages occupied by compressor", 0) * page_size
 
         total = free + inactive + speculative + active + wired + compressed
         available = free + inactive + speculative

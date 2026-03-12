@@ -25,6 +25,7 @@
   } from '../stores/keyboard';
   import { WS_HTTP_BASE } from '../api/websocket';
   import { jarvis } from '../socket/client';
+  import { healthStore } from '../stores/health';
   import SuggestionBar from './SuggestionBar.svelte';
   import MessageSkeleton from './MessageSkeleton.svelte';
   import ContactHoverCard from './ContactHoverCard.svelte';
@@ -856,6 +857,14 @@
         </h2>
       </div>
       <div class="header-actions">
+        {#if $healthStore.data?.model?.loaded}
+          <div class="model-badge" title="AI model loaded — click Settings to switch">
+            <span class="model-dot"></span>
+            <span class="model-name">
+              {$healthStore.data.model.display_name?.split('(')[0].trim() ?? 'AI Ready'}
+            </span>
+          </div>
+        {/if}
       </div>
     </div>
 
@@ -1047,6 +1056,34 @@
     display: flex;
     gap: var(--space-2);
     margin-left: auto;
+    align-items: center;
+  }
+
+  .model-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    background: var(--surface-elevated, var(--bg-secondary));
+    border: 1px solid var(--border-subtle, var(--border-color));
+    border-radius: var(--radius-full, 9999px);
+    font-size: var(--text-xs, 11px);
+    color: var(--text-tertiary, var(--text-secondary));
+    user-select: none;
+  }
+
+  .model-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-success, #34c759);
+    flex-shrink: 0;
+    animation: livePulse 2s ease-in-out infinite;
+  }
+
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.75); }
   }
 
   .messages {

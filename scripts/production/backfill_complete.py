@@ -319,6 +319,7 @@ def main() -> None:
 
                     if extraction_windows:
                         from jarvis.db.window_progress import (
+                            clear_window_progress,
                             get_completed_windows,
                             init_window_progress_table,
                             record_window_progress,
@@ -327,6 +328,8 @@ def main() -> None:
                         # Initialize window progress tracking
                         with db.connection() as conn:
                             init_window_progress_table(conn)
+                            if args.force:
+                                clear_window_progress(conn, chat_id)
                             completed_windows = get_completed_windows(conn, chat_id)
 
                         extractor = get_instruction_extractor(

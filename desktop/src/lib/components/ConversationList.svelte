@@ -24,6 +24,7 @@
   import { jarvis } from '../socket';
   import type { ConnectionInfo } from '../socket';
   import { formatParticipant } from '../db';
+  const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
   // Track focused conversation for keyboard navigation
   let focusedIndex = $state(-1);
@@ -40,6 +41,11 @@
   // Connection status (UX-01)
   let connectionInfo = $state<ConnectionInfo>(jarvis.getConnectionInfo());
   let unsubConnectionInfo: (() => void) | null = null;
+  const isServerConnected = $derived(
+    isTauri
+      ? connectionInfo.state === 'connected' || conversationsStore.connectionStatus === 'connected'
+      : conversationsStore.connectionStatus === 'connected'
+  );
 
   // Search filter state
   let searchQuery = $state('');
@@ -441,11 +447,11 @@
 <div class="conversation-list">
   <div class="header">
     <h2>Messages</h2>
-    {#if connectionInfo.state !== 'connected'}
+    {#if !isServerConnected}
       <span class="connection-badge disconnected" title="Disconnected from server">
         <span class="connection-dot"></span>
       </span>
-    {:else if connectionInfo.isFallback}
+    {:else if isTauri && connectionInfo.isFallback}
       <span class="connection-badge fallback" title="Using WebSocket fallback (Unix socket unavailable)">
         <span class="connection-dot"></span>
       </span>

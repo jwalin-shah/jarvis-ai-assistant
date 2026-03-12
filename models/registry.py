@@ -118,11 +118,20 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         description="LFM 2.5 700M with 4-bit quantization (local). Perfect for fact extraction.",
         recommended_for=["fact_extraction", "balanced"],
     ),
+    "qwen3-0.8b": ModelSpec(
+        id="qwen3-0.8b",
+        path="mlx-community/Qwen3.5-0.8B-4bit",
+        display_name="Qwen3.5 0.8B (4-bit)",
+        size_gb=0.63,
+        min_ram_gb=6,
+        quality_tier="excellent",
+        description="Qwen3.5 0.8B with 4-bit quantization. Excellent instruction following for iMessage replies.",
+        recommended_for=["quick_replies", "natural_conversation", "drafting", "iMessage"],
+    ),
 }
 
 # Default model ID when none specified
-# LFM 2.5 fine-tuned is the default for conversational use cases
-DEFAULT_MODEL_ID = "lfm-0.7b"
+DEFAULT_MODEL_ID = "qwen3-0.8b"
 
 
 def get_model_spec(model_id: str) -> ModelSpec | None:
@@ -164,12 +173,13 @@ def get_recommended_model(available_ram_gb: float) -> ModelSpec:
     Returns:
         The recommended ModelSpec for the system.
     """
-    # Sort models by quality tier (descending: excellent -> good -> basic)
+    # Sort models by quality tier (descending: excellent -> good -> basic),
+    # breaking ties by min_ram_gb ascending (prefer more efficient model),
+    # then by DEFAULT_MODEL_ID preference.
     tier_order = {"excellent": 3, "good": 2, "basic": 1}
     sorted_models = sorted(
         MODEL_REGISTRY.values(),
-        key=lambda m: tier_order[m.quality_tier],
-        reverse=True,
+        key=lambda m: (-tier_order[m.quality_tier], m.min_ram_gb, m.id != DEFAULT_MODEL_ID),
     )
 
     # Find the best model that fits

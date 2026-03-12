@@ -157,6 +157,13 @@ class ModelConfig:
             from models.registry import is_model_available
 
             return is_model_available(self.model_id)
+        # Check HF cache for direct HF-style paths (e.g. "org/model-name")
+        if "/" in self.model_path and not os.path.isabs(self.model_path):
+            from pathlib import Path as _Path
+
+            cache_dir = _Path.home() / ".cache" / "huggingface" / "hub"
+            model_cache_name = f"models--{self.model_path.replace('/', '--')}"
+            return (cache_dir / model_cache_name).exists()
         return False
 
     @property
@@ -921,6 +928,9 @@ class MLXModelLoader:
             response = response[len(formatted_prompt) :].strip()
 
         # --- ARTIFACT STRIPPING ---
+        # 0. Strip <think>...</think> blocks (Qwen3 / chain-of-thought models)
+        response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
+
         # 1. Strip timestamps like [11:05] or [11:05 AM]
         response = re.sub(r"\[\d{1,2}:\d{2}(?:\s?[APM]{2})?\]", "", response)
 

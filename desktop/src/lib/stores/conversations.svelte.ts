@@ -709,7 +709,13 @@ function refreshConversationNames() {
 }
 
 export async function initializePolling(): Promise<() => void> {
-  await initDatabases();
+  if (isTauri) {
+    try {
+      await initDatabases();
+    } catch {
+      // In Tauri, direct DB access can fail (e.g. permissions). Continue with HTTP/socket fallback.
+    }
+  }
   // Load pinned/archived state from localStorage
   conversationsStore.pinnedChats = loadPinnedChats();
   conversationsStore.archivedChats = loadArchivedChats();

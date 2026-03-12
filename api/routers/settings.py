@@ -44,7 +44,7 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 # Models to expose in the UI (subset of MODEL_REGISTRY)
 # Ordered from fastest/smallest to strongest quality.
-ENABLED_MODEL_IDS = ["lfm-350m", "lfm-0.7b", "lfm-1.2b-base", "lfm-1.2b"]
+ENABLED_MODEL_IDS = ["lfm-350m", "lfm-0.7b", "lfm-1.2b-base", "lfm-1.2b", "qwen3-0.8b"]
 
 
 def _get_enabled_models() -> list[ModelSpec]:

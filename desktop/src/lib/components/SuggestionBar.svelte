@@ -22,6 +22,13 @@
   let errorMessage = $state("");
   let abortController: AbortController | null = null;
   let runId = 0;
+  let streamStartTime = $state(0);
+  let streamTokenCount = $state(0);
+  let tokensPerSecond = $derived(
+    streamTokenCount > 0 && streamStartTime > 0
+      ? Math.round(streamTokenCount / ((Date.now() - streamStartTime) / 1000))
+      : 0
+  );
 
   // Allow more time for model loading + generation on Apple Silicon
   const STREAM_TIMEOUT_MS = 45000;
@@ -54,6 +61,8 @@
 
     barState = "streaming";
     streamingText = "";
+    streamStartTime = 0;
+    streamTokenCount = 0;
     errorMessage = "";
 
     try {
@@ -63,6 +72,8 @@
           { chat_id: chatId, context_messages: DRAFT_CONTEXT_MESSAGES },
           (token: string) => {
             if (currentRun !== runId) return;
+            if (streamingText === "") streamStartTime = Date.now();
+            streamTokenCount++;
             streamingText += token;
           }
         ),
@@ -211,6 +222,9 @@
     >
       {#if streamingText}
         <span class="streaming-text">{streamingText}<span class="cursor"></span></span>
+        {#if tokensPerSecond > 5}
+          <span class="tps-badge">{tokensPerSecond} tok/s</span>
+        {/if}
       {:else}
         <div class="typing-indicator">
           <span class="typing-dot"></span>
@@ -364,6 +378,15 @@
     50% {
       opacity: 0;
     }
+  }
+
+  .tps-badge {
+    font-size: 10px;
+    color: var(--color-success, #34c759);
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+    margin-left: 8px;
+    flex-shrink: 0;
   }
 
   .bar-content.loading {

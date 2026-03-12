@@ -15,7 +15,7 @@
 
   onMount(() => {
     fetchHealth();
-    startMetricsPolling(10000);
+    startMetricsPolling(3000);
   });
 
   onDestroy(() => {
@@ -129,15 +129,30 @@
 
     <div class="card">
       <div class="card-icon model" class:loaded={$healthStore.data?.model_loaded}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-        </svg>
+        {#if $healthStore.data && !$healthStore.data.model_loaded}
+          <span class="model-loading-ring"></span>
+        {:else}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+          </svg>
+        {/if}
       </div>
       <div class="card-content">
         <h3>AI Model</h3>
-        <p class="stat">{$healthStore.data?.model_loaded ? "Loaded" : "Not Loaded"}</p>
+        <p class="stat" class:loaded={$healthStore.data?.model_loaded}>
+          {#if !$healthStore.data}
+            Checking...
+          {:else if $healthStore.data.model_loaded}
+            ✓ Loaded
+          {:else}
+            Warming up...
+          {/if}
+        </p>
         <p class="sub">
           {$healthStore.data?.model?.display_name || "Unknown model"}
+          {#if $healthStore.data?.model?.quality_tier}
+            · <span class="quality-badge">{$healthStore.data.model.quality_tier}</span>
+          {/if}
         </p>
       </div>
     </div>
@@ -195,7 +210,7 @@
 
   <!-- Routing Metrics Section -->
   <div class="metrics-section">
-    <h2>Routing Metrics</h2>
+    <h2>Routing Metrics<span class="live-dot" aria-hidden="true"></span></h2>
 
     {#if $metricsStore.loading && !$metricsStore.summary}
       <div class="metrics-loading">
@@ -325,6 +340,22 @@
     font-size: 28px;
     font-weight: 600;
     margin-bottom: 24px;
+  }
+
+  .live-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-success, #34c759);
+    animation: livePulse 1.8s ease-in-out infinite;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.75); }
   }
 
   .cards {
