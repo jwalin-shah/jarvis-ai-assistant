@@ -25,8 +25,8 @@ from tqdm import tqdm
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset
-from evals.judge_config import JUDGE_MODEL, get_judge_client
+from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset  # noqa: E402
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
 BATCH_SIZE = 10
 RATE_LIMIT_DELAY = 2.1
@@ -296,9 +296,9 @@ def run_variant(
             results.append(result)
 
             status = "AI!" if anti_ai else "clean"
-            print(
-                f"[{start_idx + i + 1:2d}] [{ex.category:12s}] {status} | {score:.0f}/10 | {reply[:50]}"
-            )
+            formatted_reply = reply[:50]
+            idx_str = f"[{start_idx + i + 1:2d}]"
+            print(f"{idx_str} [{ex.category:12s}] {status} | {score:.0f}/10 | {formatted_reply}")
 
     # Calculate summary
     scores = [r.judge_score for r in results if r.judge_score is not None]
@@ -369,9 +369,9 @@ def main() -> int:
 
     for s in all_summaries:
         print(f"\n{s['name'].upper()}")
-        print(
-            f"  Config: context_depth={s['config']['context_depth']}, use_rag={s['config']['use_rag']}"
-        )
+        cdepth = s['config']['context_depth']
+        urag = s['config']['use_rag']
+        print(f"  Config: context_depth={cdepth}, use_rag={urag}")
         print(f"  Avg Score: {s['avg_score']:.2f}/10")
         print(f"  Anti-AI Rate: {s['anti_ai_rate']:.1%}")
         print(f"  Avg Latency: {s['avg_latency']:.0f}ms")
@@ -385,9 +385,9 @@ def main() -> int:
     print(f"🏆 WINNER: {winner['name'].upper()}")
     print("=" * 70)
     print(f"Score: {winner['avg_score']:.2f}/10")
-    print(
-        f"Config: context_depth={winner['config']['context_depth']}, use_rag={winner['config']['use_rag']}"
-    )
+    w_cdepth = winner['config']['context_depth']
+    w_urag = winner['config']['use_rag']
+    print(f"Config: context_depth={w_cdepth}, use_rag={w_urag}")
 
     # Save results
     output_path = PROJECT_ROOT / "results" / "ablation_context_rag.json"
