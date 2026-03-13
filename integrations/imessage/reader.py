@@ -1934,12 +1934,14 @@ class ChatDBReader:
 
         # Fetch missing GUIDs in chunks
         chunk_size = 900
-        for i in range(0, len(missing_guids), chunk_size):
-            chunk = missing_guids[i : i + chunk_size]
-            placeholders = ", ".join(["?"] * len(chunk))
-            query = f"SELECT ROWID, guid FROM message WHERE guid IN ({placeholders})"
+        # ⚡ Bolt Optimization: Move connection acquisition outside the chunking loop
+        # to prevent N+1 connection overhead and reuse the same connection for all batches.
+        with self._connection_context() as conn:
+            for i in range(0, len(missing_guids), chunk_size):
+                chunk = missing_guids[i : i + chunk_size]
+                placeholders = ", ".join(["?"] * len(chunk))
+                query = f"SELECT ROWID, guid FROM message WHERE guid IN ({placeholders})"
 
-            with self._connection_context() as conn:
                 cursor = conn.cursor()
                 try:
                     cursor.execute(query, chunk)
