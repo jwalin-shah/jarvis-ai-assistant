@@ -477,6 +477,7 @@ def is_english(text: str, threshold: float | None = None) -> bool:
             if lang_prob.lang == "en" and lang_prob.prob >= threshold:
                 return True
         # If no English detected with high probability, check if it's the top language
+        # Provide a safe fallback if threshold is not met but it's the top language
         if probs and probs[0].lang == "en":
             return True
         return False
