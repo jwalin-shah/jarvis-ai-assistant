@@ -125,6 +125,9 @@ packages = ["contracts", "integrations", "core", "models", "benchmarks", "jarvis
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+exclude = [
+    "internal/archive",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
