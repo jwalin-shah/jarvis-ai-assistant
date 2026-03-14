@@ -21,7 +21,9 @@ def main():
         sys.argv.extend(["--baseline", "internal/archive/evals/baselines/baseline_20260221.json"])
 
     if not has_candidate:
-        sys.argv.extend(["--candidate", "internal/archive/evals/results/eval_pipeline_baseline.json"])
+        sys.argv.extend(
+            ["--candidate", "internal/archive/evals/results/eval_pipeline_baseline.json"]
+        )
 
     # Intercept missing file errors gracefully when --allow-missing-candidate is set
     # Actually quality_gate.main() handles this internally, but it requires the
@@ -29,6 +31,7 @@ def main():
 
     # We should let the main method run
     sys.exit(quality_gate.main())
+
 
 if __name__ == "__main__":
     main()
