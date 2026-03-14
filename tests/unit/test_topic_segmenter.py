@@ -13,7 +13,6 @@ sys.modules["jarvis.embedding_adapter"] = mock_adapter
 # We need to ensure we import from the source, assuming it's in python path
 try:
     from jarvis.contracts.imessage import Message
-
     from jarvis.topics.topic_segmenter import segment_conversation
 except ImportError:
     # If not in path (e.g. running as script), assume we are in root
@@ -104,7 +103,7 @@ def test_segment_conversation_drifts():
         mock_get_embs.return_value = embeddings
 
         mock_tracker = MagicMock()
-        mock_tracker.get_anchors.return_value = set()
+        mock_tracker.get_anchors_batch.return_value = [set() for _ in range(n)]
         mock_get_tracker.return_value = mock_tracker
 
         mock_config_obj = MagicMock()
