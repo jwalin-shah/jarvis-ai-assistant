@@ -25,10 +25,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.judge_config import JUDGE_MODEL, get_judge_client
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
-from models.template_defaults import get_minimal_fallback_templates
-from models.templates import ResponseTemplate, TemplateMatcher
+from models.template_defaults import get_minimal_fallback_templates  # noqa: E402
+from models.templates import ResponseTemplate, TemplateMatcher  # noqa: E402
 
 
 def fetch_real_messages(limit: int = 100) -> list[dict]:
@@ -45,7 +45,7 @@ def fetch_real_messages(limit: int = 100) -> list[dict]:
         # Get diverse messages of different lengths
         cursor.execute(
             """
-            SELECT 
+            SELECT
                 m.text,
                 m.date,
                 c.display_name,
@@ -137,7 +137,11 @@ Rate each response on a scale of 1-10:
 
 Respond with ONLY a JSON array in this exact format:
 [
-  {{"score": <number>, "reasoning": "<brief explanation>", "better_alternative": "<suggested better response or null>"}},
+  {{
+    "score": <number>,
+    "reasoning": "<brief explanation>",
+    "better_alternative": "<suggested better alternative or null>"
+  }},
   ... (one object for each evaluation)
 ]
 """
@@ -170,9 +174,8 @@ Respond with ONLY a JSON array in this exact format:
                     }
                 )
 
-            print(
-                f"  ✓ Batch {i // batch_size + 1}/{(len(evaluations) + batch_size - 1) // batch_size} complete"
-            )
+            total_batches = (len(evaluations) + batch_size - 1) // batch_size
+            print(f"  ✓ Batch {i // batch_size + 1}/{total_batches} done")
 
             # Rate limit: 30 req/min = 2 sec between calls
             if i + batch_size < len(evaluations):
@@ -485,7 +488,8 @@ def main():
             if evaluations:
                 print(f"\n⚖️  Judging {len(evaluations)} template responses with Cerebras...")
                 print(
-                    f"   (Batch size: {args.batch_size}, Estimated time: {len(evaluations) // args.batch_size * 2.1:.0f}s)"
+                    f"   (Batch size: {args.batch_size}, "
+                    f"Est. time: {len(evaluations) // args.batch_size * 2.1:.0f}s)"
                 )
                 judge_results = batch_judge_templates(evaluations, client, args.batch_size)
         else:
