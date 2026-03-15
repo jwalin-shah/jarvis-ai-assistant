@@ -1,1 +1,1 @@
-"""JARVIS Benchmark Suite (Workstreams 1-4)."""
+"""JARVIS Benchmark Suite (Workstreams 1-4)."""  # noqa: E501
