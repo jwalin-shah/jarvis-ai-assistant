@@ -752,7 +752,7 @@ class RecoveryManager:
             target_path: Path for the vacuumed database.
         """
         with sqlite3.connect(str(self.db_path)) as conn:
-            conn.execute(f"VACUUM INTO '{target_path}'")
+            conn.execute("VACUUM INTO ?", (str(target_path),))
             logger.info("Vacuumed database into %s", target_path)
 
 
