@@ -58,20 +58,27 @@ class InstructionExtractorAdapter(ExtractorAdapter):
         if not text:
             return []
 
-        # Mock a message object
-        class MockMessage:
-            def __init__(self, text: str, is_from_me: bool) -> None:
-                self.text = text
-                self.is_from_me = is_from_me
-                self.sender_name = "User" if is_from_me else "Contact"
-                self.id = message_id
+        # Wrap in a segment using concrete Message contract
+        from jarvis.contracts.imessage import Message
 
-        # Wrap in a segment
         now = datetime.now()
+        msg = Message(
+            id=message_id,
+            chat_id="eval_chat",
+            sender="me" if is_from_me else "eval_contact",
+            sender_name="User" if is_from_me else "Contact",
+            text=text,
+            date=now,
+            is_from_me=is_from_me,
+            attachments=[],
+            reactions=[],
+            is_system_message=False,
+        )
+
         segment = TopicSegment(
             chat_id="eval_chat",
             contact_id="eval_contact",
-            messages=[MockMessage(text, is_from_me)],
+            messages=[msg],
             start_time=now,
             end_time=now,
             message_count=1,
