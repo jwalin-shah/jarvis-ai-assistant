@@ -49,7 +49,7 @@
 </script>
 
 {#if visible}
-  <div class="hover-card" style="left: {x}px; top: {y}px;" transition:fade={{ duration: 100 }}>
+  <div class="hover-card" role="tooltip" style="left: {x}px; top: {y}px;" transition:fade={{ duration: 100 }}>
     {#if loading}
       <div class="loading">
         <div class="spinner"></div>
