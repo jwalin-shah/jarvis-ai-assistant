@@ -147,7 +147,14 @@ def segment_conversation(
 
     segments: list[TopicSegment] = []
     current_chunk: list[Message] = [messages[0]]
-    current_segment_anchors: set[str] = anchor_tracker.get_anchors(messages[0].text or "")
+
+    # Pre-extract all message anchors using batched processing
+    message_texts = [m.text or "" for m in messages]
+    all_message_anchors = anchor_tracker.get_anchors_batch(message_texts)
+
+    current_segment_anchors: set[str] = (
+        all_message_anchors[0].copy() if all_message_anchors and all_message_anchors[0] else set()
+    )
 
     # Pre-compute drifts vectorized to avoid np.linalg.norm in loop
     drifts = np.zeros(n, dtype=np.float32)
@@ -191,7 +198,7 @@ def segment_conversation(
 
         # Signal 2: Entity Continuity (Jaccard) - are we still talking about same things?
         msg_text = curr_msg.text or ""
-        msg_anchors = anchor_tracker.get_anchors(msg_text)
+        msg_anchors = all_message_anchors[i]
 
         if current_segment_anchors and msg_anchors:
             intersection = len(msg_anchors & current_segment_anchors)

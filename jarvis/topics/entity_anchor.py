@@ -62,22 +62,36 @@ class EntityAnchorTracker:
         """Extract set of entity anchors from text."""
         if not text:
             return set()
+        return self.get_anchors_batch([text])[0]
 
-        doc = self.nlp(text)
-        anchors = set()
+    def get_anchors_batch(self, texts: list[str]) -> list[set[str]]:
+        """Extract sets of entity anchors from a list of texts.
 
-        # 1. Add detected entities (Contacts, Orgs, etc.)
-        for ent in doc.ents:
-            anchors.add(ent.text.lower())
+        Performance optimization: Uses nlp.pipe() for much faster batched processing.
+        """
+        if not texts:
+            return []
 
-        # 2. Add Noun Chunks (Span-based keywords)
-        # Filters out simple pronouns like "it", "me", "you"
-        for chunk in doc.noun_chunks:
-            chunk_text = chunk.root.text.lower()
-            if len(chunk_text) > 2 and chunk.root.pos_ != "PRON":
-                anchors.add(chunk_text)
+        results = []
+        # Process in batches for better performance
+        docs = self.nlp.pipe(texts, batch_size=50)
 
-        return anchors
+        for doc in docs:
+            anchors = set()
+
+            # 1. Add detected entities (Contacts, Orgs, etc.)
+            for ent in doc.ents:
+                anchors.add(ent.text.lower())
+
+            # 2. Add Noun Chunks (Span-based keywords)
+            for chunk in doc.noun_chunks:
+                chunk_text = chunk.root.text.lower()
+                if len(chunk_text) > 2 and chunk.root.pos_ != "PRON":
+                    anchors.add(chunk_text)
+
+            results.append(anchors)
+
+        return results
 
 
 _tracker = None
