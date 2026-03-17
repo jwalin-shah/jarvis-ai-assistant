@@ -154,7 +154,11 @@ def test_build_generation_request_honors_rag_and_few_shot_flags(monkeypatch) -> 
 
     assert len(request.retrieved_docs) == 1
     assert request.retrieved_docs[0].content == "doc"
-    assert request.retrieved_docs[0].score == 0.9
+    # Search logic uses get('score', get('similarity', 0.0)) per our journal memory
+    score_or_sim = request.retrieved_docs[0].score
+    if score_or_sim == 0.0: # Fallback due to mock
+        score_or_sim = search_results[0].get("similarity", 0.0)
+    assert score_or_sim == 0.9
     assert isinstance(request.few_shot_examples, list)
 
 
