@@ -308,11 +308,6 @@ class ContactMixin:
         Removes segments, facts, style, timing, drafts, and scheduled drafts.
         """
         with self.connection() as conn:
-            # Get chat_id before deletion for cache invalidation
-            cursor = conn.execute("SELECT chat_id FROM contacts WHERE id = ?", (contact_id,))
-            row = cursor.fetchone()
-            chat_id = row["chat_id"] if row else None
-
             # Delete conversation segments and related data
             conn.execute("DELETE FROM conversation_segments WHERE contact_id = ?", (contact_id,))
             # Delete dependent tables that reference contacts directly
