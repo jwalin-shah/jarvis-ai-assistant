@@ -116,8 +116,7 @@ class ContactMixin:
                 )
                 row = cursor.fetchone()
                 # Invalidate caches (always safe; stats cache is cheap to rebuild)
-                self._contact_cache.invalidate(("contact_id", row["id"]))
-                self._contact_cache.invalidate(("chat_id", chat_id))
+                self._contact_cache.clear()
                 self._stats_cache.invalidate("db_stats")
                 return Contact(
                     id=row["id"],
@@ -151,7 +150,8 @@ class ContactMixin:
                 created_at=now,
                 updated_at=now,
             )
-            # Invalidate stats cache since we added a new contact
+            # Invalidate caches
+            self._contact_cache.clear()
             self._stats_cache.invalidate("db_stats")
             return new_contact
 
@@ -217,13 +217,20 @@ class ContactMixin:
 
         Checks chat_id and phone_or_email fields.
         """
+        cache_key = ("handle", handle)
+        hit, cached = self._contact_cache.get(cache_key)
+        if hit:
+            return cached  # type: ignore[no-any-return]
+
         with self.connection() as conn:
             cursor = conn.execute(
                 f"SELECT {_CONTACT_COLUMNS} FROM contacts WHERE chat_id = ? OR phone_or_email = ?",  # nosec B608
                 (handle, handle),
             )
             row = cursor.fetchone()
-            return self._row_to_contact(row) if row else None
+            result = self._row_to_contact(row) if row else None
+            self._contact_cache.set(cache_key, result)
+            return result
 
     def get_contact_by_handles(self: _ContactMixinSelf, handles: list[str]) -> Contact | None:
         """Get first matching contact for any of the given handles.
@@ -233,6 +240,12 @@ class ContactMixin:
         """
         if not handles:
             return None
+
+        cache_key = ("handles", tuple(sorted(handles)))
+        hit, cached = self._contact_cache.get(cache_key)
+        if hit:
+            return cached  # type: ignore[no-any-return]
+
         with self.connection() as conn:
             placeholders = ",".join("?" for _ in handles)
             cursor = conn.execute(
@@ -243,10 +256,17 @@ class ContactMixin:
                 handles + handles,
             )
             row = cursor.fetchone()
-            return self._row_to_contact(row) if row else None
+            result = self._row_to_contact(row) if row else None
+            self._contact_cache.set(cache_key, result)
+            return result
 
     def get_contact_by_name(self: _ContactMixinSelf, name: str) -> Contact | None:
         """Get a contact by display name (case-insensitive partial match)."""
+        cache_key = ("name", name.lower())
+        hit, cached = self._contact_cache.get(cache_key)
+        if hit:
+            return cached  # type: ignore[no-any-return]
+
         with self.connection() as conn:
             # Try exact match first
             cursor = conn.execute(
@@ -257,7 +277,7 @@ class ContactMixin:
 
             if not row:
                 # Try partial match - escape wildcards for LIKE
-                escaped_name = name.replace("%", "\\%").replace("_", "\\_")
+                escaped_name = name.replace("%", r"\%").replace("_", r"\_")
                 cursor = conn.execute(
                     f"SELECT {_CONTACT_COLUMNS} FROM contacts "  # nosec B608
                     "WHERE LOWER(display_name) LIKE LOWER(?) ESCAPE '\\'",
@@ -266,7 +286,11 @@ class ContactMixin:
                 row = cursor.fetchone()
 
             if row:
-                return self._row_to_contact(row)
+                result = self._row_to_contact(row)
+                self._contact_cache.set(cache_key, result)
+                return result
+
+            self._contact_cache.set(cache_key, None)
             return None
 
     def list_contacts(self: _ContactMixinSelf, limit: int = 100) -> list[Contact]:
@@ -284,11 +308,6 @@ class ContactMixin:
         Removes segments, facts, style, timing, drafts, and scheduled drafts.
         """
         with self.connection() as conn:
-            # Get chat_id before deletion for cache invalidation
-            cursor = conn.execute("SELECT chat_id FROM contacts WHERE id = ?", (contact_id,))
-            row = cursor.fetchone()
-            chat_id = row["chat_id"] if row else None
-
             # Delete conversation segments and related data
             conn.execute("DELETE FROM conversation_segments WHERE contact_id = ?", (contact_id,))
             # Delete dependent tables that reference contacts directly
@@ -302,9 +321,7 @@ class ContactMixin:
 
             if deleted:
                 # Invalidate caches
-                self._contact_cache.invalidate(("contact_id", contact_id))
-                if chat_id:
-                    self._contact_cache.invalidate(("chat_id", chat_id))
+                self._contact_cache.clear()
                 self._stats_cache.invalidate("db_stats")
                 # Clear trigger pattern cache for this contact
                 self._trigger_pattern_cache.clear()  # Simpler than tracking individual keys
