@@ -10,21 +10,22 @@ Usage:
     uv run python evals/eval_pipeline.py --similarity      # + BERT cosine similarity
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import json
-import logging
-import os
-import sys
-import time
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from pathlib import Path
+import json  # noqa: E402
+import logging  # noqa: E402
+import os  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+# noqa: E402
 
 # Load .env
 _env_path = PROJECT_ROOT / ".env"
@@ -179,7 +180,7 @@ def _judge_single_item(judge_client: object, judge_model: str, ex: EvalExample, 
 
 
 def main() -> int:
-    import argparse
+    import argparse  # noqa: E402
 
     parser = argparse.ArgumentParser(description="JARVIS Eval Pipeline")
     parser.add_argument("--judge", action="store_true", help="Enable LLM judge scoring")
@@ -235,13 +236,13 @@ def main() -> int:
 
     # Initialize components
     print("Loading classifier...", flush=True)
-    from jarvis.classifiers.category_classifier import classify_category
-    from jarvis.classifiers.response_mobilization import classify_response_pressure
+    from jarvis.classifiers.category_classifier import classify_category  # noqa: E402
+    from jarvis.classifiers.response_mobilization import classify_response_pressure  # noqa: E402
 
     # Initialize reply service for generation
     print("Loading reply service...", flush=True)
-    from jarvis.contracts.pipeline import MessageContext
-    from jarvis.reply_service import ReplyService
+    from jarvis.contracts.pipeline import MessageContext  # noqa: E402
+    from jarvis.reply_service import ReplyService  # noqa: E402
 
     reply_service = ReplyService()
 
@@ -249,14 +250,14 @@ def main() -> int:
     embedder = None
     if args.similarity:
         print("Loading embedder for similarity...", flush=True)
-        from jarvis.embedding_adapter import get_embedder
+        from jarvis.embedding_adapter import get_embedder  # noqa: E402
 
         embedder = get_embedder()
 
     # Optional: judge
     judge_client = None
     if args.judge:
-        from evals.judge_config import JUDGE_MODEL, get_judge_client
+        from internal.archive.evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
         judge_client = get_judge_client()
         if judge_client is None:
@@ -319,7 +320,7 @@ def main() -> int:
         sim_score = None
         if embedder and generated and not generated.startswith("[ERROR"):
             try:
-                import numpy as np
+                import numpy as np  # noqa: E402
 
                 emb_gen = embedder.encode([generated])[0]
                 emb_ideal = embedder.encode([ex.ideal_response])[0]

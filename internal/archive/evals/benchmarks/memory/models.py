@@ -5,7 +5,7 @@ Workstream 1: Memory Profiler
 Defines the models and context lengths to profile for memory benchmarking.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass  # noqa: E402
 
 
 @dataclass(frozen=True)

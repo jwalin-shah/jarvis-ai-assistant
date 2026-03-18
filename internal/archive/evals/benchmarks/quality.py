@@ -12,16 +12,16 @@ Usage:
     uv run python -m evals.benchmarks.quality compare --model-a default --model-b new
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import json
-import logging
-import time
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from pathlib import Path
-from statistics import mean, median, stdev
-from typing import Any
+import json  # noqa: E402
+import logging  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
+from pathlib import Path  # noqa: E402
+from statistics import mean, median, stdev  # noqa: E402
+from typing import Any  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -285,7 +285,7 @@ class QualityBenchmark:
         """Lazy load quality gate."""
         if self._quality_gate is None:
             try:
-                from jarvis.quality.gates import QualityGate, QualityGateConfig
+                from jarvis.quality.gates import QualityGate, QualityGateConfig  # noqa: E402
 
                 config = QualityGateConfig(
                     hallucination_threshold=self._gate_threshold,
@@ -562,7 +562,7 @@ class ABTestFramework:
 
             # Approximate p-value (two-tailed)
             # Using normal approximation for simplicity
-            import math
+            import math  # noqa: E402
 
             p_value = 2 * (1 - 0.5 * (1 + math.erf(abs(t_stat) / math.sqrt(2))))
             return p_value
@@ -628,7 +628,7 @@ class HumanEvaluationIntegration:
 
         return output_path
 
-    def import_human_evaluations(self, evaluation_file: Path) -> list[tuple[str, dict[str, float]]]:
+    def import_human_evaluations(self, evaluation_file: Path) -> list[tuple[str, dict[str, float]]]:  # noqa: E402
         """Import human evaluations from a completed file.
 
         Args:
@@ -685,7 +685,7 @@ class HumanEvaluationIntegration:
 
 def main() -> None:
     """CLI entry point for quality benchmark."""
-    import argparse
+    import argparse  # noqa: E402
 
     parser = argparse.ArgumentParser(description="JARVIS Quality Benchmark")
     subparsers = parser.add_subparsers(dest="command", help="Commands")

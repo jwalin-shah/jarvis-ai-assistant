@@ -118,3 +118,41 @@ class BM25Searcher:
                     )
 
             return results
+
+    def to_dict(self) -> dict[str, Any]:
+        with self._lock:
+            data = {
+                "rowids": self._rowids,
+                "corpus": self._corpus,
+            }
+            if self._bm25 is not None:
+                # Extract BM25Okapi fields
+                bm = self._bm25
+                data["bm25"] = {
+                    "corpus_size": bm.corpus_size,
+                    "avgdl": bm.avgdl,
+                    "doc_freqs": [dict(df) for df in bm.doc_freqs],
+                    "idf": bm.idf,
+                    "doc_len": bm.doc_len,
+                    "average_idf": getattr(bm, "average_idf", 0.0),
+                }
+            return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> BM25Searcher:
+        searcher = cls()
+        searcher._rowids = data.get("rowids", [])
+        searcher._corpus = data.get("corpus", [])
+
+        bm25_data = data.get("bm25")
+        if bm25_data:
+            # Reconstruct BM25Okapi without tokenizing corpus again
+            searcher._bm25 = BM25Okapi([])
+            searcher._bm25.corpus_size = bm25_data["corpus_size"]
+            searcher._bm25.avgdl = bm25_data["avgdl"]
+            searcher._bm25.doc_freqs = bm25_data["doc_freqs"]
+            searcher._bm25.idf = bm25_data["idf"]
+            searcher._bm25.doc_len = bm25_data["doc_len"]
+            searcher._bm25.average_idf = bm25_data["average_idf"]
+
+        return searcher

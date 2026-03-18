@@ -6,19 +6,19 @@ Provides utilities for:
 - Exporting memory data for external analysis
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import json
-import os
-import time
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any
+import json  # noqa: E402
+import os  # noqa: E402
+import time  # noqa: E402
+from dataclasses import asdict, dataclass  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-import psutil
+import psutil  # noqa: E402
 
-from jarvis.metrics import MemorySampler, get_memory_sampler
+from jarvis.metrics import MemorySampler, get_memory_sampler  # noqa: E402
 
 # Constants
 BYTES_PER_MB = 1024 * 1024
@@ -43,7 +43,7 @@ class MemorySnapshot:
 def _get_metal_memory_mb() -> float:
     """Get Metal GPU memory if available."""
     try:
-        import mlx.core as mx
+        import mlx.core as mx  # noqa: E402
 
         return mx.metal.get_peak_memory() / BYTES_PER_MB
     except (ImportError, AttributeError):
@@ -52,7 +52,7 @@ def _get_metal_memory_mb() -> float:
 
 def _get_gc_objects() -> int:
     """Get count of tracked garbage collector objects."""
-    import gc
+    import gc  # noqa: E402
 
     return len(gc.get_objects())
 
@@ -289,7 +289,7 @@ def run_memory_watch(duration_seconds: int = 60, interval: float = 1.0) -> dict[
 
 def main() -> None:
     """Main entry point for dashboard CLI."""
-    import argparse
+    import argparse  # noqa: E402
 
     parser = argparse.ArgumentParser(description="JARVIS Memory Dashboard")
     parser.add_argument(

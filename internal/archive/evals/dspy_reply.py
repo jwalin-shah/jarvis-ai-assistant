@@ -9,15 +9,15 @@ Defines the optimization target that DSPy compiles against:
 - get_category_examples(): filter examples by category
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import json
-import re
+import json  # noqa: E402
+import re  # noqa: E402
 
-import dspy
+import dspy  # noqa: E402
 
-from evals.judge_config import JUDGE_MODEL
-from evals.judge_config import get_judge_client as _get_judge_client
+from internal.archive.evals.judge_config import JUDGE_MODEL  # noqa: E402
+from internal.archive.evals.judge_config import get_judge_client as _get_judge_client  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ class CategoryReplyModule(dspy.Module):
 # ---------------------------------------------------------------------------
 def _build_examples() -> list[dspy.Example]:
     """Convert batch_eval test cases into dspy.Examples for the trainset."""
-    from evals.batch_eval import TEST_CASES
+    from internal.archive.evals.batch_eval import TEST_CASES  # noqa: E402
 
     examples = []
     for tc in TEST_CASES:
@@ -181,7 +181,7 @@ def clean_reply(text: str) -> str:
 # Metric: LLM judge via Gemini 2.5 Flash (mirrors batch_eval.judge_response)
 # ---------------------------------------------------------------------------
 
-# _get_judge_client imported from evals.judge_config
+# _get_judge_client imported from internal.archive.evals.judge_config  # noqa: E402
 
 
 _judge_client = None

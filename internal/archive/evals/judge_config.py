@@ -1,19 +1,19 @@
 """Centralized LLM judge configuration for evals and scripts.
 
-All eval/script files should import from here instead of hardcoding
+All eval/script files should import from here instead of hardcoding  # noqa: E402
 model names and API endpoints. Change the judge model in ONE place.
 
 Usage:
-    from evals.judge_config import JUDGE_MODEL, get_judge_client
+    from internal.archive.evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
     client = get_judge_client()
     resp = client.chat.completions.create(model=JUDGE_MODEL, ...)
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import os
-from pathlib import Path
+import os  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 # Load .env from project root
 _env_path = Path(__file__).parent.parent / ".env"
@@ -72,6 +72,6 @@ def get_judge_client():
     key = os.environ.get(JUDGE_API_KEY_ENV, "")
     if not key or key == "your-key-here":
         return None
-    from openai import OpenAI
+    from openai import OpenAI  # noqa: E402
 
     return OpenAI(base_url=JUDGE_BASE_URL, api_key=key)

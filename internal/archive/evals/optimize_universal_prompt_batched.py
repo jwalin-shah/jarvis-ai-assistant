@@ -8,23 +8,28 @@ Usage:
     uv run python evals/optimize_universal_prompt_batched.py --judge
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import argparse
-import json
-import sys
-import time
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
+import argparse  # noqa: E402
+import json  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+# noqa: E402
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset
-from evals.judge_config import JUDGE_MODEL, get_judge_client
+from internal.archive.evals.eval_pipeline import (  # noqa: E402
+    EVAL_DATASET_PATH,
+    check_anti_ai,
+    load_eval_dataset,
+)
+from internal.archive.evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
 # Test different universal prompt variations
 PROMPT_VARIANTS = {
@@ -160,7 +165,7 @@ def test_prompt_variant_batched(
 ) -> PromptResult:
     """Test a single prompt variant with batching."""
 
-    from models.loader import get_model
+    from models.loader import get_model  # noqa: E402
 
     loader = get_model()
     if not loader.is_loaded():

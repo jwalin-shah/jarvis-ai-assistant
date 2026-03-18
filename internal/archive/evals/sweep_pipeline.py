@@ -5,19 +5,27 @@ Uses GPT-OSS-120B to generate an 'optimal' instruction for each depth,
 then runs evaluation on the student model.
 """
 
-import argparse
-import json
-import sys
-from pathlib import Path
+import argparse  # noqa: E402
+import json  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+# noqa: E402
 
-from evals.dspy_reply import TRAIN_EXAMPLES, clean_reply, judge_metric
-from evals.judge_config import JUDGE_MODEL, get_judge_client
-from models.loader import get_model
+from internal.archive.evals.dspy_reply import (  # noqa: E402  # noqa: E402
+    TRAIN_EXAMPLES,
+    clean_reply,
+    judge_metric,
+)
+from internal.archive.evals.judge_config import (  # noqa: E402  # noqa: E402
+    JUDGE_MODEL,
+    get_judge_client,
+)
+from models.loader import get_model  # noqa: E402  # noqa: E402
 
 
 def generate_optimized_instruction(depth: int, judge_client):
@@ -64,7 +72,7 @@ def run_eval(
         )
         reply = clean_reply(result.text)
 
-        from dspy import Prediction
+        from dspy import Prediction  # noqa: E402
 
         pred = Prediction(reply=reply)
 

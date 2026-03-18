@@ -14,21 +14,22 @@ Usage:
     uv run python evals/rag_eval.py --audit-sample 50  # Audit N random pairs
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import argparse
-import json
-import logging
-import os
-import sys
-import time
-from dataclasses import dataclass
-from pathlib import Path
+import argparse  # noqa: E402
+import json  # noqa: E402
+import logging  # noqa: E402
+import os  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+# noqa: E402
 
 # Load .env
 _env_path = PROJECT_ROOT / ".env"
@@ -39,7 +40,10 @@ if _env_path.exists():
             key, _, val = line.partition("=")
             os.environ.setdefault(key.strip(), val.strip())
 
-from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
+from internal.archive.evals.judge_config import (  # noqa: E402  # noqa: E402
+    JUDGE_MODEL,
+    get_judge_client,
+)
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -86,7 +90,7 @@ class PairAuditResult:
 # ---------------------------------------------------------------------------
 
 
-# get_judge_client imported from evals.judge_config
+# get_judge_client imported from internal.archive.evals.judge_config  # noqa: E402
 
 
 def judge_call(client, prompt: str) -> tuple[float, str]:
@@ -116,7 +120,7 @@ def judge_call(client, prompt: str) -> tuple[float, str]:
 
 def eval_retrieval_relevance(client, test_cases: list[dict]) -> list[RelevanceResult]:
     """Score whether retrieved trigger_texts are relevant to test case queries."""
-    from jarvis.search.vec_search import get_vec_searcher
+    from jarvis.search.vec_search import get_vec_searcher  # noqa: E402
 
     searcher = get_vec_searcher()
     results = []
@@ -178,9 +182,9 @@ def eval_retrieval_relevance(client, test_cases: list[dict]) -> list[RelevanceRe
 
 def eval_generation_ablation(client, test_cases: list[dict]) -> list[AblationResult]:
     """Compare generation quality WITH vs WITHOUT RAG examples."""
-    from evals.batch_eval import build_prompt, judge_response
-    from jarvis.search.vec_search import get_vec_searcher
-    from models.loader import get_model
+    from internal.archive.evals.batch_eval import build_prompt, judge_response  # noqa: E402
+    from jarvis.search.vec_search import get_vec_searcher  # noqa: E402
+    from models.loader import get_model  # noqa: E402
 
     searcher = get_vec_searcher()
     results = []
@@ -268,7 +272,7 @@ def eval_generation_ablation(client, test_cases: list[dict]) -> list[AblationRes
 
 def eval_pair_quality(client, sample_size: int = 50) -> list[PairAuditResult]:
     """Audit quality of stored trigger-response pairs in vec_chunks."""
-    from jarvis.db.core import JarvisDB
+    from jarvis.db.core import JarvisDB  # noqa: E402
 
     db = JarvisDB()
     db.connect()
@@ -363,7 +367,7 @@ def main() -> int:
         return 1
 
     # Load test cases
-    from evals.batch_eval import TEST_CASES
+    from internal.archive.evals.batch_eval import TEST_CASES  # noqa: E402
 
     print(f"Test cases: {len(TEST_CASES)}", flush=True)
     print(f"Judge: {JUDGE_MODEL} via DeepInfra", flush=True)

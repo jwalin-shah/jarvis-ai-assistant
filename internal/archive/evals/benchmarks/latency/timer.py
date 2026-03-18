@@ -6,18 +6,18 @@ Provides nanosecond-precision timing using time.perf_counter_ns()
 for accurate measurement of model operations.
 """
 
-import gc
-import time
-from collections.abc import Callable, Generator
-from contextlib import contextmanager
-from dataclasses import dataclass
-from typing import Any, TypeVar
+import gc  # noqa: E402
+import time  # noqa: E402
+from collections.abc import Callable, Generator  # noqa: E402
+from contextlib import contextmanager  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from typing import Any, TypeVar  # noqa: E402
 
 T = TypeVar("T")
 
-# MLX imports for GPU cache clearing
+# MLX imports for GPU cache clearing  # noqa: E402
 try:
-    import mlx.core as mx
+    import mlx.core as mx  # noqa: E402
 
     HAS_MLX = True
 except ImportError:

@@ -16,21 +16,22 @@ Usage:
     uv run python evals/dspy_optimize.py --eval-only --per-category  # Eval all categories
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import argparse
-import json
-import logging
-import os
-import sys
-import time
-from dataclasses import dataclass
-from pathlib import Path
+import argparse  # noqa: E402
+import json  # noqa: E402
+import logging  # noqa: E402
+import os  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+# noqa: E402
 
 # Load .env
 _env_path = PROJECT_ROOT / ".env"
@@ -41,10 +42,10 @@ if _env_path.exists():
             key, _, val = line.partition("=")
             os.environ.setdefault(key.strip(), val.strip())
 
-import dspy  # noqa: E402
+import dspy  # noqa: E402  # noqa: E402
 
-from evals.dspy_client import DSPYMLXClient  # noqa: E402
-from evals.dspy_reply import (  # noqa: E402
+from internal.archive.evals.dspy_client import DSPYMLXClient  # noqa: E402  # noqa: E402
+from internal.archive.evals.dspy_reply import (  # noqa: E402  # noqa: E402
     TRAIN_EXAMPLES,
     CategoryReplyModule,
     ReplyModule,
@@ -61,7 +62,11 @@ CATEGORY_SAVE_DIR = PROJECT_ROOT / "evals" / "optimized_categories"
 
 def build_teacher_lm() -> dspy.LM:
     """Cerebras ZAI GLM 4.7 as the teacher/demo generator."""
-    from evals.judge_config import JUDGE_BASE_URL, JUDGE_MODEL, get_judge_api_key
+    from internal.archive.evals.judge_config import (  # noqa: E402
+        JUDGE_BASE_URL,
+        JUDGE_MODEL,
+        get_judge_api_key,
+    )
 
     key = get_judge_api_key()
     return dspy.LM(
