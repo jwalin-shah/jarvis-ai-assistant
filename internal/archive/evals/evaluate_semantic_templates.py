@@ -25,9 +25,12 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.judge_config import JUDGE_MODEL, get_judge_client
-from models.template_defaults import get_minimal_fallback_templates
-from models.templates import ResponseTemplate, TemplateMatcher
+from internal.archive.evals.judge_config import (  # noqa: E402  # noqa: E402
+    JUDGE_MODEL,
+    get_judge_client,
+)
+from models.template_defaults import get_minimal_fallback_templates  # noqa: E402  # noqa: E402
+from models.templates import ResponseTemplate, TemplateMatcher  # noqa: E402  # noqa: E402
 
 
 def fetch_real_messages(limit: int = 100) -> list[dict]:
@@ -44,7 +47,7 @@ def fetch_real_messages(limit: int = 100) -> list[dict]:
         # Get diverse messages of different lengths
         cursor.execute(
             """
-            SELECT 
+            SELECT
                 m.text,
                 m.date,
                 c.display_name,

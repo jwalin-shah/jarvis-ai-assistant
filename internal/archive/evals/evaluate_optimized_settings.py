@@ -9,11 +9,18 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402  # noqa: E402
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, EvalExample, load_eval_dataset
-from evals.judge_config import JUDGE_MODEL, get_judge_client
-from models.loader import get_model
+from internal.archive.evals.eval_pipeline import (  # noqa: E402  # noqa: E402
+    EVAL_DATASET_PATH,
+    EvalExample,
+    load_eval_dataset,
+)
+from internal.archive.evals.judge_config import (  # noqa: E402  # noqa: E402
+    JUDGE_MODEL,
+    get_judge_client,
+)
+from models.loader import get_model  # noqa: E402  # noqa: E402
 
 # Configuration
 NUM_EXAMPLES = 20  # Small batch for quick eval
