@@ -117,34 +117,34 @@
   </div>
 
   <div class="controls">
-    <button class="control-btn" on:click={stepBackward} title="Step Backward">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+    <button class="control-btn" on:click={stepBackward} title="Step Backward" aria-label="Step Backward">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
         <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
       </svg>
     </button>
 
-    <button class="control-btn play-btn" on:click={togglePlay} title={isPlaying ? "Pause" : "Play"}>
+    <button class="control-btn play-btn" on:click={togglePlay} title={isPlaying ? "Pause" : "Play"} aria-label={isPlaying ? "Pause" : "Play"}>
       {#if isPlaying}
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
           <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
         </svg>
       {:else}
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
           <path d="M8 5v14l11-7z"/>
         </svg>
       {/if}
     </button>
 
-    <button class="control-btn" on:click={stepForward} title="Step Forward">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+    <button class="control-btn" on:click={stepForward} title="Step Forward" aria-label="Step Forward">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
         <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
       </svg>
     </button>
 
     <div class="divider"></div>
 
-    <button class="control-btn" on:click={reset} title="Reset to Present">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+    <button class="control-btn" on:click={reset} title="Reset to Present" aria-label="Reset to Present">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
         <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
       </svg>
     </button>
