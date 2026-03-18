@@ -8,25 +8,25 @@ This module discovers common message patterns by:
 4. Extracting representative templates from clusters
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import argparse
-import json
-import logging
-import sqlite3
-import sys
-import time
-from dataclasses import asdict, dataclass
-from pathlib import Path
-from typing import Any
+import argparse  # noqa: E402
+import json  # noqa: E402
+import logging  # noqa: E402
+import sqlite3  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import asdict, dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-import numpy as np
-from sklearn.cluster import DBSCAN
-from tqdm import tqdm
+import numpy as np  # noqa: E402
+from sklearn.cluster import DBSCAN  # noqa: E402
+from tqdm import tqdm  # noqa: E402
 
-# Conditional imports for sentence transformers
+# Conditional imports for sentence transformers  # noqa: E402
 try:
-    from sentence_transformers import SentenceTransformer
+    from sentence_transformers import SentenceTransformer  # noqa: E402
 
     HAS_SENTENCE_TRANSFORMERS = True
 except ImportError:

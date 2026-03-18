@@ -13,18 +13,23 @@ Usage:
     uv run python evals/speculative_benchmark.py --num-draft-tokens 5
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import json
-import sys
-import time
-from dataclasses import dataclass
-from pathlib import Path
+import json  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+# noqa: E402
 
-from evals.batch_eval import TEST_CASES, build_prompt, check_result  # noqa: E402
+from internal.archive.evals.batch_eval import (  # noqa: E402  # noqa: E402
+    TEST_CASES,
+    build_prompt,
+    check_result,
+)
 
 
 @dataclass
@@ -153,7 +158,7 @@ def print_comparison(baseline: list[BenchmarkResult], speculative: list[Benchmar
 
 
 def main() -> int:
-    import argparse
+    import argparse  # noqa: E402
 
     parser = argparse.ArgumentParser(description="Speculative Decoding Benchmark")
     parser.add_argument(
@@ -173,7 +178,7 @@ def main() -> int:
     print()
 
     # Load target model
-    from models.loader import MLXModelLoader
+    from models.loader import MLXModelLoader  # noqa: E402
 
     loader = MLXModelLoader()
     print("Loading target model...")

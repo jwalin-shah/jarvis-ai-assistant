@@ -6,12 +6,12 @@ Implements the HallucinationEvaluator protocol from contracts/hallucination.py
 using the vectara/hallucination_evaluation_model from HuggingFace.
 """
 
-import logging
-from datetime import UTC, datetime
-from statistics import mean, median, stdev
-from typing import Any, Protocol, runtime_checkable
+import logging  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
+from statistics import mean, median, stdev  # noqa: E402
+from typing import Any, Protocol, runtime_checkable  # noqa: E402
 
-from jarvis.contracts.hallucination import HHEMBenchmarkResult, HHEMResult
+from jarvis.contracts.hallucination import HHEMBenchmarkResult, HHEMResult  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class VectaraHHEMModel:
         if self._model is None:
             logger.info("Loading HHEM model: vectara/hallucination_evaluation_model")
             try:
-                from sentence_transformers import CrossEncoder
+                from sentence_transformers import CrossEncoder  # noqa: E402
 
                 self._model = CrossEncoder("vectara/hallucination_evaluation_model")
             except Exception as e:

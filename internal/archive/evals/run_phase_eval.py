@@ -6,12 +6,12 @@ Modes:
 - candidate: run eval_pipeline and check against baseline via quality gate
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import argparse
-import subprocess
-import sys
-from pathlib import Path
+import argparse  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 

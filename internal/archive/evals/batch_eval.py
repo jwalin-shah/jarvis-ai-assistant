@@ -10,20 +10,21 @@ Usage:
     uv run python evals/batch_eval.py --judge       # + LLM judge scoring
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import json
-import logging
-import os
-import sys
-import time
-from dataclasses import dataclass
-from pathlib import Path
+import json  # noqa: E402
+import logging  # noqa: E402
+import os  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+# noqa: E402
 
 # Load .env
 _env_path = PROJECT_ROOT / ".env"
@@ -38,8 +39,10 @@ if _env_path.exists():
 # Constants
 # ---------------------------------------------------------------------------
 
-from evals.judge_config import JUDGE_MODEL  # noqa: E402
-from evals.judge_config import get_judge_client as _get_judge_client  # noqa: E402
+from internal.archive.evals.judge_config import JUDGE_MODEL  # noqa: E402  # noqa: E402
+from internal.archive.evals.judge_config import (
+    get_judge_client as _get_judge_client,  # noqa: E402  # noqa: E402
+)
 
 ANTI_AI_PHRASES = [
     "i'd be happy to",
@@ -672,7 +675,7 @@ def check_result(tc: dict, output: str) -> tuple[list[str], list[str]]:
 
 
 def main() -> int:
-    import argparse
+    import argparse  # noqa: E402
 
     parser = argparse.ArgumentParser(description="JARVIS Batch Eval")
     parser.add_argument(
@@ -721,9 +724,9 @@ def main() -> int:
     loader = None
 
     # Set MLX memory limits early to prevent swap thrashing on 8GB systems.
-    # loader.load() also sets these, but we set them before any MLX import
+    # loader.load() also sets these, but we set them before any MLX import  # noqa: E402
     # to guard against accidental early allocation.
-    from models.memory_config import apply_embedder_limits
+    from models.memory_config import apply_embedder_limits  # noqa: E402
 
     apply_embedder_limits()
 
@@ -736,9 +739,10 @@ def main() -> int:
         print("Loading DSPy compiled program...", flush=True)
         load_start = time.perf_counter()
         try:
-            import dspy
-            from evals.dspy_client import DSPYMLXClient
-            from evals.dspy_reply import ReplyModule
+            import dspy  # noqa: E402
+
+            from internal.archive.evals.dspy_client import DSPYMLXClient  # noqa: E402
+            from internal.archive.evals.dspy_reply import ReplyModule  # noqa: E402
 
             student_lm = DSPYMLXClient(max_tokens=50, temperature=0.1)
             dspy.configure(lm=student_lm)
@@ -753,7 +757,7 @@ def main() -> int:
         print("Loading MLX model...", flush=True)
         load_start = time.perf_counter()
         try:
-            from models.loader import get_model
+            from models.loader import get_model  # noqa: E402
 
             loader = get_model()
             if not loader.is_loaded():

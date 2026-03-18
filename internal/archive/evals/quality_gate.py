@@ -8,14 +8,14 @@ Supported input formats:
 2) Normalized baseline/candidate JSON with top-level `metrics` object
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import argparse
-import json
-import sys
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
+import argparse  # noqa: E402
+import json  # noqa: E402
+import sys  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
 
 @dataclass(frozen=True)

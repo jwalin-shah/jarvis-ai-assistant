@@ -6,27 +6,27 @@ Implements the MemoryProfiler protocol from contracts/memory.py.
 Measures RSS, virtual memory, and Metal GPU memory during model loading.
 """
 
-import gc
-import logging
-import time
-from datetime import UTC, datetime
-from typing import Any
+import gc  # noqa: E402
+import logging  # noqa: E402
+import time  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
+from typing import Any  # noqa: E402
 
-import psutil
+import psutil  # noqa: E402
 
-from jarvis.contracts.memory import MemoryProfile
+from jarvis.contracts.memory import MemoryProfile  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 # MLX is only available on Apple Silicon
-# Use lazy imports to allow testing on other platforms
+# Use lazy imports to allow testing on other platforms  # noqa: E402
 _mlx_available = False
 _mx: Any = None
 _load: Any = None
 
 try:
-    import mlx.core as _mx_module
-    from mlx_lm import load as _load_module
+    import mlx.core as _mx_module  # noqa: E402
+    from mlx_lm import load as _load_module  # noqa: E402
 
     _mx = _mx_module
     _load = _load_module
@@ -264,7 +264,7 @@ class MLXMemoryProfiler:
             load_time = time.perf_counter() - start_time
 
             # Run a generation to allocate KV cache
-            from mlx_lm import generate
+            from mlx_lm import generate  # noqa: E402
 
             _ = generate(
                 model=model,

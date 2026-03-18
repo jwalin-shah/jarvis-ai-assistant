@@ -10,23 +10,28 @@ Usage:
     uv run python evals/ablation_context_rag.py --judge
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import argparse
-import json
-import sys
-import time
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
+import argparse  # noqa: E402
+import json  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+# noqa: E402
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset
-from evals.judge_config import JUDGE_MODEL, get_judge_client
+from internal.archive.evals.eval_pipeline import (  # noqa: E402
+    EVAL_DATASET_PATH,
+    check_anti_ai,
+    load_eval_dataset,
+)
+from internal.archive.evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
 BATCH_SIZE = 10
 RATE_LIMIT_DELAY = 2.1
@@ -141,7 +146,7 @@ def generate_batch(
     results = []
 
     for ex in examples:
-        import time
+        import time  # noqa: E402
 
         start = time.perf_counter()
 
@@ -248,7 +253,7 @@ def run_variant(
 ) -> tuple[list[AblationResult], dict]:
     """Run ablation for a single variant."""
 
-    from models.loader import get_model
+    from models.loader import get_model  # noqa: E402
 
     loader = get_model()
     if not loader.is_loaded():

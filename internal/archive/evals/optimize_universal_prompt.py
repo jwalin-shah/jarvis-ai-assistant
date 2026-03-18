@@ -8,17 +8,18 @@ Usage:
     uv run python evals/optimize_universal_prompt.py --trials 10 --depths 3,5,10
 """
 
-import argparse
-import sys
-from pathlib import Path
+import argparse  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-import dspy
+import dspy  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+# noqa: E402
 
-from evals.dspy_client import DSPYMLXClient
-from evals.dspy_reply import (
+from internal.archive.evals.dspy_client import DSPYMLXClient  # noqa: E402
+from internal.archive.evals.dspy_reply import (  # noqa: E402
     TRAIN_EXAMPLES,
     judge_metric,
 )
@@ -123,7 +124,11 @@ def prepare_trainset(depth: int):
 
 
 def build_teacher_lm():
-    from evals.judge_config import JUDGE_BASE_URL, JUDGE_MODEL, get_judge_api_key
+    from internal.archive.evals.judge_config import (  # noqa: E402
+        JUDGE_BASE_URL,
+        JUDGE_MODEL,
+        get_judge_api_key,
+    )
 
     key = get_judge_api_key()
     # Teacher models (Cerebras) can handle JSON/Chat via ChatAdapter

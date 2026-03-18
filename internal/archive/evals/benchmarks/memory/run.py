@@ -5,19 +5,19 @@ Usage: python -m benchmarks.memory.run --output results/memory.json
 Workstream 1: Memory Profiler
 """
 
-import argparse
-import json
-import logging
-import sys
-from dataclasses import asdict
-from pathlib import Path
+import argparse  # noqa: E402
+import json  # noqa: E402
+import logging  # noqa: E402
+import sys  # noqa: E402
+from dataclasses import asdict  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from evals.benchmarks.memory.models import (
+from internal.archive.evals.benchmarks.memory.models import (  # noqa: E402
     CONTEXT_LENGTHS,
     get_default_model,
     get_models_for_profiling,
 )
-from evals.benchmarks.memory.profiler import MLXMemoryProfiler
+from internal.archive.evals.benchmarks.memory.profiler import MLXMemoryProfiler  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ def main() -> int:
 
     # Determine models to profile
     if args.model:
-        from evals.benchmarks.memory.models import ModelSpec
+        from internal.archive.evals.benchmarks.memory.models import ModelSpec  # noqa: E402
 
         models = [
             ModelSpec(

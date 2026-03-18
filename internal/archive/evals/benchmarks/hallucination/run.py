@@ -5,18 +5,18 @@ Usage: python -m benchmarks.hallucination.run --output results/hhem.json
 Workstream 2: HHEM Hallucination Benchmark
 """
 
-import argparse
-import json
-import sys
-from pathlib import Path
+import argparse  # noqa: E402
+import json  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from evals.benchmarks.hallucination.datasets import (
+from internal.archive.evals.benchmarks.hallucination.datasets import (  # noqa: E402
     generate_grounded_pairs,
     generate_hallucinated_pairs,
     generate_mixed_dataset,
     get_dataset_metadata,
 )
-from evals.benchmarks.hallucination.hhem import get_evaluator
+from internal.archive.evals.benchmarks.hallucination.hhem import get_evaluator  # noqa: E402
 
 
 def main() -> int:

@@ -11,24 +11,24 @@ Usage:
     uv run python evals/evaluate_templates.py [--limit 50]
 """
 
-import argparse
-import json
-import random
-import sys
-import time
-from pathlib import Path
+import argparse  # noqa: E402
+import json  # noqa: E402
+import random  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+# noqa: E402
 
-from evals.judge_config import JUDGE_MODEL, get_judge_client
-
-from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES
+from internal.archive.evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
+from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES  # noqa: E402
 
 
 def fetch_real_messages(limit: int = 50) -> list[dict]:
     """Fetch real acknowledge/closing messages from chat.db."""
-    import sqlite3
+    import sqlite3  # noqa: E402
 
     chat_db = Path.home() / "Library" / "Messages" / "chat.db"
     if not chat_db.exists():
@@ -43,7 +43,7 @@ def fetch_real_messages(limit: int = 50) -> list[dict]:
         # Heuristic: short messages (2-15 chars) or common patterns
         cursor.execute(
             """
-            SELECT 
+            SELECT
                 m.text,
                 m.date,
                 c.display_name,
@@ -152,7 +152,7 @@ def analyze_user_style(messages: list[dict]) -> dict:
     all_texts = [m["text"].lower() for m in messages]
 
     # Count common patterns
-    from collections import Counter
+    from collections import Counter  # noqa: E402
 
     # Find acknowledgments they use
     ack_patterns = [

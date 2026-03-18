@@ -14,26 +14,30 @@ Usage:
     python -m benchmarks.classifier.classifier_benchmark --benchmark throughput
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import argparse
-import gc
-import json
-import logging
-import statistics
-import sys
-import tracemalloc
-from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
-from pathlib import Path
-from typing import Any
+import argparse  # noqa: E402
+import gc  # noqa: E402
+import json  # noqa: E402
+import logging  # noqa: E402
+import statistics  # noqa: E402
+import sys  # noqa: E402
+import tracemalloc  # noqa: E402
+from collections.abc import Callable  # noqa: E402
+from dataclasses import asdict, dataclass, field  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-import numpy as np
+import numpy as np  # noqa: E402
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
-from evals.benchmarks.latency.timer import HighPrecisionTimer, force_model_unload, warmup_timer
+from internal.archive.evals.benchmarks.latency.timer import (  # noqa: E402
+    HighPrecisionTimer,
+    force_model_unload,
+    warmup_timer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -502,7 +506,7 @@ def benchmark_v1_classifier(messages: list[str], batch_size: int = 64) -> Benchm
     Returns:
         BenchmarkResult with all measurements.
     """
-    from jarvis.classifiers.response_classifier import (
+    from jarvis.classifiers.response_classifier import (  # noqa: E402
         get_response_classifier,
         reset_response_classifier,
     )
