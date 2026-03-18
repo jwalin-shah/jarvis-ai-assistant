@@ -128,7 +128,7 @@ Rate this response on a scale of 1-10:
 - 1-2: Very bad, completely wrong
 
 Respond with ONLY a JSON object:
-{{"score": <number>, "reasoning": "<brief explanation>", "better_alternative": "<suggested better response or null>"}}
+{{"score": <number>, "reasoning": "<brief explanation>", "better_alternative": "<suggested>"}}
 """
 
     try:
