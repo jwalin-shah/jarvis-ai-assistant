@@ -110,7 +110,7 @@ def get_gpu_load_percent() -> float | None:
         # Use powermetrics to get GPU load. Requires sudo or specific permissions.
         # Alternatively, use a faster but less reliable system_profiler check.
         # For now, we'll try a fast sysctl check for GPU activity.
-        subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True)  # nosec B603 B607
+        subprocess.check_output(["/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"], text=True)  # nosec B603
 
         # If Apple Silicon, we might be able to get it via some IOKit hooks
         # but for a CLI tool, powermetrics is the standard way.
@@ -234,7 +234,7 @@ def get_macos_memory_pressure() -> MacOSMemoryPressure | None:
 
     try:
         # Parse vm_stat
-        vm_stat = subprocess.check_output(["vm_stat"], text=True)  # nosec B603 B607
+        vm_stat = subprocess.check_output(["/usr/bin/vm_stat"], text=True)  # nosec B603
         stats = {}
         for line in vm_stat.splitlines():
             match = re.match(r'"?([^"]+)"?:\s+(\d+)', line)
@@ -254,7 +254,9 @@ def get_macos_memory_pressure() -> MacOSMemoryPressure | None:
                         break
 
         # Get sysctl metrics
-        sysctl = subprocess.check_output(["sysctl", "vm.memory_pressure"], text=True).strip()  # nosec B603 B607
+        sysctl = subprocess.check_output(  # nosec B603
+            ["/usr/sbin/sysctl", "vm.memory_pressure"], text=True
+        ).strip()
         pressure_level = int(sysctl.split(":")[-1].strip())
 
         # Calculate metrics
@@ -296,15 +298,15 @@ def get_thermal_state() -> str | None:
     try:
         # Try kern.thermal_level first
         try:
-            sysctl = subprocess.check_output(  # nosec B603 B607
-                ["sysctl", "-n", "kern.thermal_level"], text=True
+            sysctl = subprocess.check_output(  # nosec B603
+                ["/usr/sbin/sysctl", "-n", "kern.thermal_level"], text=True
             ).strip()
             level = int(sysctl)
         except Exception:
             # Fallback for some Apple Silicon versions: thermal_threshold
             # Note: thermal_threshold is usually 0-100 where higher is hotter
-            sysctl = subprocess.check_output(  # nosec B603 B607
-                ["sysctl", "-n", "machdep.xcpm.thermal_threshold"], text=True
+            sysctl = subprocess.check_output(  # nosec B603
+                ["/usr/sbin/sysctl", "-n", "machdep.xcpm.thermal_threshold"], text=True
             ).strip()
             # Convert 0-100 scale to 0-3 scale
             val = int(sysctl)

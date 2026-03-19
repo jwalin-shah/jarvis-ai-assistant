@@ -22,7 +22,7 @@ def _get_memory_fast() -> tuple[float, float, float]:
     logger = logging.getLogger(__name__)
     try:
         result = subprocess.run(
-            ["vm_stat"],
+            ["/usr/bin/vm_stat"],  # nosec B603
             capture_output=True,
             text=True,
             timeout=2,
