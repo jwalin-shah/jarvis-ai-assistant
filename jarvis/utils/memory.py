@@ -254,7 +254,9 @@ def get_macos_memory_pressure() -> MacOSMemoryPressure | None:
                         break
 
         # Get sysctl metrics
-        sysctl = subprocess.check_output(["/usr/sbin/sysctl", "vm.memory_pressure"], text=True).strip()  # nosec B603
+        sysctl = subprocess.check_output(  # nosec B603
+            ["/usr/sbin/sysctl", "vm.memory_pressure"], text=True
+        ).strip()
         pressure_level = int(sysctl.split(":")[-1].strip())
 
         # Calculate metrics
