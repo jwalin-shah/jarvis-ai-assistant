@@ -21,9 +21,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.judge_config import JUDGE_MODEL, get_judge_client
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
-from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES
+from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES  # noqa: E402
 
 
 def fetch_real_messages(limit: int = 50) -> list[dict]:
@@ -127,7 +127,7 @@ Rate this response on a scale of 1-10:
 
 Respond with ONLY a JSON object:
 {{"score": <number>, "reasoning": "<brief explanation>", "better_alternative": "<suggested better response or null>"}}
-"""
+"""  # noqa: E501
 
     try:
         resp = client.chat.completions.create(
