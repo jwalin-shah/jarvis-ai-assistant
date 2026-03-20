@@ -29,7 +29,9 @@ class EntityAnchorTracker:
             import subprocess  # nosec B404
             import sys
 
-            subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"], check=True)  # nosec B603 B607
+            subprocess.run(  # nosec B603 B607
+                [sys.executable, "-m", "spacy", "download", "en_core_web_sm"], check=True
+            )
             self.nlp = spacy.load("en_core_web_sm", disable=["ner"])
 
         # 2. Add custom EntityRuler for high-precision local matching
