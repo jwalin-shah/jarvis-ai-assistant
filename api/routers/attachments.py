@@ -84,7 +84,7 @@ def _generate_thumbnail_with_sips(source_path: Path, max_pixels: int = 1024) -> 
 
         result = subprocess.run(
             [
-                "sips",
+                "/usr/bin/sips",
                 "-s",
                 "format",
                 "jpeg",

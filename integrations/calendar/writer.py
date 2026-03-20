@@ -63,7 +63,7 @@ class CalendarWriterImpl:
             # We just check if Calendar is accessible; actual write permission
             # is granted when creating events
             result = subprocess.run(
-                ["osascript", "-e", 'tell application "Calendar" to name of calendars'],
+                ["/usr/bin/osascript", "-e", 'tell application "Calendar" to name of calendars'],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -152,7 +152,7 @@ class CalendarWriterImpl:
 
         try:
             result = subprocess.run(
-                ["osascript", "-e", script],
+                ["/usr/bin/osascript", "-e", script],
                 capture_output=True,
                 text=True,
                 timeout=30,

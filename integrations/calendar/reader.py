@@ -89,7 +89,7 @@ class CalendarReaderImpl:
         try:
             # Try a simple AppleScript command
             result = subprocess.run(
-                ["osascript", "-e", 'tell application "Calendar" to name of calendars'],
+                ["/usr/bin/osascript", "-e", 'tell application "Calendar" to name of calendars'],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -128,7 +128,7 @@ class CalendarReaderImpl:
 
         try:
             result = subprocess.run(
-                ["osascript", "-e", LIST_CALENDARS_SCRIPT],
+                ["/usr/bin/osascript", "-e", LIST_CALENDARS_SCRIPT],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -191,7 +191,7 @@ class CalendarReaderImpl:
 
         try:
             result = subprocess.run(
-                ["osascript", "-e", script],
+                ["/usr/bin/osascript", "-e", script],
                 capture_output=True,
                 text=True,
                 timeout=60,
