@@ -341,7 +341,7 @@ end tell
         try:
             logger.info("Sending iMessage to %s", target_desc)
             subprocess.run(
-                ["osascript", "-e", script],
+                ["/usr/bin/osascript", "-e", script],
                 capture_output=True,
                 check=True,
                 text=True,

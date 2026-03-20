@@ -382,7 +382,7 @@ def cmd_ner(args: argparse.Namespace) -> int:
             console.print(f"[red]Setup script not found: {setup_script}[/red]")
             return 1
         console.print("[bold]Setting up NER environment...[/bold]")
-        result = subprocess.run(["bash", str(setup_script)], check=False)  # nosec B603 B607
+        result = subprocess.run(["/bin/bash", str(setup_script)], check=False)  # nosec B603 B607
         return result.returncode
 
     if subcommand == "status":
