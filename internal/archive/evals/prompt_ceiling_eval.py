@@ -90,7 +90,7 @@ def clean_message(text: str) -> str:
     """Clean a single message."""
     if not text:
         return ""
-    
+
     # Remove attachment placeholders
     text = re.sub(r'\[?image\]?', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\[?photo\]?', '', text, flags=re.IGNORECASE)
@@ -99,16 +99,21 @@ def clean_message(text: str) -> str:
     text = re.sub(r'\[?voice memo\]?', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\[?audio\]?', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\[?Location\]?', '', text, flags=re.IGNORECASE)
-    
+
     # Remove unicode replacement character
     text = text.replace('\ufffc', '')
-    
+
     # Remove reaction prefixes
-    text = re.sub(r'^(liked|loved|laughed at|emphasized|questioned)\s+["\']?', '', text, flags=re.IGNORECASE)
-    
+    text = re.sub(
+        r'^(liked|loved|laughed at|emphasized|questioned)\s+["\']?',
+        '',
+        text,
+        flags=re.IGNORECASE
+    )
+
     # Strip whitespace
     text = text.strip()
-    
+
     return text
 
 
@@ -120,7 +125,7 @@ def strip_phone_numbers(text: str) -> str:
 
 def preprocess_conversation(context: list[str], last_message: str) -> tuple[list[str], str]:
     """Preprocess conversation for model input.
-    
+
     IMPORTANT: Keep the "Name: message" format so the model knows who's speaking.
     Just replace phone numbers with "Them" for consistency.
     """
@@ -132,34 +137,34 @@ def preprocess_conversation(context: list[str], last_message: str) -> tuple[list
             # Replace phone numbers with "Them" but keep the prefix
             m = strip_phone_numbers(m)
             clean_context.append(m)
-    
+
     clean_last = clean_message(last_message)
     clean_last = strip_phone_numbers(clean_last)
-    
+
     # Keep up to 6 lines of context (enough for 3 turns back and forth)
     # Don't go too short - model needs context to understand the conversation
     if len(clean_context) > 6:
         clean_context = clean_context[-6:]
-    
+
     return clean_context, clean_last
 
 
 def build_simple_prompt(system_prompt: str, context: list[str], last_message: str) -> str:
     """Build minimal ChatML prompt.
-    
+
     Keep the "Name: message" format so model understands conversation flow.
     """
     # Keep the "Name: message" format from context
     # For last_message, it should already have "Them: " prefix if we kept it
     conversation_lines = list(context)
-    
+
     # Add last message - if it doesn't have a prefix, add "Them:"
     if last_message and not last_message.startswith(("Them:", "Jwalin:")):
         last_message = "Them: " + last_message
     conversation_lines.append(last_message)
-    
+
     conversation = "\n".join(conversation_lines)
-    
+
     return f"""<|im_start|>system
 {system_prompt}<|im_end|>
 <|im_start|>user
@@ -176,44 +181,44 @@ def clean_output(text: str) -> str:
     """Clean generated output."""
     if not text:
         return ""
-    
+
     original = text
-    
+
     # Strip contact name prefixes (Them:, +123:, Jwalin:, etc.)
     text = re.sub(r'^(?:Them|Jwalin|[+]?\d{10,15}|\w+)\s*:\s*', '', text)
-    
+
     # Strip quoted content
     text = re.sub(r'^"([^"]*)"\s*', r'\1', text)
-    
+
     # Strip markdown artifacts
     text = re.sub(r'\*\*', '', text)
     text = re.sub(r'\*\s*', '', text)
-    
+
     # Strip stage directions
     text = re.sub(r'\([^)]*\)', '', text)
-    
+
     # Strip meta-commentary patterns
     text = re.sub(r'is a phrase that means.*', '', text, flags=re.IGNORECASE)
     text = re.sub(r'seems like.*', '', text, flags=re.IGNORECASE)
     text = re.sub(r'it sounds like.*', '', text, flags=re.IGNORECASE)
     text = re.sub(r'sounds like.*', '', text, flags=re.IGNORECASE)
-    
+
     # Strip emojis
     emoji_pattern = re.compile(
         '[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF'
         '\U0001F1E0-\U0001F1FF\U00002702-\U000027B0\U000024C2-\U0001F251]+'
     )
     text = emoji_pattern.sub('', text)
-    
+
     # Normalize whitespace
     text = re.sub(r'\s+', ' ', text).strip()
-    
+
     # Remove trailing fragments
     text = re.sub(r'[,;\s]+$', '', text)
-    
+
     if text != original:
         logger.debug(f"Cleaned: '{original[:50]}...' -> '{text[:50]}...'")
-    
+
     return text if text else original.strip()
 
 
@@ -223,7 +228,7 @@ def clean_output(text: str) -> str:
 
 def load_training_format_dataset(path: Path) -> list[EvalExample]:
     """Load training-format dataset (messages format).
-    
+
     Keep the "Name: message" format throughout.
     """
     examples = []
@@ -232,17 +237,17 @@ def load_training_format_dataset(path: Path) -> list[EvalExample]:
         if not line:
             continue
         data = json.loads(line)
-        
+
         messages = data.get("messages", [])
         if len(messages) < 3:
             continue
-        
+
         user_content = messages[1].get("content", "") if len(messages) > 1 else ""
         ideal_response = messages[2].get("content", "") if len(messages) > 2 else ""
-        
+
         # Parse conversation - keep the "Name: message" format
         lines = user_content.split("\n")
-        
+
         # All lines except last are context
         # Last line is what we need to reply to
         if len(lines) >= 2:
@@ -253,7 +258,7 @@ def load_training_format_dataset(path: Path) -> list[EvalExample]:
             last_message = lines[0]
         else:
             continue
-        
+
         examples.append(
             EvalExample(
                 category="statement",
@@ -276,7 +281,7 @@ def load_generator(model_id: str | None = None):
     """Load the MLX generator."""
     from models.generator import MLXGenerator
     from models.loader import MLXModelLoader, ModelConfig
-    
+
     config = ModelConfig(model_id=model_id)
     loader = MLXModelLoader(config)
     generator = MLXGenerator(loader=loader, config=config, skip_templates=True)
@@ -291,13 +296,13 @@ def generate_reply(
 ) -> tuple[str, float]:
     """Generate a reply with preprocessing and constraints."""
     from jarvis.contracts.models import GenerationRequest
-    
+
     # Preprocess input
     clean_context, clean_last = preprocess_conversation(context, last_message)
-    
+
     # Build prompt
     prompt = build_simple_prompt(system_prompt, clean_context, clean_last)
-    
+
     # Create generation request with constraints
     # Note: GenerationRequest doesn't support logit_bias directly in this version
     # We'll handle constraints via stop_sequences and post-processing
@@ -314,14 +319,14 @@ def generate_reply(
             ":",  # Prevent "Name:" patterns
         ],
     )
-    
+
     start_time = time.perf_counter()
     response = generator.generate(request)
     latency_ms = (time.perf_counter() - start_time) * 1000
-    
+
     # Post-process output
     cleaned_text = clean_output(response.text)
-    
+
     return cleaned_text, latency_ms
 
 
@@ -338,7 +343,7 @@ def _extract_json_blob(text: str) -> str:
             text = parts[1]
         if text.startswith("json"):
             text = text[4:]
-    
+
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
@@ -356,7 +361,7 @@ def judge_reply(
     try:
         # Build conversation history for judge
         context_str = chr(10).join(example.context[-6:] + [example.last_message])
-        
+
         prompt = (
             "You are an expert evaluator for a text message reply generator.\n\n"
             f"CONVERSATION:\n{context_str}\n\n"
@@ -371,20 +376,20 @@ def judge_reply(
             "- Is the length appropriate?\n\n"
             'Respond in JSON: {"score": <0-10>, "reasoning": "<1-2 sentences>"}'
         )
-        
+
         resp = judge_client.chat.completions.create(
             model=judge_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=150,
         )
-        
+
         content = resp.choices[0].message.content or ""
         payload = json.loads(_extract_json_blob(content))
-        
+
         score = float(payload["score"])
         score = max(0.0, min(10.0, score))
-        
+
         return score, str(payload.get("reasoning", ""))
     except Exception as e:
         logger.error(f"Judge error: {e}")
@@ -402,12 +407,12 @@ def run_evaluation(
     model_id: str | None = None,
 ) -> list[EvalResult]:
     """Run evaluation with specified prompt variant."""
-    
+
     print(f"Loading generator (model: {model_id or 'default'})...")
     generator = load_generator(model_id=model_id)
-    
+
     system_prompt = PROMPT_VARIANTS.get(prompt_variant, CLEAN_PROMPT)
-    
+
     judge_client = None
     judge_model = None
     if use_judge:
@@ -418,9 +423,9 @@ def run_evaluation(
             print(f"Judge ready: {judge_model}")
         else:
             print("WARNING: Judge client not available")
-    
+
     results = []
-    
+
     for ex in tqdm(examples, desc=f"Evaluating ({prompt_variant})"):
         try:
             generated, latency_ms = generate_reply(
@@ -433,14 +438,14 @@ def run_evaluation(
             logger.error(f"Generation error: {e}")
             generated = f"[ERROR: {e}]"
             latency_ms = 0.0
-        
+
         judge_score = None
         judge_reasoning = ""
         if judge_client and use_judge and not generated.startswith("[ERROR"):
             judge_score, judge_reasoning = judge_reply(
                 judge_client, judge_model, ex, generated
             )
-        
+
         result = EvalResult(
             example=ex,
             generated_response=generated,
@@ -450,13 +455,13 @@ def run_evaluation(
             prompt_variant=prompt_variant,
         )
         results.append(result)
-        
+
         print(f"[{ex.category}] {ex.last_message[:40]}...")
         print(f"  Generated: {generated[:60]}")
         if judge_score is not None:
             print(f"  Judge: {judge_score:.1f}/10")
         print()
-    
+
     return results
 
 
@@ -469,34 +474,34 @@ def print_summary(results: list[EvalResult], variant: str) -> dict[str, Any]:
     print("=" * 70)
     print(f"SUMMARY: {variant}")
     print("=" * 70)
-    
+
     n = len(results)
     if n == 0:
         print("No results.")
         return {}
-    
+
     latencies = [r.latency_ms for r in results]
     avg_latency = sum(latencies) / n
-    
+
     scored = [r for r in results if r.judge_score is not None]
     if scored:
         scores = [r.judge_score for r in scored]
         avg_score = sum(scores) / len(scores)
         pass_7 = sum(1 for s in scores if s >= 7)
-        
+
         print(f"Examples:           {n}")
         print(f"Avg latency:        {avg_latency:.0f}ms")
         print(f"Judge avg:          {avg_score:.2f}/10")
         print(f"Judge pass (>=7):   {pass_7}/{len(scored)} ({pass_7/len(scored)*100:.0f}%)")
         print()
-        
+
         low = sorted(scored, key=lambda r: r.judge_score)[:3]
         print("Lowest scores:")
         for r in low:
             print(f"  [{r.judge_score:.0f}/10] {r.example.last_message[:40]}...")
             print(f"           Generated: {r.generated_response[:50]}")
         print()
-        
+
         return {
             "variant": variant,
             "n_examples": n,
@@ -517,11 +522,11 @@ def print_summary(results: list[EvalResult], variant: str) -> dict[str, Any]:
 def save_results(results: list[EvalResult], variant: str) -> Path:
     """Save results to file."""
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     filename = f"{variant}_{timestamp}.json"
     output_path = RESULTS_DIR / filename
-    
+
     output_data = {
         "timestamp": timestamp,
         "prompt_variant": variant,
@@ -540,7 +545,7 @@ def save_results(results: list[EvalResult], variant: str) -> Path:
             for r in results
         ],
     }
-    
+
     scored = [r for r in results if r.judge_score is not None]
     if scored:
         output_data["summary"] = {
@@ -549,7 +554,7 @@ def save_results(results: list[EvalResult], variant: str) -> Path:
             "judge_avg": round(sum(r.judge_score for r in scored) / len(scored), 2),
             "judge_pass_rate": round(sum(1 for r in scored if r.judge_score >= 7) / len(scored), 3),
         }
-    
+
     output_path.write_text(json.dumps(output_data, indent=2))
     print(f"Results saved to: {output_path}")
     return output_path
@@ -561,7 +566,7 @@ def save_results(results: list[EvalResult], variant: str) -> Path:
 
 def main() -> int:
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Prompt Ceiling Evaluation")
     parser.add_argument(
         "--prompt",
@@ -592,7 +597,7 @@ def main() -> int:
         help="Model ID to use",
     )
     args = parser.parse_args()
-    
+
     # Load dataset
     if args.dataset == "real":
         real_test_path = PROJECT_ROOT / "data" / "personal" / "raw_style_variable" / "test.jsonl"
@@ -602,12 +607,12 @@ def main() -> int:
         print(f"Loading real test set: {real_test_path}")
         examples = load_training_format_dataset(real_test_path)
     else:
-        print(f"ERROR: Synthetic dataset not supported in this version", file=sys.stderr)
+        print("ERROR: Synthetic dataset not supported in this version", file=sys.stderr)
         return 1
-    
+
     if args.limit:
         examples = examples[:args.limit]
-    
+
     print("=" * 70)
     print("PROMPT CEILING EVALUATION - CLEAN VERSION")
     print("=" * 70)
@@ -615,28 +620,28 @@ def main() -> int:
     print(f"Dataset:   {args.dataset} ({len(examples)} examples)")
     print(f"Judge:     {'disabled' if args.no_judge else 'enabled'}")
     print()
-    
+
     variants = list(PROMPT_VARIANTS.keys()) if args.prompt == "all" else [args.prompt]
-    
+
     all_summaries = []
-    
+
     for variant in variants:
         print(f"\n{'='*70}")
         print(f"Testing prompt variant: {variant}")
         print(f"{'='*70}\n")
-        
+
         results = run_evaluation(
             prompt_variant=variant,
             examples=examples,
             use_judge=not args.no_judge,
             model_id=args.model,
         )
-        
+
         summary = print_summary(results, variant)
         all_summaries.append(summary)
-        
+
         save_results(results, variant)
-    
+
     if len(all_summaries) > 1:
         print("\n" + "=" * 70)
         print("COMPARISON")
@@ -652,7 +657,7 @@ def main() -> int:
                     f"{s['avg_latency_ms']:<10.0f}ms"
                 )
         print()
-    
+
     return 0
 
 

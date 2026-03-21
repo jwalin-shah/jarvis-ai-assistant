@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import pickle  # nosec B403
 import sqlite3
 import threading
 import time
@@ -28,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Cache directory for BM25 index
 _CACHE_DIR = Path(".cache")
-_BM25_CACHE_FILE = _CACHE_DIR / "bm25_index.pkl"
+_BM25_CACHE_FILE = _CACHE_DIR / "bm25_index.json"
 
 
 class HybridSearcher:
@@ -110,7 +109,7 @@ class HybridSearcher:
 
         try:
             with open(_BM25_CACHE_FILE, "rb") as f:
-                cached = pickle.load(f)  # nosec B301
+                cached = orjson.loads(f.read())
                 metadata = cached.get("metadata")
                 if isinstance(metadata, dict):
                     return metadata
@@ -162,8 +161,8 @@ class HybridSearcher:
                 return False
 
             with open(_BM25_CACHE_FILE, "rb") as f:
-                cached = pickle.load(f)  # nosec B301
-                self.bm25_searcher = cached["searcher"]
+                cached = orjson.loads(f.read())
+                self.bm25_searcher = BM25Searcher.from_dict(cached["searcher"])
                 self._cache_metadata = cached_meta
                 logger.info("Loaded BM25 index from cache (%d chunks)", cached_meta["chunk_count"])
                 return True
@@ -176,12 +175,15 @@ class HybridSearcher:
         try:
             _CACHE_DIR.mkdir(parents=True, exist_ok=True)
             with open(_BM25_CACHE_FILE, "wb") as f:
-                pickle.dump(
-                    {
-                        "metadata": metadata,
-                        "searcher": self.bm25_searcher,
-                    },
-                    f,
+                f.write(
+                    orjson.dumps(
+                        {
+                            "metadata": metadata,
+                            "searcher": (
+                                self.bm25_searcher.to_dict() if self.bm25_searcher else None
+                            ),
+                        }
+                    )
                 )
         except Exception as e:
             logger.debug("Failed to save BM25 cache: %s", e)
