@@ -118,3 +118,53 @@ class BM25Searcher:
                     )
 
             return results
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize index to dictionary."""
+        with self._lock:
+            if self._bm25 is None:
+                return {}
+
+            return {
+                "rowids": self._rowids,
+                "corpus": self._corpus,
+                "bm25": {
+                    "corpus_size": self._bm25.corpus_size,
+                    "avgdl": self._bm25.avgdl,
+                    "doc_freqs": self._bm25.doc_freqs,
+                    "idf": self._bm25.idf,
+                    "doc_len": self._bm25.doc_len,
+                    "average_idf": getattr(self._bm25, "average_idf", 0.0),
+                },
+            }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> BM25Searcher:
+        """Deserialize index from dictionary."""
+        instance = cls()
+        if not data or "bm25" not in data:
+            return instance
+
+        instance._rowids = data.get("rowids", [])
+        instance._corpus = data.get("corpus", [])
+
+        bm25_data = data["bm25"]
+        # Create an empty BM25Okapi instance
+        bm25 = BM25Okapi.__new__(BM25Okapi)
+
+        # Restore state
+        bm25.corpus_size = bm25_data.get("corpus_size", 0)
+        bm25.avgdl = bm25_data.get("avgdl", 0.0)
+        bm25.doc_freqs = bm25_data.get("doc_freqs", [])
+        bm25.idf = bm25_data.get("idf", {})
+        bm25.doc_len = bm25_data.get("doc_len", [])
+        bm25.average_idf = bm25_data.get("average_idf", 0.0)
+
+        # Constants from BM25Okapi default init
+        bm25.k1 = 1.5
+        bm25.b = 0.75
+        bm25.epsilon = 0.25
+
+        instance._bm25 = bm25
+
+        return instance
