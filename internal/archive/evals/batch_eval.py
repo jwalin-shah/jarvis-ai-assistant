@@ -12,15 +12,15 @@ Usage:
 
 from __future__ import annotations
 
-import json
-import logging
-import os
-import sys
-import time
-from dataclasses import dataclass
-from pathlib import Path
+import json  # noqa: E402
+import logging  # noqa: E402
+import os  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -722,7 +722,7 @@ def main() -> int:
 
     # Set MLX memory limits early to prevent swap thrashing on 8GB systems.
     # loader.load() also sets these, but we set them before any MLX import
-    # to guard against accidental early allocation.
+    # to guard against accidental early allocation.  # noqa: E402
     from models.memory_config import apply_embedder_limits
 
     apply_embedder_limits()
@@ -737,9 +737,8 @@ def main() -> int:
         load_start = time.perf_counter()
         try:
             import dspy
-
-            from evals.dspy_client import DSPYMLXClient
-            from evals.dspy_reply import ReplyModule
+            from evals.dspy_client import DSPYMLXClient  # noqa: E402
+            from evals.dspy_reply import ReplyModule  # noqa: E402
 
             student_lm = DSPYMLXClient(max_tokens=50, temperature=0.1)
             dspy.configure(lm=student_lm)

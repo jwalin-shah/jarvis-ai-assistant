@@ -14,18 +14,18 @@ Usage:
     uv run python evals/rag_eval.py --audit-sample 50  # Audit N random pairs
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import argparse
-import json
-import logging
-import os
-import sys
-import time
-from dataclasses import dataclass
-from pathlib import Path
+import argparse  # noqa: E402
+import json  # noqa: E402
+import logging  # noqa: E402
+import os  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -179,8 +179,9 @@ def eval_retrieval_relevance(client, test_cases: list[dict]) -> list[RelevanceRe
 def eval_generation_ablation(client, test_cases: list[dict]) -> list[AblationResult]:
     """Compare generation quality WITH vs WITHOUT RAG examples."""
     from evals.batch_eval import build_prompt, judge_response
+
     from jarvis.search.vec_search import get_vec_searcher
-    from models.loader import get_model
+    from models.loader import get_model  # noqa: E402
 
     searcher = get_vec_searcher()
     results = []

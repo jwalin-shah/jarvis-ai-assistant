@@ -12,16 +12,16 @@ Components:
     - run: CLI entrypoint for running benchmarks
 """
 
-from evals.benchmarks.hallucination.datasets import (
-    EmailTestCase,
+from evals.benchmarks.hallucination.datasets import (  # noqa: E402
+    EmailTestCase,  # noqa: E402
     generate_grounded_pairs,
     generate_hallucinated_pairs,
     generate_mixed_dataset,
     generate_test_cases,
     get_dataset_metadata,
 )
-from evals.benchmarks.hallucination.hhem import (
-    HHEMEvaluator,
+from evals.benchmarks.hallucination.hhem import (  # noqa: E402
+    HHEMEvaluator,  # noqa: E402
     HHEMModelProtocol,
     VectaraHHEMModel,
     get_evaluator,

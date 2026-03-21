@@ -11,12 +11,12 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
-import json
-import sys
-import time
-from itertools import product
-from pathlib import Path
+import argparse  # noqa: E402
+import json  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from itertools import product  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))

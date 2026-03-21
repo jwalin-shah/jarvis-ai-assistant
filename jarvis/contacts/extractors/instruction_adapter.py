@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import cast, Any
+from jarvis.contracts.imessage import Message
 
 from jarvis.contacts.extractors.base import ExtractedCandidate, ExtractorAdapter, register_extractor
 from jarvis.contacts.instruction_extractor import get_instruction_extractor
@@ -71,7 +72,7 @@ class InstructionExtractorAdapter(ExtractorAdapter):
         segment = TopicSegment(
             chat_id="eval_chat",
             contact_id="eval_contact",
-            messages=[MockMessage(text, is_from_me)],
+            messages=[cast("Message", MockMessage(text, is_from_me))],
             start_time=now,
             end_time=now,
             message_count=1,

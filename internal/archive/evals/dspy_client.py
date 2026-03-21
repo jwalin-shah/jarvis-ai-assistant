@@ -4,7 +4,7 @@ Wraps the local MLXModelLoader to be compatible with DSPy 3.x (BaseLM.forward AP
 
 Usage:
     import dspy
-    from evals.dspy_client import DSPYMLXClient
+    from evals.dspy_client import DSPYMLXClient  # noqa: E402
 
     lm = DSPYMLXClient()
     dspy.configure(lm=lm)
@@ -17,17 +17,17 @@ Usage:
     response = predictor(question="How does this help latency?")
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import time
-from typing import Any
+import time  # noqa: E402
+from typing import Any  # noqa: E402
 
 try:
     import dspy
 except ImportError:
     dspy = None  # type: ignore[assignment]
 
-from models.loader import get_model
+from models.loader import get_model  # noqa: E402
 
 
 class _Msg:
