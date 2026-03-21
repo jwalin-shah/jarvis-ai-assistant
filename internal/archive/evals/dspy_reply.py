@@ -11,12 +11,12 @@ Defines the optimization target that DSPy compiles against:
 
 from __future__ import annotations
 
-import json
-import re
+import json  # noqa: E402
+import re  # noqa: E402
 
-import dspy
-from evals.judge_config import JUDGE_MODEL
-from evals.judge_config import get_judge_client as _get_judge_client
+import dspy  # noqa: E402
+from evals.judge_config import JUDGE_MODEL  # noqa: E402
+from evals.judge_config import get_judge_client as _get_judge_client  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

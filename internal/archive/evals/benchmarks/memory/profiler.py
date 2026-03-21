@@ -12,9 +12,9 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-import psutil
+import psutil  # noqa: E402
 
-from jarvis.contracts.memory import MemoryProfile
+from jarvis.contracts.memory import MemoryProfile  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ _load: Any = None
 
 try:
     import mlx.core as _mx_module
-    from mlx_lm import load as _load_module
+    from mlx_lm import load as _load_module  # noqa: E402
 
     _mx = _mx_module
     _load = _load_module

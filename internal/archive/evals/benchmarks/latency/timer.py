@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, TypeVar  # noqa: E402
 
 T = TypeVar("T")
 

@@ -12,8 +12,8 @@ Usage:
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
+import os  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 # Load .env from project root
 _env_path = Path(__file__).parent.parent / ".env"

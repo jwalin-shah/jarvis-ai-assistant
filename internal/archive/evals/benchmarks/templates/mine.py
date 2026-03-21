@@ -11,18 +11,18 @@ This module discovers common message patterns by:
 from __future__ import annotations
 
 import argparse
-import json
-import logging
-import sqlite3
-import sys
-import time
-from dataclasses import asdict, dataclass
-from pathlib import Path
-from typing import Any
+import json  # noqa: E402
+import logging  # noqa: E402
+import sqlite3  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import asdict, dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-import numpy as np
-from sklearn.cluster import DBSCAN
-from tqdm import tqdm
+import numpy as np  # noqa: E402
+from sklearn.cluster import DBSCAN  # noqa: E402
+from tqdm import tqdm  # noqa: E402
 
 # Conditional imports for sentence transformers
 try:

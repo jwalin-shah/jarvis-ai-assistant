@@ -11,12 +11,12 @@ import sys
 from pathlib import Path
 
 from evals.benchmarks.hallucination.datasets import (
-    generate_grounded_pairs,
+    generate_grounded_pairs,  # noqa: E402
     generate_hallucinated_pairs,
     generate_mixed_dataset,
     get_dataset_metadata,
 )
-from evals.benchmarks.hallucination.hhem import get_evaluator
+from evals.benchmarks.hallucination.hhem import get_evaluator  # noqa: E402
 
 
 def main() -> int:

@@ -12,16 +12,16 @@ Usage:
 
 from __future__ import annotations
 
-import json
-import logging
-import os
-import sys
-import time
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from pathlib import Path
+import json  # noqa: E402
+import logging  # noqa: E402
+import os  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -143,7 +143,9 @@ def _extract_json_blob(text: str) -> str:
     return s
 
 
-def _judge_single_item(judge_client: object, judge_model: str, ex: EvalExample, generated: str) -> tuple[float | None, str]:
+def _judge_single_item(
+    judge_client: object, judge_model: str, ex: EvalExample, generated: str
+) -> tuple[float | None, str]:  # noqa: E501
     """Judge one item and return (score, reasoning)."""
     try:
         prompt = (
@@ -236,12 +238,12 @@ def main() -> int:
     # Initialize components
     print("Loading classifier...", flush=True)
     from jarvis.classifiers.category_classifier import classify_category
-    from jarvis.classifiers.response_mobilization import classify_response_pressure
+    from jarvis.classifiers.response_mobilization import classify_response_pressure  # noqa: E402
 
     # Initialize reply service for generation
     print("Loading reply service...", flush=True)
     from jarvis.contracts.pipeline import MessageContext
-    from jarvis.reply_service import ReplyService
+    from jarvis.reply_service import ReplyService  # noqa: E402
 
     reply_service = ReplyService()
 
@@ -462,9 +464,9 @@ def main() -> int:
                             results[idx].generated_response,
                         )
                         results[idx].judge_score = score
-                        results[idx].judge_reasoning = (
-                            f"batch_fail_then_single: {reasoning}; batch_error={e}"
-                        )
+                        results[
+                            idx
+                        ].judge_reasoning = f"batch_fail_then_single: {reasoning}; batch_error={e}"
                         if args.judge_delay_seconds > 0:
                             time.sleep(min(args.judge_delay_seconds, 0.6))
                 if args.judge_delay_seconds > 0 and (start + args.judge_batch_size) < len(

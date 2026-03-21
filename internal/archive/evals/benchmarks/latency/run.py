@@ -11,22 +11,22 @@ import argparse
 import json
 import logging
 import sys
-from datetime import UTC, datetime
-from pathlib import Path
-from statistics import mean, stdev
+from datetime import UTC, datetime  # noqa: E402
+from pathlib import Path  # noqa: E402
+from statistics import mean, stdev  # noqa: E402
 
-import numpy as np
-from evals.benchmarks.latency.scenarios import (
-    Scenario,
+import numpy as np  # noqa: E402
+from evals.benchmarks.latency.scenarios import (  # noqa: E402
+    Scenario,  # noqa: E402
     get_scenario_by_type,
-)
-from evals.benchmarks.latency.timer import (
-    HighPrecisionTimer,
+)  # noqa: E402
+from evals.benchmarks.latency.timer import (  # noqa: E402
+    HighPrecisionTimer,  # noqa: E402
     force_model_unload,
     warmup_timer,
 )
 
-from jarvis.contracts.latency import LatencyBenchmarkResult, LatencyResult
+from jarvis.contracts.latency import LatencyBenchmarkResult, LatencyResult  # noqa: E402
 
 # Conditional MLX imports for environments without Apple Silicon
 try:
@@ -311,7 +311,7 @@ class MLXLatencyBenchmarker:
 
         # Run scenarios in order: cold, warm, hot
         # This order is important because warm/hot benefit from cold's loading
-        for scenario in ("cold", "warm", "hot"):
+        for scenario in ("cold", "warm", "hot"):  # noqa: E402
             logger.info("Starting %s scenario benchmark", scenario)
             results[scenario] = self.run_benchmark(
                 model_path=model_path,

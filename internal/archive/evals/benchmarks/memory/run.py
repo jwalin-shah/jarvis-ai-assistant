@@ -12,12 +12,12 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from evals.benchmarks.memory.models import (
-    CONTEXT_LENGTHS,
+from evals.benchmarks.memory.models import (  # noqa: E402
+    CONTEXT_LENGTHS,  # noqa: E402
     get_default_model,
     get_models_for_profiling,
 )
-from evals.benchmarks.memory.profiler import MLXMemoryProfiler
+from evals.benchmarks.memory.profiler import MLXMemoryProfiler  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
