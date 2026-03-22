@@ -100,7 +100,8 @@ QUESTION_STARTERS = {
 }
 
 # === EMOTIONAL MARKERS ===
-EMOTIONAL_MARKERS = ["lmao", "lol", "xd", "haha", "omg", "bruh", "rip", "lmfao", "rofl"]
+# Bolt: using a set for O(1) membership checking since this is frequently queried.
+EMOTIONAL_MARKERS = {"lmao", "lol", "xd", "haha", "omg", "bruh", "rip", "lmfao", "rofl"}
 
 # === AGREEMENT / BACKCHANNEL ===
 AGREEMENT_WORDS = {
