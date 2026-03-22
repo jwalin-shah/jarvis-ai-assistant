@@ -81,6 +81,43 @@ class BM25Searcher:
 
             return 0
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize index safely without pickle."""
+        with self._lock:
+            data: dict[str, Any] = {
+                "rowids": self._rowids,
+                "corpus": self._corpus,
+                "bm25": None,
+            }
+            if self._bm25 is not None:
+                data["bm25"] = {
+                    "corpus_size": self._bm25.corpus_size,
+                    "avgdl": self._bm25.avgdl,
+                    "doc_freqs": self._bm25.doc_freqs,
+                    "idf": self._bm25.idf,
+                    "doc_len": self._bm25.doc_len,
+                }
+            return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> BM25Searcher:
+        """Deserialize index safely without pickle."""
+        searcher = cls()
+        searcher._rowids = data.get("rowids", [])
+        searcher._corpus = data.get("corpus", [])
+
+        bm25_data = data.get("bm25")
+        if bm25_data:
+            # Pass a dummy document to skip calculations, then overwrite attributes
+            searcher._bm25 = BM25Okapi([["dummy"]])
+            searcher._bm25.corpus_size = bm25_data["corpus_size"]
+            searcher._bm25.avgdl = bm25_data["avgdl"]
+            searcher._bm25.doc_freqs = bm25_data["doc_freqs"]
+            searcher._bm25.idf = bm25_data["idf"]
+            searcher._bm25.doc_len = bm25_data["doc_len"]
+
+        return searcher
+
     def search(self, query: str, limit: int | None = None) -> list[BM25Result]:
         """Search the keyword index.
 
