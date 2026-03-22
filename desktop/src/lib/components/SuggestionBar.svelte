@@ -255,7 +255,7 @@
     <div class="bar-content error">
       <Icon name="alert-circle" size={14} />
       <span class="error-text">{errorMessage}</span>
-      <button class="bar-btn" onclick={generateReplies} title="Retry">
+      <button class="bar-btn" onclick={generateReplies} title="Retry" aria-label="Retry generating suggestions">
         <Icon name="refresh-cw" size={14} />
       </button>
     </div>

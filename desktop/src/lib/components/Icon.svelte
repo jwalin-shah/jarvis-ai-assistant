@@ -129,6 +129,7 @@
   stroke-linecap="round"
   stroke-linejoin="round"
   class="icon"
+  aria-hidden="true"
 >
   {@html icons[name]}
 </svg>
