@@ -304,8 +304,8 @@
           </svg>
           Retry
         </button>
-        <button class="dismiss-btn" onclick={handleDismiss} title="Dismiss">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <button class="dismiss-btn" onclick={handleDismiss} title="Dismiss" aria-label="Dismiss message">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
