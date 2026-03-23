@@ -100,7 +100,8 @@ QUESTION_STARTERS = {
 }
 
 # === EMOTIONAL MARKERS ===
-EMOTIONAL_MARKERS = ["lmao", "lol", "xd", "haha", "omg", "bruh", "rip", "lmfao", "rofl"]
+# Optimized as a set for O(1) membership checks during high-frequency NLP feature extraction
+EMOTIONAL_MARKERS = {"lmao", "lol", "xd", "haha", "omg", "bruh", "rip", "lmfao", "rofl"}
 
 # === AGREEMENT / BACKCHANNEL ===
 AGREEMENT_WORDS = {
