@@ -174,7 +174,7 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "-v --doctest-modules --cov=jarvis --cov=api --cov=models --cov=core --cov=integrations --cov=contracts --cov=benchmarks --cov-report=term-missing -m 'not benchmark and not hardware and not real_model'"
+addopts = "-v --doctest-modules  --cov=api --cov=models --cov=core --cov=integrations --cov=contracts --cov=benchmarks  -m 'not benchmark and not hardware and not real_model'"
 timeout = 30
 timeout_method = "thread"
 markers = [
