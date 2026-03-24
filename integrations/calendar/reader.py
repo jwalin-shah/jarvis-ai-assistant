@@ -177,7 +177,7 @@ class CalendarReaderImpl:
 
         # Build calendar filter
         if calendar_id:
-            safe_id = calendar_id.replace("\\", "\\\\").replace('"', '\\"')
+            safe_id = self._escape_applescript(calendar_id)
             cal_filter = SPECIFIC_CALENDAR_FILTER.format(calendar_id=safe_id)
         else:
             cal_filter = ALL_CALENDARS_FILTER
@@ -379,6 +379,22 @@ class CalendarReaderImpl:
             if value != "missing value":
                 result[key] = value
         return result
+
+    def _escape_applescript(self, text: str) -> str:
+        """Escape special characters for AppleScript strings.
+
+        Args:
+            text: Text to escape.
+
+        Returns:
+            Escaped text.
+        """
+        # Escape backslashes first, then quotes, then newlines
+        text = text.replace("\\", "\\\\")
+        text = text.replace('"', '\\"')
+        text = text.replace("\n", "\\n")
+        text = text.replace("\r", "\\r")
+        return text
 
     def _parse_iso_date(self, date_str: str) -> datetime | None:
         """Parse ISO date from AppleScript.

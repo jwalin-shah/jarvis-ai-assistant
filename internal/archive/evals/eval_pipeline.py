@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -143,7 +143,7 @@ def _extract_json_blob(text: str) -> str:
     return s
 
 
-def _judge_single_item(judge_client: object, judge_model: str, ex: EvalExample, generated: str) -> tuple[float | None, str]:
+def _judge_single_item(judge_client: object, judge_model: str, ex: EvalExample, generated: str) -> tuple[float | None, str]:  # noqa: E501
     """Judge one item and return (score, reasoning)."""
     try:
         prompt = (

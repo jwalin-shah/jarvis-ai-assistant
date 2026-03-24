@@ -27,7 +27,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -42,9 +42,8 @@ if _env_path.exists():
             os.environ.setdefault(key.strip(), val.strip())
 
 import dspy  # noqa: E402
-
-from evals.dspy_client import DSPYMLXClient  # noqa: E402
-from evals.dspy_reply import (  # noqa: E402
+from evals.dspy_client import DSPYMLXClient  # noqa: E402  # noqa: E402
+from evals.dspy_reply import (  # noqa: E402  # noqa: E402
     TRAIN_EXAMPLES,
     CategoryReplyModule,
     ReplyModule,
