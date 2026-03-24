@@ -144,7 +144,10 @@ def main():
     )
     parser.add_argument("--candidates", type=int, default=5, help="MIPROv2 candidates")
     parser.add_argument(
-        "--demos", type=int, default=3, help="Max bootstrapped demos (set to 0 to test no few-shot)"  # noqa: E501
+        "--demos",
+        type=int,
+        default=3,
+        help="Max bootstrapped demos (set to 0 to test no few-shot)",  # noqa: E501
     )
     args = parser.parse_args()
 
