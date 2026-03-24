@@ -6,20 +6,20 @@ Usage:
     uv run python evals/prompt_ceiling_eval.py --dataset real --prompt clean --limit 20
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import json
-import logging
-import os
-import re
-import sys
-import time
-from dataclasses import dataclass
-from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any
+import json  # noqa: E402
+import logging  # noqa: E402
+import os  # noqa: E402
+import re  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -104,7 +104,7 @@ def clean_message(text: str) -> str:
     text = text.replace('\ufffc', '')
 
     # Remove reaction prefixes
-    text = re.sub(r'^(liked|loved|laughed at|emphasized|questioned)\s+["\']?', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'^(liked|loved|laughed at|emphasized|questioned)\s+["\']?', '', text, flags=re.IGNORECASE)  # noqa: E501
 
     # Strip whitespace
     text = text.strip()
@@ -120,7 +120,7 @@ def strip_phone_numbers(text: str) -> str:
 
 def preprocess_conversation(context: list[str], last_message: str) -> tuple[list[str], str]:
     """Preprocess conversation for model input.
-    
+
     IMPORTANT: Keep the "Name: message" format so the model knows who's speaking.
     Just replace phone numbers with "Them" for consistency.
     """
@@ -146,7 +146,7 @@ def preprocess_conversation(context: list[str], last_message: str) -> tuple[list
 
 def build_simple_prompt(system_prompt: str, context: list[str], last_message: str) -> str:
     """Build minimal ChatML prompt.
-    
+
     Keep the "Name: message" format so model understands conversation flow.
     """
     # Keep the "Name: message" format from context
@@ -223,7 +223,7 @@ def clean_output(text: str) -> str:
 
 def load_training_format_dataset(path: Path) -> list[EvalExample]:
     """Load training-format dataset (messages format).
-    
+
     Keep the "Name: message" format throughout.
     """
     examples = []
@@ -547,7 +547,7 @@ def save_results(results: list[EvalResult], variant: str) -> Path:
             "n_examples": len(results),
             "avg_latency_ms": round(sum(r.latency_ms for r in results) / len(results), 1),
             "judge_avg": round(sum(r.judge_score for r in scored) / len(scored), 2),
-            "judge_pass_rate": round(sum(1 for r in scored if r.judge_score >= 7) / len(scored), 3),
+            "judge_pass_rate": round(sum(1 for r in scored if r.judge_score >= 7) / len(scored), 3),  # noqa: E501
         }
 
     output_path.write_text(json.dumps(output_data, indent=2))
