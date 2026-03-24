@@ -11,7 +11,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from evals.eval_pipeline import EVAL_DATASET_PATH, EvalExample, load_eval_dataset  # noqa: E402
 from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
-from tqdm import tqdm  # noqa: E402
+from tqdm import tqdm  # noqa: E402  # noqa: E402
 
 from models.loader import get_model  # noqa: E402
 
