@@ -8,17 +8,17 @@ Usage:
     uv run python evals/optimize_universal_prompt.py --trials 10 --depths 3,5,10
 """
 
-import argparse
-import sys
-from pathlib import Path
+import argparse  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-import dspy
+import dspy  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.dspy_client import DSPYMLXClient
-from evals.dspy_reply import (
+from evals.dspy_client import DSPYMLXClient  # noqa: E402
+from evals.dspy_reply import (  # noqa: E402
     TRAIN_EXAMPLES,
     judge_metric,
 )
@@ -144,7 +144,10 @@ def main():
     )
     parser.add_argument("--candidates", type=int, default=5, help="MIPROv2 candidates")
     parser.add_argument(
-        "--demos", type=int, default=3, help="Max bootstrapped demos (set to 0 to test no few-shot)"
+        "--demos",
+        type=int,
+        default=3,
+        help="Max bootstrapped demos (set to 0 to test no few-shot)",  # noqa: E501
     )
     args = parser.parse_args()
 

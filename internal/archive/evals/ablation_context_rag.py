@@ -10,23 +10,23 @@ Usage:
     uv run python evals/ablation_context_rag.py --judge
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import argparse
-import json
-import sys
-import time
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
+import argparse  # noqa: E402
+import json  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset
-from evals.judge_config import JUDGE_MODEL, get_judge_client
+from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset  # noqa: E402
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
 BATCH_SIZE = 10
 RATE_LIMIT_DELAY = 2.1
@@ -297,7 +297,7 @@ def run_variant(
 
             status = "AI!" if anti_ai else "clean"
             print(
-                f"[{start_idx + i + 1:2d}] [{ex.category:12s}] {status} | {score:.0f}/10 | {reply[:50]}"
+                f"[{start_idx + i + 1:2d}] [{ex.category:12s}] {status} | {score:.0f}/10 | {reply[:50]}"  # noqa: E501
             )
 
     # Calculate summary
@@ -370,7 +370,7 @@ def main() -> int:
     for s in all_summaries:
         print(f"\n{s['name'].upper()}")
         print(
-            f"  Config: context_depth={s['config']['context_depth']}, use_rag={s['config']['use_rag']}"
+            f"  Config: context_depth={s['config']['context_depth']}, use_rag={s['config']['use_rag']}"  # noqa: E501
         )
         print(f"  Avg Score: {s['avg_score']:.2f}/10")
         print(f"  Anti-AI Rate: {s['anti_ai_rate']:.1%}")
@@ -386,7 +386,7 @@ def main() -> int:
     print("=" * 70)
     print(f"Score: {winner['avg_score']:.2f}/10")
     print(
-        f"Config: context_depth={winner['config']['context_depth']}, use_rag={winner['config']['use_rag']}"
+        f"Config: context_depth={winner['config']['context_depth']}, use_rag={winner['config']['use_rag']}"  # noqa: E501
     )
 
     # Save results

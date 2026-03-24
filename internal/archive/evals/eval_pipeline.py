@@ -10,18 +10,18 @@ Usage:
     uv run python evals/eval_pipeline.py --similarity      # + BERT cosine similarity
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
-import json
-import logging
-import os
-import sys
-import time
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from pathlib import Path
+import json  # noqa: E402
+import logging  # noqa: E402
+import os  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -143,7 +143,9 @@ def _extract_json_blob(text: str) -> str:
     return s
 
 
-def _judge_single_item(judge_client: object, judge_model: str, ex: EvalExample, generated: str) -> tuple[float | None, str]:
+def _judge_single_item(
+    judge_client: object, judge_model: str, ex: EvalExample, generated: str
+) -> tuple[float | None, str]:  # noqa: E501
     """Judge one item and return (score, reasoning)."""
     try:
         prompt = (
@@ -462,9 +464,9 @@ def main() -> int:
                             results[idx].generated_response,
                         )
                         results[idx].judge_score = score
-                        results[idx].judge_reasoning = (
-                            f"batch_fail_then_single: {reasoning}; batch_error={e}"
-                        )
+                        results[
+                            idx
+                        ].judge_reasoning = f"batch_fail_then_single: {reasoning}; batch_error={e}"
                         if args.judge_delay_seconds > 0:
                             time.sleep(min(args.judge_delay_seconds, 0.6))
                 if args.judge_delay_seconds > 0 and (start + args.judge_batch_size) < len(
@@ -566,7 +568,7 @@ def main() -> int:
         print("-" * 70, flush=True)
         for r in misses:
             print(
-                f"  [{r.example.category} -> {r.predicted_category}] {r.example.last_message[:50]}",
+                f"  [{r.example.category} -> {r.predicted_category}] {r.example.last_message[:50]}",  # noqa: E501
                 flush=True,
             )
 

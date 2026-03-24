@@ -5,19 +5,20 @@ Uses GPT-OSS-120B to generate an 'optimal' instruction for each depth,
 then runs evaluation on the student model.
 """
 
-import argparse
-import json
-import sys
-from pathlib import Path
+import argparse  # noqa: E402
+import json  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.dspy_reply import TRAIN_EXAMPLES, clean_reply, judge_metric
-from evals.judge_config import JUDGE_MODEL, get_judge_client
-from models.loader import get_model
+from evals.dspy_reply import TRAIN_EXAMPLES, clean_reply, judge_metric  # noqa: E402
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
+
+from models.loader import get_model  # noqa: E402
 
 
 def generate_optimized_instruction(depth: int, judge_client):
@@ -103,7 +104,7 @@ def main():
             print(f"Average Score: {avg_score:.3f}")
 
             results.append(
-                {"depth": depth, "repetition_penalty": rp, "instruction": instr, "score": avg_score}
+                {"depth": depth, "repetition_penalty": rp, "instruction": instr, "score": avg_score}  # noqa: E501
             )
 
     # Summary
