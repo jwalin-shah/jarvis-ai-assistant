@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from statistics import mean, median, stdev
 from typing import Any, Protocol, runtime_checkable
 
-from jarvis.contracts.hallucination import HHEMBenchmarkResult, HHEMResult
+from jarvis.contracts.hallucination import HHEMBenchmarkResult, HHEMResult  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

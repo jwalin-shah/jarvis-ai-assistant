@@ -27,7 +27,7 @@ try:
 except ImportError:
     dspy = None  # type: ignore[assignment]
 
-from models.loader import get_model
+from models.loader import get_model  # noqa: E402
 
 
 class _Msg:

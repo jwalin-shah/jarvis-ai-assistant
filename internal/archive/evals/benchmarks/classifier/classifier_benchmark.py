@@ -33,7 +33,11 @@ import numpy as np
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
-from evals.benchmarks.latency.timer import HighPrecisionTimer, force_model_unload, warmup_timer
+from evals.benchmarks.latency.timer import (  # noqa: E402
+    HighPrecisionTimer,
+    force_model_unload,
+    warmup_timer,
+)
 
 logger = logging.getLogger(__name__)
 
