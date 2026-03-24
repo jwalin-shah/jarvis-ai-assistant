@@ -297,7 +297,7 @@ def run_variant(
 
             status = "AI!" if anti_ai else "clean"
             print(
-                f"[{start_idx + i + 1:2d}] [{ex.category:12s}] {status} | {score:.0f}/10 | {reply[:50]}"
+                f"[{start_idx + i + 1:2d}] [{ex.category:12s}] {status} | {score:.0f}/10 | {reply[:50]}"  # noqa: E501
             )
 
     # Calculate summary
@@ -370,7 +370,7 @@ def main() -> int:
     for s in all_summaries:
         print(f"\n{s['name'].upper()}")
         print(
-            f"  Config: context_depth={s['config']['context_depth']}, use_rag={s['config']['use_rag']}"
+            f"  Config: context_depth={s['config']['context_depth']}, use_rag={s['config']['use_rag']}"  # noqa: E501
         )
         print(f"  Avg Score: {s['avg_score']:.2f}/10")
         print(f"  Anti-AI Rate: {s['anti_ai_rate']:.1%}")
@@ -386,7 +386,7 @@ def main() -> int:
     print("=" * 70)
     print(f"Score: {winner['avg_score']:.2f}/10")
     print(
-        f"Config: context_depth={winner['config']['context_depth']}, use_rag={winner['config']['use_rag']}"
+        f"Config: context_depth={winner['config']['context_depth']}, use_rag={winner['config']['use_rag']}"  # noqa: E501
     )
 
     # Save results
