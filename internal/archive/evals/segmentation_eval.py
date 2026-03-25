@@ -16,7 +16,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT))  # noqa: E402
 
 from jarvis.topics.topic_segmenter import get_segmenter  # noqa: E402
 
