@@ -222,7 +222,8 @@ def main():
     print("\n📈 Improvements:")
     print(f"   Score: {score_improvement:+.2f} points")
     print(
-        f"   Length: -{length_reduction:.0f} chars ({length_reduction / baseline_results['avg_length'] * 100:.0f}% shorter)"
+        f"   Length: -{length_reduction:.0f} chars "
+        f"({length_reduction / baseline_results['avg_length'] * 100:.0f}% shorter)"
     )
 
     # Save results
