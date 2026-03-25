@@ -18,7 +18,7 @@ from typing import Any
 
 import psutil
 
-from jarvis.metrics import MemorySampler, get_memory_sampler
+from jarvis.metrics import MemorySampler, get_memory_sampler  # noqa: E501, E402
 
 # Constants
 BYTES_PER_MB = 1024 * 1024

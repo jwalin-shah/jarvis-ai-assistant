@@ -26,11 +26,11 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))  # noqa: E402
+sys.path.insert(0, str(PROJECT_ROOT))   # noqa: E501, E402
 # Ensure model-relative paths resolve regardless of promptfoo basePath/cwd.
-os.chdir(PROJECT_ROOT)  # noqa: E402
+os.chdir(PROJECT_ROOT)   # noqa: E501, E402
 
-from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY
+from jarvis.prompts.generation_config import DEFAULT_REPETITION_PENALTY  # noqa: E501, E402
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s", stream=sys.stderr)
 logger = logging.getLogger(__name__)

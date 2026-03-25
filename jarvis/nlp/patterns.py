@@ -100,6 +100,8 @@ QUESTION_STARTERS = {
 }
 
 # === EMOTIONAL MARKERS ===
+# Optimization: Converted from list to set for O(1) membership lookups
+# in the high-frequency category feature extraction path.
 EMOTIONAL_MARKERS = {"lmao", "lol", "xd", "haha", "omg", "bruh", "rip", "lmfao", "rofl"}
 
 # === AGREEMENT / BACKCHANNEL ===

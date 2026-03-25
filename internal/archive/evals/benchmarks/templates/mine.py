@@ -22,7 +22,7 @@ from typing import Any
 
 import numpy as np
 from sklearn.cluster import DBSCAN
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E501, E402
 
 # Conditional imports for sentence transformers
 try:

@@ -10,15 +10,15 @@ import json
 import sys
 from pathlib import Path
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E501, E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))  # noqa: E402
+sys.path.insert(0, str(PROJECT_ROOT))   # noqa: E501, E402
 
-from evals.dspy_reply import TRAIN_EXAMPLES, clean_reply, judge_metric
-from evals.judge_config import JUDGE_MODEL, get_judge_client
+from evals.dspy_reply import TRAIN_EXAMPLES, clean_reply, judge_metric  # noqa: E501, E402
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E501, E402
 
-from models.loader import get_model
+from models.loader import get_model  # noqa: E501, E402
 
 
 def generate_optimized_instruction(depth: int, judge_client):

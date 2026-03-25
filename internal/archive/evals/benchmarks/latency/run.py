@@ -16,17 +16,17 @@ from pathlib import Path
 from statistics import mean, stdev
 
 import numpy as np
-from evals.benchmarks.latency.scenarios import (
+from evals.benchmarks.latency.scenarios import (  # noqa: E501, E402
     Scenario,
     get_scenario_by_type,
 )
-from evals.benchmarks.latency.timer import (
+from evals.benchmarks.latency.timer import (  # noqa: E501, E402
     HighPrecisionTimer,
     force_model_unload,
     warmup_timer,
 )
 
-from jarvis.contracts.latency import LatencyBenchmarkResult, LatencyResult
+from jarvis.contracts.latency import LatencyBenchmarkResult, LatencyResult  # noqa: E501, E402
 
 # Conditional MLX imports for environments without Apple Silicon
 try:

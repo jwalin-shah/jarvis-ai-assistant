@@ -383,6 +383,8 @@ class CategoryFeatureExtractor:
         features.append(capitalized / max(len(words) - 1, 1))
 
         # Reaction/emotion features (7)
+        # Optimization: text.startswith(tuple) delegates multi-prefix matching to C-level
+        # which is significantly faster than using a Python-level any() generator expression.
         is_reaction_msg = 1.0 if text.startswith(REACTION_PATTERNS) else 0.0
         features.append(is_reaction_msg)
 

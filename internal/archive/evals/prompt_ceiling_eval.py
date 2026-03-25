@@ -19,10 +19,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E501, E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))  # noqa: E402
+sys.path.insert(0, str(PROJECT_ROOT))   # noqa: E501, E402
 
 _env_path = PROJECT_ROOT / ".env"
 if _env_path.exists():
