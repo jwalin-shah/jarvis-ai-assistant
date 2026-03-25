@@ -13,12 +13,12 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E501, E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT))   # noqa: E501, E402
 
-from jarvis.topics.topic_segmenter import get_segmenter  # noqa: E402
+from jarvis.topics.topic_segmenter import get_segmenter  # noqa: E402   # noqa: E501, E402
 
 # =============================================================================
 # Data Types

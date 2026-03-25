@@ -22,9 +22,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT))   # noqa: E501, E402
 
-from evals.batch_eval import TEST_CASES, build_prompt, check_result  # noqa: E402
+from evals.batch_eval import (  # noqa: E402   # noqa: E501, E402
+    TEST_CASES,
+    build_prompt,
+    check_result,
+)
 
 
 @dataclass

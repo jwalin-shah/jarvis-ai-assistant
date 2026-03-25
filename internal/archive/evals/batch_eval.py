@@ -20,10 +20,10 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E501, E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT))   # noqa: E501, E402
 
 # Load .env
 _env_path = PROJECT_ROOT / ".env"
@@ -38,8 +38,10 @@ if _env_path.exists():
 # Constants
 # ---------------------------------------------------------------------------
 
-from evals.judge_config import JUDGE_MODEL  # noqa: E402
-from evals.judge_config import get_judge_client as _get_judge_client  # noqa: E402
+from evals.judge_config import JUDGE_MODEL  # noqa: E402   # noqa: E501, E402
+from evals.judge_config import (
+    get_judge_client as _get_judge_client,  # noqa: E402   # noqa: E501, E402
+)
 
 ANTI_AI_PHRASES = [
     "i'd be happy to",
@@ -737,7 +739,6 @@ def main() -> int:
         load_start = time.perf_counter()
         try:
             import dspy
-
             from evals.dspy_client import DSPYMLXClient
             from evals.dspy_reply import ReplyModule
 

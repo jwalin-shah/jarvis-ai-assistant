@@ -14,7 +14,7 @@ from typing import Any
 
 import psutil
 
-from jarvis.contracts.memory import MemoryProfile
+from jarvis.contracts.memory import MemoryProfile  # noqa: E501, E402
 
 logger = logging.getLogger(__name__)
 
