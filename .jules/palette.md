@@ -1,0 +1,3 @@
+## 2024-03-25 - ChatView Accessibility Enhancements
+**Learning:** `svelte-check` is the primary static analysis tool for the frontend (`pnpm run check`), and Svelte projects do not use a standard `pnpm run lint` or `pnpm run format` locally in this configuration. The `ChatView.svelte` send and new chat buttons lacked explicit focus indicators, relying only on hover states, hindering keyboard navigation visibility.
+**Action:** When working on Svelte components, verify with `pnpm run check`. Always ensure interactive elements explicitly define `:focus-visible` styling (e.g., `outline: 2px solid var(--color-primary); outline-offset: 2px;`) to support keyboard navigation fully.
