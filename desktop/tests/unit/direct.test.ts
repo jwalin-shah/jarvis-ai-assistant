@@ -29,6 +29,7 @@ const TYPEDSTREAM_TEST =
 // but vi.mock overrides that alias with our controllable mock.
 const mockSelect = vi.fn();
 const mockClose = vi.fn();
+const mockExecute = vi.fn();
 const mockLoad = vi.fn();
 
 vi.mock("@tauri-apps/plugin-sql", () => ({
@@ -108,9 +109,11 @@ describe("direct.ts", () => {
     // Set up the mock DB instance that Database.load returns
     mockSelect.mockResolvedValue([]);
     mockClose.mockResolvedValue(undefined);
+    mockExecute.mockResolvedValue(undefined);
     mockLoad.mockResolvedValue({
       select: mockSelect,
       close: mockClose,
+      execute: mockExecute,
     });
 
     // Re-import the module to get fresh state.
@@ -208,6 +211,7 @@ describe("direct.ts", () => {
       mockLoad.mockResolvedValue({
         select: mockSelect,
         close: mockClose,
+        execute: mockExecute,
       });
       mockSelect.mockResolvedValue([]);
       await directModule.initDatabases();
