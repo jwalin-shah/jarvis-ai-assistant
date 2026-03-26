@@ -104,7 +104,10 @@ def clean_message(text: str) -> str:
     text = text.replace('\ufffc', '')
 
     # Remove reaction prefixes
-    text = re.sub(r'^(liked|loved|laughed at|emphasized|questioned)\s+["\']?', '', text, flags=re.IGNORECASE)
+    text = re.sub(
+        r'^(liked|loved|laughed at|emphasized|questioned)\s+["\']?',
+        '', text, flags=re.IGNORECASE
+    )
 
     # Strip whitespace
     text = text.strip()
