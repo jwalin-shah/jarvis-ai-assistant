@@ -112,7 +112,7 @@ def main() -> int:
     parser.add_argument(
         "--baseline",
         type=Path,
-        default=Path("evals/baselines/baseline_20260221.json"),
+        default=Path("internal/archive/evals/baselines/baseline_20260221.json"),
         help="Baseline metrics JSON",
     )
     parser.add_argument(

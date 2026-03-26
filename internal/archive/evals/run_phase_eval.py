@@ -53,7 +53,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--baseline",
-        default="evals/baselines/baseline_20260221.json",
+        default="internal/archive/evals/baselines/baseline_20260221.json",
         help="Baseline artifact path",
     )
     args = parser.parse_args()

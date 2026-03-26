@@ -37,7 +37,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("evals/baselines/baseline_20260221.json"),
+        default=Path("internal/archive/evals/baselines/baseline_20260221.json"),
         help="Baseline output JSON",
     )
     args = parser.parse_args()
