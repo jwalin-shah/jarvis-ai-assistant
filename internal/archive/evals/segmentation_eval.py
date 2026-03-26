@@ -7,18 +7,18 @@ conversations to measure:
 - WindowDiff / Pk: Standard segmentation error metrics.
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
 import sys
-from dataclasses import dataclass
-from pathlib import Path
+from dataclasses import dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from jarvis.topics.topic_segmenter import get_segmenter  # noqa: E402
+from jarvis.topics.topic_segmenter import get_segmenter  # noqa: E402  # noqa: E402
 
 # =============================================================================
 # Data Types

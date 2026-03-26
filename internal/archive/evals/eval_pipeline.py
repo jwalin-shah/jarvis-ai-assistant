@@ -10,18 +10,18 @@ Usage:
     uv run python evals/eval_pipeline.py --similarity      # + BERT cosine similarity
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
 import json
 import logging
 import os
 import sys
 import time
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from pathlib import Path
+from dataclasses import dataclass, field  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -143,7 +143,9 @@ def _extract_json_blob(text: str) -> str:
     return s
 
 
-def _judge_single_item(judge_client: object, judge_model: str, ex: EvalExample, generated: str) -> tuple[float | None, str]:
+def _judge_single_item(
+    judge_client: object, judge_model: str, ex: EvalExample, generated: str
+) -> tuple[float | None, str]:
     """Judge one item and return (score, reasoning)."""
     try:
         prompt = (
