@@ -833,6 +833,19 @@
         class:group={conversationsStore.selectedConversation.is_group}
         onmouseenter={handleAvatarMouseEnter}
         onmouseleave={handleAvatarMouseLeave}
+        role="button"
+        tabindex="0"
+        aria-label="View contact details"
+        onkeydown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            hoverCardX = (e.currentTarget as HTMLElement).getBoundingClientRect().left;
+            hoverCardY = (e.currentTarget as HTMLElement).getBoundingClientRect().bottom + 8;
+            hoverCardVisible = !hoverCardVisible;
+          } else if (e.key === 'Escape') {
+            hoverCardVisible = false;
+          }
+        }}
       >
         {#if conversationsStore.selectedConversation.is_group}
           <svg viewBox="0 0 24 24" fill="currentColor">
@@ -1012,6 +1025,11 @@
     font-weight: var(--font-weight-semibold);
     color: white;
     flex-shrink: 0;
+  }
+
+  .avatar:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   .avatar.group {
