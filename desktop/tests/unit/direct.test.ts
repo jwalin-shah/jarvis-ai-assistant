@@ -111,6 +111,7 @@ describe("direct.ts", () => {
     mockLoad.mockResolvedValue({
       select: mockSelect,
       close: mockClose,
+      execute: vi.fn(),
     });
 
     // Re-import the module to get fresh state.
@@ -208,6 +209,7 @@ describe("direct.ts", () => {
       mockLoad.mockResolvedValue({
         select: mockSelect,
         close: mockClose,
+        execute: vi.fn(),
       });
       mockSelect.mockResolvedValue([]);
       await directModule.initDatabases();
