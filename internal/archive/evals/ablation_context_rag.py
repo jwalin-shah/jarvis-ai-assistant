@@ -368,8 +368,8 @@ def main() -> int:
 
     for s in all_summaries:
         print(f"\n{s['name'].upper()}")
-        c_depth = s['config']['context_depth']
-        c_rag = s['config']['use_rag']
+        c_depth = s["config"]["context_depth"]
+        c_rag = s["config"]["use_rag"]
         print(f"  Config: context_depth={c_depth}, use_rag={c_rag}")
         print(f"  Avg Score: {s['avg_score']:.2f}/10")
         print(f"  Anti-AI Rate: {s['anti_ai_rate']:.1%}")
@@ -384,8 +384,8 @@ def main() -> int:
     print(f"🏆 WINNER: {winner['name'].upper()}")
     print("=" * 70)
     print(f"Score: {winner['avg_score']:.2f}/10")
-    w_depth = winner['config']['context_depth']
-    w_rag = winner['config']['use_rag']
+    w_depth = winner["config"]["context_depth"]
+    w_rag = winner["config"]["use_rag"]
     print(f"Config: context_depth={w_depth}, use_rag={w_rag}")
 
     # Save results

@@ -287,7 +287,7 @@ def print_report(report: dict) -> None:
     summary = report["summary"]
     print(f"\nTotal Experiments: {summary['total']}")
     print(f"Passed: {summary['passed']} | Failed: {summary['failed']}")
-    total_s = summary['total_duration_s']
+    total_s = summary["total_duration_s"]
     print(f"Total Duration: {total_s:.1f}s ({total_s / 60:.1f} min)")
 
     print("\n" + "-" * 70)
