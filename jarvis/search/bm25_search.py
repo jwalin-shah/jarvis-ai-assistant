@@ -48,6 +48,43 @@ class BM25Searcher:
         self._corpus: list[str] = []
         self._lock = threading.RLock()
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize searcher state to a dictionary safely."""
+        with self._lock:
+            state = {
+                "rowids": self._rowids,
+                "corpus": self._corpus,
+            }
+            if self._bm25 is not None:
+                state["bm25"] = {
+                    "corpus_size": self._bm25.corpus_size,
+                    "avgdl": self._bm25.avgdl,
+                    "doc_freqs": self._bm25.doc_freqs,
+                    "idf": self._bm25.idf,
+                    "doc_len": self._bm25.doc_len,
+                }
+            return state
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> BM25Searcher:
+        """Deserialize searcher from a dictionary safely."""
+        searcher = cls()
+        searcher._rowids = data.get("rowids", [])
+        searcher._corpus = data.get("corpus", [])
+
+        bm25_data = data.get("bm25")
+        if bm25_data is not None:
+            # Initialize with dummy corpus to avoid division by zero
+            bm25 = BM25Okapi([["dummy"]])
+            bm25.corpus_size = bm25_data["corpus_size"]
+            bm25.avgdl = bm25_data["avgdl"]
+            bm25.doc_freqs = bm25_data["doc_freqs"]
+            bm25.idf = bm25_data["idf"]
+            bm25.doc_len = bm25_data["doc_len"]
+            searcher._bm25 = bm25
+
+        return searcher
+
     def is_indexed(self) -> bool:
         """Check if index is populated."""
         return self._bm25 is not None
