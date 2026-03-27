@@ -9,11 +9,15 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from tqdm import tqdm
+from evals.eval_pipeline import (  # noqa: E402  # noqa: E402
+    EVAL_DATASET_PATH,
+    EvalExample,
+    load_eval_dataset,
+)
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402  # noqa: E402
+from tqdm import tqdm  # noqa: E402  # noqa: E402
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, EvalExample, load_eval_dataset
-from evals.judge_config import JUDGE_MODEL, get_judge_client
-from models.loader import get_model
+from models.loader import get_model  # noqa: E402  # noqa: E402
 
 # Configuration
 NUM_EXAMPLES = 20  # Small batch for quick eval
@@ -214,12 +218,11 @@ def main():
 
     score_improvement = optimized_results["avg_score"] - baseline_results["avg_score"]
     length_reduction = baseline_results["avg_length"] - optimized_results["avg_length"]
+    length_reduction_pct = length_reduction / baseline_results["avg_length"] * 100
 
     print("\n📈 Improvements:")
     print(f"   Score: {score_improvement:+.2f} points")
-    print(
-        f"   Length: -{length_reduction:.0f} chars ({length_reduction / baseline_results['avg_length'] * 100:.0f}% shorter)"
-    )
+    print(f"   Length: -{length_reduction:.0f} chars ({length_reduction_pct:.0f}% shorter)")
 
     # Save results
     output = {
@@ -228,7 +231,7 @@ def main():
         "improvements": {
             "score": score_improvement,
             "length_reduction": length_reduction,
-            "length_reduction_pct": length_reduction / baseline_results["avg_length"] * 100,
+            "length_reduction_pct": length_reduction_pct,
         },
     }
 

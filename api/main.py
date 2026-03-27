@@ -25,6 +25,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from api.errors import register_exception_handlers
+from api.middleware import SecurityHeadersMiddleware
 from api.ratelimit import limiter, rate_limit_exceeded_handler
 from jarvis.metrics import get_latency_histogram, get_request_counter
 
@@ -322,6 +323,9 @@ def _configure_middleware(app_instance: FastAPI) -> None:
 
     # Enable GZip compression for responses (50-75% bandwidth savings for large JSON responses)
     app_instance.add_middleware(GZipMiddleware, minimum_size=500)
+
+    # Security headers middleware
+    app_instance.add_middleware(SecurityHeadersMiddleware)
 
     # Rate limiting middleware (applies default_limits to all routes)
     app_instance.add_middleware(SlowAPIMiddleware)

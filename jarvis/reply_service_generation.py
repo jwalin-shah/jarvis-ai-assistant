@@ -9,8 +9,8 @@ from typing import Any
 
 import numpy as np
 
-from jarvis.contracts.models import GenerationRequest as ModelGenerationRequest
 from jarvis.config import get_config
+from jarvis.contracts.models import GenerationRequest as ModelGenerationRequest
 from jarvis.contracts.pipeline import (
     GenerationRequest,
     GenerationResponse,
@@ -210,11 +210,16 @@ def build_generation_request(
     retrieved_docs = []
     if use_rag and search_results:
         for res in search_results:
+            # Fallback to similarity if score is missing
+            score = res.get("score")
+            if score is None:
+                score = res.get("similarity", 0.0)
+
             retrieved_docs.append(
                 RAGDocument(
                     content=res.get("text", "") or res.get("content", ""),
                     source=res.get("source", "unknown"),
-                    score=float(res.get("score", 0.0) or 0.0),
+                    score=float(score or 0.0),
                     metadata=res,
                 )
             )
@@ -534,14 +539,9 @@ def generate_llm_reply(
 
         route_type = "generated_llm"
         route_reason = "generated"
-        if (
-            generator_model == "fallback"
-            or generator_finish_reason in {"fallback", "error"}
-        ):
+        if generator_model == "fallback" or generator_finish_reason in {"fallback", "error"}:
             route_type = "generated_fallback"
-            route_reason = generator_error or (
-                f"generator_{generator_finish_reason or 'fallback'}"
-            )
+            route_reason = generator_error or (f"generator_{generator_finish_reason or 'fallback'}")
 
         logger.info(
             "[reply] Confidence: %.2f (%s) | direct-to-llm",
