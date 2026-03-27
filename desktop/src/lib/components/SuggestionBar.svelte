@@ -194,12 +194,13 @@
 
 <svelte:window onkeydown={handleKeyDown} />
 
-<div class="suggestion-bar">
+<div class="suggestion-bar" aria-live="polite">
   <span class="bar-icon"><Icon name="sparkles" size={16} /></span>
 
   {#if barState === "streaming"}
     <button 
       class="bar-content streaming" 
+      aria-label={streamingText ? `Drafting: ${streamingText}` : "AI is thinking..."}
       onclick={() => {
         if (streamingText) {
           onSelect(streamingText);
@@ -239,6 +240,7 @@
         <button
           class="chip"
           style:opacity={suggestion.confidence < 0.7 ? 0.85 : 1}
+          aria-label="{suggestion.text}, confidence {Math.round(suggestion.confidence * 100)}%"
           onclick={() => {
             onSelect(suggestion.text);
             onAccept?.(suggestion.text);
@@ -255,7 +257,7 @@
     <div class="bar-content error">
       <Icon name="alert-circle" size={14} />
       <span class="error-text">{errorMessage}</span>
-      <button class="bar-btn" onclick={generateReplies} title="Retry">
+      <button class="bar-btn" aria-label="Retry generating suggestions" onclick={generateReplies} title="Retry">
         <Icon name="refresh-cw" size={14} />
       </button>
     </div>
