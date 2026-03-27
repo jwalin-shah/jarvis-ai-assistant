@@ -1,0 +1,6 @@
+{
+  "depth": 3,
+  "repetition_penalty": 1.1,
+  "instruction": "Reply in the same tone as the last user message: brief, casual, and human\u2011like. Match their style, keep it short, and avoid any AI references or filler words.",
+  "score": 0.45
+}
