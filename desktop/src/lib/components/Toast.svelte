@@ -20,7 +20,7 @@
   {#each $toasts as toast, i (toast.id)}
     <div
       class="toast toast-{toast.type}"
-      role="alert"
+      role={toast.type === 'error' || toast.type === 'warning' ? 'alert' : 'status'}
       style="--index: {i}"
     >
       <div class="toast-icon">
@@ -167,7 +167,8 @@
     opacity: 0;
   }
 
-  .toast:hover .toast-dismiss {
+  .toast:hover .toast-dismiss,
+  .toast-dismiss:focus-visible {
     opacity: 1;
   }
 
