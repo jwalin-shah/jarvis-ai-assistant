@@ -1,71 +1,46 @@
-#!/usr/bin/env python3
-"""Simple training script for JARVIS LoRA fine-tuning.
+"""Training entry point script.
 
-This is a thin wrapper around mlx_lm.lora with sensible defaults.
-All configuration is in ft_configs/lora_template.yaml.
-
-Usage:
-    # Train with default config
-    uv run python scripts/training/train.py
-    
-    # Train with custom config
-    uv run python scripts/training/train.py --config ft_configs/my_config.yaml
-    
-    # Quick test run (10 iterations)
-    uv run python scripts/training/train.py --test
+Wraps the actual training logic to provide a clean CLI interface.
 """
-
-from __future__ import annotations
 
 import argparse
 import subprocess
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
 
+def main():
+    """Main entry point."""
+    parser = argparse.ArgumentParser(description="Train a model using JARVIS infrastructure")
+    parser.add_argument("--config", type=str, help="Path to training config", default="ft_configs/config.yaml")
+    parser.add_argument("--test", action="store_true", help="Run a quick test training loop")
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Train JARVIS LoRA adapter")
-    parser.add_argument(
-        "--config",
-        type=Path,
-        default=PROJECT_ROOT / "ft_configs" / "lora_template.yaml",
-        help="Path to training config YAML",
-    )
-    parser.add_argument(
-        "--test",
-        action="store_true",
-        help="Quick test run (10 iterations)",
-    )
-    parser.add_argument(
-        "--iters",
-        type=int,
-        help="Override number of iterations",
-    )
     args = parser.parse_args()
 
-    if not args.config.exists():
-        print(f"ERROR: Config not found: {args.config}", file=sys.stderr)
-        return 1
+    # Ensure we are in the project root
+    project_root = Path(__file__).parent.parent.parent
 
-    # Build command
-    cmd = ["mlx_lm.lora", "--config", str(args.config)]
+    # Construct the command to run the actual training script
+    # We use uv run to ensure dependencies are met
+    cmd = ["uv", "run", "python", "-m", "scripts.training.run_train"]
+
+    if args.config:
+        cmd.extend(["--config", args.config])
 
     if args.test:
-        cmd.extend(["--iters", "10", "--steps-per-eval", "5"])
-        print("Running test training (10 iterations)...")
-    elif args.iters:
-        cmd.extend(["--iters", str(args.iters)])
+        cmd.append("--test")
 
-    print(f"Training with config: {args.config}")
-    print(f"Command: {' '.join(cmd)}")
-    print()
+    print(f"Running training command: {' '.join(cmd)}")
 
-    # Run training
-    result = subprocess.run(cmd, cwd=PROJECT_ROOT)
-    return result.returncode
+    try:
+        subprocess.run(cmd, cwd=project_root, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Training failed with exit code {e.returncode}")
+        sys.exit(e.returncode)
+    except KeyboardInterrupt:
+        print("\nTraining interrupted")
+        sys.exit(130)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
