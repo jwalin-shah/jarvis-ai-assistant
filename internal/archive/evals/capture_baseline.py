@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Capture normalized Phase-0 baseline metrics from an eval output JSON."""
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
 import argparse
 import json
 import time
-from pathlib import Path
-from typing import Any
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
 
 def _extract_metrics(payload: dict[str, Any]) -> dict[str, float]:
@@ -31,13 +31,13 @@ def main() -> int:
     parser.add_argument(
         "--source",
         type=Path,
-        default=Path("evals/results/eval_pipeline_baseline.json"),
+        default=Path("internal/archive/evals/results/eval_pipeline_baseline.json"),
         help="Source eval output JSON",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("evals/baselines/baseline_20260221.json"),
+        default=Path("internal/archive/evals/baselines/baseline_20260221.json"),
         help="Baseline output JSON",
     )
     args = parser.parse_args()

@@ -6,12 +6,12 @@ Modes:
 - candidate: run eval_pipeline and check against baseline via quality gate
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
 import argparse
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -53,7 +53,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--baseline",
-        default="evals/baselines/baseline_20260221.json",
+        default="internal/archive/evals/baselines/baseline_20260221.json",
         help="Baseline artifact path",
     )
     args = parser.parse_args()

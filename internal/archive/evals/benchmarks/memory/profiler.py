@@ -9,12 +9,12 @@ Measures RSS, virtual memory, and Metal GPU memory during model loading.
 import gc
 import logging
 import time
-from datetime import UTC, datetime
-from typing import Any
+from datetime import UTC, datetime  # noqa: E402
+from typing import Any  # noqa: E402
 
 import psutil
 
-from jarvis.contracts.memory import MemoryProfile
+from jarvis.contracts.memory import MemoryProfile  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

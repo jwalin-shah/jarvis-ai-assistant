@@ -7,7 +7,7 @@ This extends the basic dspy_reply.py with:
 - Constraint-aware generation
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
 import dspy
 

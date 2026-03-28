@@ -10,10 +10,10 @@ Usage:
     resp = client.chat.completions.create(model=JUDGE_MODEL, ...)
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
 import os
-from pathlib import Path
+from pathlib import Path  # noqa: E402
 
 # Load .env from project root
 _env_path = Path(__file__).parent.parent / ".env"

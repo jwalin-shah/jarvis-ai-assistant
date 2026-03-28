@@ -7,11 +7,11 @@ using the vectara/hallucination_evaluation_model from HuggingFace.
 """
 
 import logging
-from datetime import UTC, datetime
-from statistics import mean, median, stdev
-from typing import Any, Protocol, runtime_checkable
+from datetime import UTC, datetime  # noqa: E402
+from statistics import mean, median, stdev  # noqa: E402
+from typing import Any, Protocol, runtime_checkable  # noqa: E402
 
-from jarvis.contracts.hallucination import HHEMBenchmarkResult, HHEMResult
+from jarvis.contracts.hallucination import HHEMBenchmarkResult, HHEMResult  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
