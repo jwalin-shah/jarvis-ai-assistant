@@ -5,10 +5,13 @@ DSPy's high-level logic with the local MLX model via BaseLM.forward().
 """
 
 import os
+import sys
+sys.path.insert(0, str(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "internal", "archive"))))
 
 import dspy
 import pytest
-from internal.archive.evals.dspy_client import DSPYMLXClient
+
+from evals.dspy_client import DSPYMLXClient
 
 
 class SimpleReply(dspy.Signature):

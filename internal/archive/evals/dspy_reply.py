@@ -16,8 +16,8 @@ import re
 
 import dspy
 
-from internal.archive.evals.judge_config import JUDGE_MODEL
-from internal.archive.evals.judge_config import get_judge_client as _get_judge_client
+from evals.judge_config import JUDGE_MODEL
+from evals.judge_config import get_judge_client as _get_judge_client
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ class CategoryReplyModule(dspy.Module):
 # ---------------------------------------------------------------------------
 def _build_examples() -> list[dspy.Example]:
     """Convert batch_eval test cases into dspy.Examples for the trainset."""
-    from internal.archive.evals.batch_eval import TEST_CASES
+    from evals.batch_eval import TEST_CASES
 
     examples = []
     for tc in TEST_CASES:
@@ -181,7 +181,7 @@ def clean_reply(text: str) -> str:
 # Metric: LLM judge via Gemini 2.5 Flash (mirrors batch_eval.judge_response)
 # ---------------------------------------------------------------------------
 
-# _get_judge_client imported from internal.archive.evals.judge_config
+# _get_judge_client imported from evals.judge_config
 
 
 _judge_client = None

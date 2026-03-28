@@ -4,7 +4,7 @@ All eval/script files should import from here instead of hardcoding
 model names and API endpoints. Change the judge model in ONE place.
 
 Usage:
-    from internal.archive.evals.judge_config import JUDGE_MODEL, get_judge_client
+    from evals.judge_config import JUDGE_MODEL, get_judge_client
 
     client = get_judge_client()
     resp = client.chat.completions.create(model=JUDGE_MODEL, ...)
