@@ -11,17 +11,23 @@ Usage:
     uv run python evals/evaluate_templates.py [--limit 50]
 """
 
+# Add project root to path
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.append(str(PROJECT_ROOT))
+
 import argparse
 import json
 import random
-import sys
 import time
-from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from evals.judge_config import JUDGE_MODEL, get_judge_client
+
 from jarvis.prompts import ACKNOWLEDGE_TEMPLATES, CLOSING_TEMPLATES
 
 
@@ -42,7 +48,7 @@ def fetch_real_messages(limit: int = 50) -> list[dict]:
         # Heuristic: short messages (2-15 chars) or common patterns
         cursor.execute(
             """
-            SELECT 
+            SELECT
                 m.text,
                 m.date,
                 c.display_name,

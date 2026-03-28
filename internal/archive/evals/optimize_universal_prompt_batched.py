@@ -20,11 +20,13 @@ from typing import Any
 
 from tqdm import tqdm
 
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+# Add project root to path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.append(str(PROJECT_ROOT))
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset
-from evals.judge_config import JUDGE_MODEL, get_judge_client
+# pylint: disable=wrong-import-position
+from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset  # noqa: E402
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
 # Test different universal prompt variations
 PROMPT_VARIANTS = {
@@ -159,8 +161,8 @@ def test_prompt_variant_batched(
     judge_client: Any | None,
 ) -> PromptResult:
     """Test a single prompt variant with batching."""
-
-    from models.loader import get_model
+    # pylint: disable=import-outside-toplevel
+    from models.loader import get_model  # noqa: E402
 
     loader = get_model()
     if not loader.is_loaded():
