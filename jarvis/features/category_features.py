@@ -410,102 +410,6 @@ class CategoryFeatureExtractor:
 
         return np.array(features, dtype=np.float32)
 
-    def _extract_original_14(
-        self,
-        text: str,
-        text_lower: str,
-        doc: spacy.tokens.Doc,
-    ) -> tuple[list[float], float, float, int, int]:
-        """Extract original 14 features.
-
-        Returns (features, you_modal, modal_count, first_person, second_person).
-        """
-        features: list[float] = []
-        len(doc)
-
-        has_imperative = (
-            1.0 if len(doc) > 0 and doc[0].pos_ == "VERB" and doc[0].tag_ == "VB" else 0.0
-        )
-        features.append(has_imperative)
-
-        you_modal = (
-            1.0
-            if any(
-                p in text_lower
-                for p in ["can you", "could you", "would you", "will you", "should you"]
-            )
-            else 0.0
-        )
-        features.append(you_modal)
-
-        has_request = 1.0 if any(token.lemma_ in REQUEST_VERBS for token in doc) else 0.0
-        features.append(has_request)
-
-        starts_modal = 1.0 if len(doc) > 0 and doc[0].tag_ in ("MD", "VB") else 0.0
-        features.append(starts_modal)
-
-        features.append(1.0 if you_modal and "?" in text else 0.0)
-
-        i_will = (
-            1.0
-            if any(p in text_lower for p in ["i'll", "i will", "i'm gonna", "ima", "imma"])
-            else 0.0
-        )
-        features.append(i_will)
-
-        has_promise = 1.0 if any(token.lemma_ in PROMISE_VERBS for token in doc) else 0.0
-        features.append(has_promise)
-
-        first_person = sum(1 for token in doc if token.text.lower() in FIRST_PERSON_PRONOUNS)
-        features.append(float(first_person))
-
-        has_agreement = 1.0 if any(word in text_lower for word in AGREEMENT_WORDS) else 0.0
-        features.append(has_agreement)
-
-        modal_count = sum(1 for token in doc if token.tag_ == "MD")
-        features.append(float(modal_count))
-
-        features.append(float(sum(1 for token in doc if token.pos_ == "VERB")))
-
-        second_person = sum(1 for token in doc if token.text.lower() in SECOND_PERSON_PRONOUNS)
-        features.append(float(second_person))
-
-        has_neg = 1.0 if any(token.dep_ == "neg" for token in doc) else 0.0
-        features.append(has_neg)
-
-        is_question = (
-            1.0
-            if "?" in text or any(token.tag_ in ("WDT", "WP", "WP$", "WRB") for token in doc)
-            else 0.0
-        )
-        features.append(is_question)
-
-        return features, you_modal, float(modal_count), first_person, second_person
-
-    @staticmethod
-    def _extract_pos_ratios(doc: spacy.tokens.Doc, total_tokens: int) -> list[float]:
-        """Extract 8 POS ratio features."""
-        pos_counts = {p: 0 for p in POS_TAGS}
-        for token in doc:
-            if token.pos_ in pos_counts:
-                pos_counts[token.pos_] += 1
-        return [pos_counts[pos] / max(total_tokens, 1) for pos in POS_TAGS]
-
-    @staticmethod
-    def _extract_fine_grained_tags(doc: spacy.tokens.Doc) -> list[float]:
-        """Extract 12 fine-grained tag presence features."""
-        tag_set = {token.tag_ for token in doc}
-        return [1.0 if tag in tag_set else 0.0 for tag in FINE_GRAINED_TAGS]
-
-    @staticmethod
-    def _extract_dependency_counts(doc: spacy.tokens.Doc, total_tokens: int) -> list[float]:
-        """Extract 15 dependency relation ratio features."""
-        dep_counts = {d: 0 for d in DEP_LABELS}
-        for token in doc:
-            if token.dep_ in dep_counts:
-                dep_counts[token.dep_] += 1
-        return [dep_counts[dep] / max(total_tokens, 1) for dep in DEP_LABELS]
-
     @staticmethod
     def _extract_entity_features(doc: spacy.tokens.Doc, total_tokens: int) -> list[float]:
         """Extract 21 named entity features."""
@@ -536,81 +440,6 @@ class CategoryFeatureExtractor:
             len(noun_chunks) / max(total_tokens, 1),
         ]
 
-    @staticmethod
-    def _extract_token_properties(doc: spacy.tokens.Doc, total_tokens: int) -> list[float]:
-        """Extract 11 token property features."""
-        t = max(total_tokens, 1)
-        stop_count = sum(1 for token in doc if token.is_stop)
-        alpha_count = sum(1 for token in doc if token.is_alpha)
-        digit_count = sum(1 for token in doc if token.is_digit)
-        avg_word_len = (
-            float(np.mean([len(token.text) for token in doc])) if total_tokens > 0 else 0.0
-        )
-        punct_count = sum(1 for token in doc if token.is_punct)
-        url_count = sum(1 for token in doc if token.like_url)
-        like_num_count = sum(1 for token in doc if token.like_num)
-        like_email_count = sum(1 for token in doc if token.like_email)
-        is_currency_count = sum(1 for token in doc if token.is_currency)
-        is_quote_count = sum(1 for token in doc if token.is_quote)
-        return [
-            stop_count / t,
-            alpha_count / t,
-            digit_count / t,
-            avg_word_len,
-            punct_count / t,
-            float(url_count),
-            like_num_count / t,
-            float(like_email_count),
-            float(is_currency_count),
-            float(is_quote_count),
-            url_count / t,
-        ]
-
-    @staticmethod
-    def _extract_morphology(
-        doc: spacy.tokens.Doc,
-        text_lower: str,
-        total_tokens: int,
-        modal_count: float,
-        first_person: int,
-        second_person: int,
-    ) -> list[float]:
-        """Extract 8 morphology features."""
-        t = max(total_tokens, 1)
-        past_tense_count = sum(1 for token in doc if token.tag_ in PAST_TENSE_TAGS)
-        present_tense_count = sum(1 for token in doc if token.tag_ in PRESENT_TENSE_TAGS)
-
-        has_imperative_mood = 0.0
-        if len(doc) > 0:
-            if doc[0].tag_ == "VB" or any(
-                token.tag_ == "VB" and token.dep_ == "ROOT" for token in doc
-            ):
-                has_imperative_mood = 1.0
-
-        has_conditional = (
-            1.0 if modal_count > 0 and any(w in text_lower for w in ["if", "would"]) else 0.0
-        )
-
-        third_person = sum(1 for token in doc if token.text.lower() in THIRD_PERSON_PRONOUNS)
-
-        has_passive = 0.0
-        if len(doc) >= 2:
-            for i in range(len(doc) - 1):
-                if doc[i].lemma_ == "be" and doc[i].dep_ == "auxpass" and doc[i + 1].tag_ == "VBN":
-                    has_passive = 1.0
-                    break
-
-        return [
-            past_tense_count / t,
-            present_tense_count / t,
-            has_imperative_mood,
-            has_conditional,
-            first_person / t,
-            second_person / t,
-            third_person / t,
-            has_passive,
-        ]
-
     def extract_spacy_features(
         self,
         text: str,
@@ -630,28 +459,221 @@ class CategoryFeatureExtractor:
 
         text_lower = text.lower()
         total_tokens = len(doc)
+        t_max = max(total_tokens, 1)
 
-        original, you_modal, modal_count, first_person, second_person = self._extract_original_14(
-            text, text_lower, doc
+        # Output feature arrays
+        original_features: list[float] = []
+        pos_ratios: list[float] = []
+        fine_tags: list[float] = []
+        dep_ratios: list[float] = []
+        token_props: list[float] = []
+        morphology: list[float] = []
+
+        # === 1. Original 14 Features Initialization ===
+        has_imperative = (
+            1.0 if total_tokens > 0 and doc[0].pos_ == "VERB" and doc[0].tag_ == "VB" else 0.0
         )
+        original_features.append(has_imperative)
 
-        features: list[float] = original
-        features.extend(self._extract_pos_ratios(doc, total_tokens))
-        features.extend(self._extract_fine_grained_tags(doc))
-        features.extend(self._extract_dependency_counts(doc, total_tokens))
-        features.extend(self._extract_entity_features(doc, total_tokens))
-        features.extend(self._extract_sentence_structure(doc, total_tokens))
-        features.extend(self._extract_token_properties(doc, total_tokens))
-        features.extend(
-            self._extract_morphology(
-                doc,
-                text_lower,
-                total_tokens,
-                modal_count,
-                first_person,
-                second_person,
+        you_modal = (
+            1.0
+            if any(
+                p in text_lower
+                for p in ["can you", "could you", "would you", "will you", "should you"]
             )
+            else 0.0
         )
+        original_features.append(you_modal)
+
+        has_request = 0.0
+        has_promise = 0.0
+        first_person = 0
+        second_person = 0
+        third_person = 0
+        modal_count = 0
+        verb_count = 0
+        has_neg = 0.0
+        has_wh = False
+
+        starts_modal = 1.0 if total_tokens > 0 and doc[0].tag_ in ("MD", "VB") else 0.0
+
+        # === 2. Token Properties Initialization ===
+        stop_count = 0
+        alpha_count = 0
+        digit_count = 0
+        punct_count = 0
+        url_count = 0
+        like_num_count = 0
+        like_email_count = 0
+        is_currency_count = 0
+        is_quote_count = 0
+        total_word_len = 0
+
+        # === 3. Morphology Initialization ===
+        past_tense_count = 0
+        present_tense_count = 0
+        has_imperative_mood = 1.0 if total_tokens > 0 and doc[0].tag_ == "VB" else 0.0
+        has_passive = 0.0
+        prev_was_be_auxpass = False
+
+        # === 4. POS and Dependencies Initialization ===
+        pos_counts = {p: 0 for p in POS_TAGS}
+        dep_counts = {d: 0 for d in DEP_LABELS}
+        tag_set = set()
+
+        # === SINGLE PASS OVER TOKENS ===
+        for token in doc:
+            lemma = token.lemma_
+            tag = token.tag_
+            pos = token.pos_
+            dep = token.dep_
+            token_text_lower = token.text.lower()
+
+            # Original 14 logic
+            if lemma in REQUEST_VERBS:
+                has_request = 1.0
+            if lemma in PROMISE_VERBS:
+                has_promise = 1.0
+
+            if token_text_lower in FIRST_PERSON_PRONOUNS:
+                first_person += 1
+            elif token_text_lower in SECOND_PERSON_PRONOUNS:
+                second_person += 1
+
+            if token_text_lower in THIRD_PERSON_PRONOUNS:
+                third_person += 1
+
+            tag_set.add(tag)
+            if tag == "MD":
+                modal_count += 1
+            if tag in ("WDT", "WP", "WP$", "WRB"):
+                has_wh = True
+
+            if pos == "VERB":
+                verb_count += 1
+            if dep == "neg":
+                has_neg = 1.0
+
+            # POS & Dep
+            if pos in pos_counts:
+                pos_counts[pos] += 1
+            if dep in dep_counts:
+                dep_counts[dep] += 1
+
+            # Token Properties
+            if token.is_stop:
+                stop_count += 1
+            if token.is_alpha:
+                alpha_count += 1
+            if token.is_digit:
+                digit_count += 1
+            if token.is_punct:
+                punct_count += 1
+            if token.like_url:
+                url_count += 1
+            if token.like_num:
+                like_num_count += 1
+            if token.like_email:
+                like_email_count += 1
+            if token.is_currency:
+                is_currency_count += 1
+            if token.is_quote:
+                is_quote_count += 1
+            total_word_len += len(token.text)
+
+            # Morphology
+            if tag in PAST_TENSE_TAGS:
+                past_tense_count += 1
+            elif tag in PRESENT_TENSE_TAGS:
+                present_tense_count += 1
+
+            if has_imperative_mood == 0.0 and tag == "VB" and dep == "ROOT":
+                has_imperative_mood = 1.0
+
+            if has_passive == 0.0:
+                if prev_was_be_auxpass and tag == "VBN":
+                    has_passive = 1.0
+                prev_was_be_auxpass = lemma == "be" and dep == "auxpass"
+
+        # === Assemble Feature Arrays ===
+
+        # Original 14
+        original_features.append(has_request)
+        original_features.append(starts_modal)
+        original_features.append(1.0 if you_modal and "?" in text else 0.0)
+        i_will = (
+            1.0
+            if any(p in text_lower for p in ["i'll", "i will", "i'm gonna", "ima", "imma"])
+            else 0.0
+        )
+        original_features.append(i_will)
+        original_features.append(has_promise)
+        original_features.append(float(first_person))
+        has_agreement = 1.0 if any(word in text_lower for word in AGREEMENT_WORDS) else 0.0
+        original_features.append(has_agreement)
+        original_features.append(float(modal_count))
+        original_features.append(float(verb_count))
+        original_features.append(float(second_person))
+        original_features.append(has_neg)
+        is_question = 1.0 if "?" in text or has_wh else 0.0
+        original_features.append(is_question)
+
+        # POS Ratios
+        pos_ratios = [pos_counts[pos] / t_max for pos in POS_TAGS]
+
+        # Fine-grained tags
+        fine_tags = [1.0 if tag in tag_set else 0.0 for tag in FINE_GRAINED_TAGS]
+
+        # Dependency Ratios
+        dep_ratios = [dep_counts[dep] / t_max for dep in DEP_LABELS]
+
+        # Entity Features (Iterates over doc.ents, which is small)
+        ent_features = self._extract_entity_features(doc, total_tokens)
+
+        # Sentence Structure (Iterates over doc.sents/noun_chunks)
+        sent_features = self._extract_sentence_structure(doc, total_tokens)
+
+        # Token Properties
+        avg_word_len = float(total_word_len) / t_max if total_tokens > 0 else 0.0
+        token_props = [
+            stop_count / t_max,
+            alpha_count / t_max,
+            digit_count / t_max,
+            avg_word_len,
+            punct_count / t_max,
+            float(url_count),
+            like_num_count / t_max,
+            float(like_email_count),
+            float(is_currency_count),
+            float(is_quote_count),
+            url_count / t_max,
+        ]
+
+        # Morphology
+        has_conditional = (
+            1.0 if modal_count > 0 and ("if" in text_lower or "would" in text_lower) else 0.0
+        )
+        morphology = [
+            past_tense_count / t_max,
+            present_tense_count / t_max,
+            has_imperative_mood,
+            has_conditional,
+            first_person / t_max,
+            second_person / t_max,
+            third_person / t_max,
+            has_passive,
+        ]
+
+        # Combine all features
+        features: list[float] = []
+        features.extend(original_features)
+        features.extend(pos_ratios)
+        features.extend(fine_tags)
+        features.extend(dep_ratios)
+        features.extend(ent_features)
+        features.extend(sent_features)
+        features.extend(token_props)
+        features.extend(morphology)
 
         return np.array(features, dtype=np.float32)
 
