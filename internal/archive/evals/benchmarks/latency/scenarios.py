@@ -5,8 +5,8 @@ Workstream 4: Latency Benchmark
 Defines cold, warm, and hot start scenarios with representative prompts.
 """
 
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass  # noqa: E402
+from typing import Literal  # noqa: E402
 
 # Re-export Scenario type from contracts
 Scenario = Literal["cold", "warm", "hot"]

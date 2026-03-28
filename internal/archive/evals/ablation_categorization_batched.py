@@ -12,22 +12,26 @@ Usage:
     uv run python evals/ablation_categorization_batched.py --variant categorized --batch-size 5
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
 import argparse
 import json
 import sys
 import time
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
+from dataclasses import dataclass, field  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset  # noqa: E402
+from evals.eval_pipeline import (  # noqa: E402
+    EVAL_DATASET_PATH,
+    check_anti_ai,
+    load_eval_dataset,
+)
 from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
 # Rate limit configuration

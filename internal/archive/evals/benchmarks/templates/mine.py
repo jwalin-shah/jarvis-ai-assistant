@@ -8,7 +8,7 @@ This module discovers common message patterns by:
 4. Extracting representative templates from clusters
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
 import argparse
 import json
@@ -16,13 +16,13 @@ import logging
 import sqlite3
 import sys
 import time
-from dataclasses import asdict, dataclass
-from pathlib import Path
-from typing import Any
+from dataclasses import asdict, dataclass  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
 import numpy as np
-from sklearn.cluster import DBSCAN
-from tqdm import tqdm
+from sklearn.cluster import DBSCAN  # noqa: E402
+from tqdm import tqdm  # noqa: E402
 
 # Conditional imports for sentence transformers
 try:

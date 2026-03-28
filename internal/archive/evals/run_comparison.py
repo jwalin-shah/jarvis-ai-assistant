@@ -9,14 +9,14 @@ Usage:
     uv run python evals/run_comparison.py --temps 0.1,0.7 --top-ps 0.5,0.95
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
 import argparse
 import json
 import sys
 import time
-from itertools import product
-from pathlib import Path
+from itertools import product  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
