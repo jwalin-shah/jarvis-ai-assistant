@@ -48,7 +48,7 @@ jobs:
         run: uv run pytest tests/unit/ -v --tb=short --timeout=30
 
       - name: Quality regression gate (Phase 0)
-        run: uv run python evals/quality_gate.py --allow-missing-candidate
+        run: uv run python internal/archive/evals/quality_gate.py --allow-missing-candidate
 
       - name: Upload test results
         if: failure()
