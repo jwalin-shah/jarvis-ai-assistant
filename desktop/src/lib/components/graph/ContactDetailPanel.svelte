@@ -78,7 +78,7 @@
             {/if}
           </div>
         </div>
-        <button class="close-btn" onclick={handleClose}>&times;</button>
+        <button class="close-btn" onclick={handleClose} aria-label="Close" title="Close">&times;</button>
       </div>
 
       {#if loading}
