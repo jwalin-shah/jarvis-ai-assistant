@@ -4,7 +4,7 @@ Wraps the local MLXModelLoader to be compatible with DSPy 3.x (BaseLM.forward AP
 
 Usage:
     import dspy
-    from evals.dspy_client import DSPYMLXClient
+    from internal.archive.evals.dspy_client import DSPYMLXClient
 
     lm = DSPYMLXClient()
     dspy.configure(lm=lm)

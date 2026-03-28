@@ -120,7 +120,7 @@ def strip_phone_numbers(text: str) -> str:
 
 def preprocess_conversation(context: list[str], last_message: str) -> tuple[list[str], str]:
     """Preprocess conversation for model input.
-    
+
     IMPORTANT: Keep the "Name: message" format so the model knows who's speaking.
     Just replace phone numbers with "Them" for consistency.
     """
@@ -146,7 +146,7 @@ def preprocess_conversation(context: list[str], last_message: str) -> tuple[list
 
 def build_simple_prompt(system_prompt: str, context: list[str], last_message: str) -> str:
     """Build minimal ChatML prompt.
-    
+
     Keep the "Name: message" format so model understands conversation flow.
     """
     # Keep the "Name: message" format from context
@@ -223,7 +223,7 @@ def clean_output(text: str) -> str:
 
 def load_training_format_dataset(path: Path) -> list[EvalExample]:
     """Load training-format dataset (messages format).
-    
+
     Keep the "Name: message" format throughout.
     """
     examples = []
@@ -411,7 +411,7 @@ def run_evaluation(
     judge_client = None
     judge_model = None
     if use_judge:
-        from evals.judge_config import JUDGE_MODEL, get_judge_client
+        from internal.archive.evals.judge_config import JUDGE_MODEL, get_judge_client
         judge_client = get_judge_client()
         judge_model = JUDGE_MODEL
         if judge_client:

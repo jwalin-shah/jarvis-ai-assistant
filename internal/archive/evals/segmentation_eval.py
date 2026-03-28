@@ -92,7 +92,7 @@ def main() -> int:
 
     # 1. Load Gold Data
     # For now, we'll use a small embedded set. In production, this would
-    # load from evals/segmentation_gold.jsonl
+    # load from internal.archive.evals/segmentation_gold.jsonl
     gold_data = [
         GoldExample(
             name="Logistics to Social",
