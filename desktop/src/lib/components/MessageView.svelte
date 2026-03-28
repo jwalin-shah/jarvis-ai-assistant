@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, onDestroy, tick } from "svelte";
   import {
     conversationsStore,
     loadMoreMessages,
@@ -14,36 +14,36 @@
     clearPrefetchedDraft,
     pollMessages,
     updateConversationAfterLocalSend,
-  } from '../stores/conversations.svelte';
-  import type { DraftSuggestion, Message } from '../types';
+  } from "../stores/conversations.svelte";
+  import type { DraftSuggestion, Message } from "../types";
   import {
     activeZone,
     setActiveZone,
     messageIndex,
     setMessageIndex,
     announce,
-  } from '../stores/keyboard';
-  import { WS_HTTP_BASE } from '../api/websocket';
-  import { jarvis } from '../socket/client';
-  import SuggestionBar from './SuggestionBar.svelte';
-  import MessageSkeleton from './MessageSkeleton.svelte';
-  import ContactHoverCard from './ContactHoverCard.svelte';
-  import { MessageItem, DateHeader, ComposeArea } from './message-view';
-  import { EmptyState } from './ui';
-  import { MessageIcon } from './icons';
-  import { formatDate, getMessageDateString } from '../utils/date';
-  import { getNavAction, isTypingInInput } from '../utils/keyboard-nav';
-  import { formatParticipant } from '../db';
+  } from "../stores/keyboard";
+  import { WS_HTTP_BASE } from "../api/websocket";
+  import { jarvis } from "../socket/client";
+  import SuggestionBar from "./SuggestionBar.svelte";
+  import MessageSkeleton from "./MessageSkeleton.svelte";
+  import ContactHoverCard from "./ContactHoverCard.svelte";
+  import { MessageItem, DateHeader, ComposeArea } from "./message-view";
+  import { EmptyState } from "./ui";
+  import { MessageIcon } from "./icons";
+  import { formatDate, getMessageDateString } from "../utils/date";
+  import { getNavAction, isTypingInInput } from "../utils/keyboard-nav";
+  import { formatParticipant } from "../db";
   import {
     recordSendAttempt,
     recordSendFailure,
     recordSendSuccess,
-  } from '../stores/reliability';
+  } from "../stores/reliability";
 
   // Panel visibility state
   let showDraftPanel = $state(false);
   let prefetchedSuggestions = $state<DraftSuggestion[] | undefined>(undefined);
-  let lastDraftUsed = $state<{ text: string, timestamp: number } | null>(null);
+  let lastDraftUsed = $state<{ text: string; timestamp: number } | null>(null);
 
   // Contact hover state
   let hoverCardVisible = $state(false);
@@ -55,7 +55,7 @@
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     hoverCardX = rect.left;
     hoverCardY = rect.bottom + 8;
-    
+
     if (hoverTimeout) clearTimeout(hoverTimeout);
     hoverTimeout = setTimeout(() => {
       hoverCardVisible = true;
@@ -78,7 +78,10 @@
 
   // Compose state
   let sendingMessage = $state(false);
-  let composeAreaRef = $state<{ focus: () => void; setValue: (text: string) => void } | null>(null);
+  let composeAreaRef = $state<{
+    focus: () => void;
+    setValue: (text: string) => void;
+  } | null>(null);
 
   // Virtual scrolling configuration
   const ESTIMATED_MESSAGE_HEIGHT = 80;
@@ -114,7 +117,9 @@
   let heightUpdateRafId: number | null = null;
 
   function getScrollOffsets() {
-    const style = messagesContainer ? getComputedStyle(messagesContainer) : null;
+    const style = messagesContainer
+      ? getComputedStyle(messagesContainer)
+      : null;
     const paddingTop = style ? parseFloat(style.paddingTop) || 0 : 0;
     const paddingBottom = style ? parseFloat(style.paddingBottom) || 0 : 0;
     const loadEarlierHeight = loadEarlierSectionEl?.offsetHeight ?? 0;
@@ -122,7 +127,8 @@
   }
 
   function handleMessageHeightChange(messageId: number, height: number) {
-    if (!messageId || height <= 0 || messageHeights.get(messageId) === height) return;
+    if (!messageId || height <= 0 || messageHeights.get(messageId) === height)
+      return;
 
     pendingHeightUpdates.set(messageId, height);
 
@@ -153,7 +159,9 @@
     const _heights = messageHeights;
     const cumulative = new Float64Array(messages.length + 1);
     for (let i = 0; i < messages.length; i++) {
-      cumulative[i + 1] = cumulative[i]! + (_heights.get(messages[i]!.id) ?? ESTIMATED_MESSAGE_HEIGHT);
+      cumulative[i + 1] =
+        cumulative[i]! +
+        (_heights.get(messages[i]!.id) ?? ESTIMATED_MESSAGE_HEIGHT);
     }
     return cumulative;
   });
@@ -177,14 +185,26 @@
     }
 
     const { paddingTop, paddingBottom, loadEarlierHeight } = getScrollOffsets();
-    const adjustedScrollTop = Math.max(0, scrollTop - loadEarlierHeight - paddingTop);
-    const visibleHeight = Math.max(0, containerHeight - paddingTop - paddingBottom);
+    const adjustedScrollTop = Math.max(
+      0,
+      scrollTop - loadEarlierHeight - paddingTop,
+    );
+    const visibleHeight = Math.max(
+      0,
+      containerHeight - paddingTop - paddingBottom,
+    );
     const totalHeight = cumHeights[messages.length]!;
 
     // Clamp to full-tail rendering near bottom to avoid oscillating bottom spacer.
-    if (adjustedScrollTop + visibleHeight >= totalHeight - 2 * ESTIMATED_MESSAGE_HEIGHT) {
+    if (
+      adjustedScrollTop + visibleHeight >=
+      totalHeight - 2 * ESTIMATED_MESSAGE_HEIGHT
+    ) {
       visibleEndIndex = messages.length;
-      visibleStartIndex = Math.max(0, messages.length - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
+      visibleStartIndex = Math.max(
+        0,
+        messages.length - MIN_VISIBLE_MESSAGES - BUFFER_SIZE,
+      );
       virtualTopPadding = cumHeights[visibleStartIndex]!;
       virtualBottomPadding = 0;
       return;
@@ -207,7 +227,9 @@
 
     // Binary search to find first message whose top edge > adjustedScrollTop + containerHeight
     const scrollBottom =
-      adjustedScrollTop + visibleHeight + BUFFER_SIZE * ESTIMATED_MESSAGE_HEIGHT;
+      adjustedScrollTop +
+      visibleHeight +
+      BUFFER_SIZE * ESTIMATED_MESSAGE_HEIGHT;
     lo = startIdx;
     hi = messages.length;
     while (lo < hi) {
@@ -218,7 +240,10 @@
         hi = mid;
       }
     }
-    let endIdx = Math.min(messages.length, Math.max(lo, startIdx + MIN_VISIBLE_MESSAGES));
+    let endIdx = Math.min(
+      messages.length,
+      Math.max(lo, startIdx + MIN_VISIBLE_MESSAGES),
+    );
 
     const bottomPadding = totalHeight - cumHeights[endIdx]!;
 
@@ -231,9 +256,10 @@
   function getVisibleMessages(): Message[] {
     const allMessages = conversationsStore.messagesWithOptimistic;
     // Extend end index to include optimistic messages if we're showing the tail
-    const effectiveEnd = visibleEndIndex >= conversationsStore.messages.length
-      ? allMessages.length
-      : visibleEndIndex;
+    const effectiveEnd =
+      visibleEndIndex >= conversationsStore.messages.length
+        ? allMessages.length
+        : visibleEndIndex;
     return allMessages.slice(visibleStartIndex, effectiveEnd);
   }
 
@@ -255,21 +281,33 @@
     if (msgIndex === -1) return;
 
     const { paddingTop, paddingBottom, loadEarlierHeight } = getScrollOffsets();
-    const scrollPosition = cumulativeHeights[msgIndex]! + loadEarlierHeight + paddingTop;
+    const scrollPosition =
+      cumulativeHeights[msgIndex]! + loadEarlierHeight + paddingTop;
 
     visibleStartIndex = Math.max(0, msgIndex - BUFFER_SIZE);
-    visibleEndIndex = Math.min(messages.length, msgIndex + BUFFER_SIZE + MIN_VISIBLE_MESSAGES);
+    visibleEndIndex = Math.min(
+      messages.length,
+      msgIndex + BUFFER_SIZE + MIN_VISIBLE_MESSAGES,
+    );
 
     virtualTopPadding = cumulativeHeights[visibleStartIndex]!;
-    virtualBottomPadding = cumulativeHeights[messages.length]! - cumulativeHeights[visibleEndIndex]!;
+    virtualBottomPadding =
+      cumulativeHeights[messages.length]! - cumulativeHeights[visibleEndIndex]!;
 
     await tick();
 
     if (messagesContainer) {
       const containerHeight = messagesContainer.clientHeight;
-      const visibleHeight = Math.max(0, containerHeight - paddingTop - paddingBottom);
-      const targetScroll = scrollPosition - visibleHeight / 2 + getMessageHeight(messageId) / 2;
-      messagesContainer.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+      const visibleHeight = Math.max(
+        0,
+        containerHeight - paddingTop - paddingBottom,
+      );
+      const targetScroll =
+        scrollPosition - visibleHeight / 2 + getMessageHeight(messageId) / 2;
+      messagesContainer.scrollTo({
+        top: Math.max(0, targetScroll),
+        behavior: "smooth",
+      });
     }
 
     await tick();
@@ -284,19 +322,28 @@
     let optimisticId: string;
     if (retryId) {
       optimisticId = retryId;
-      updateOptimisticMessage(optimisticId, { status: 'sending' });
+      updateOptimisticMessage(optimisticId, { status: "sending" });
     } else {
       optimisticId = addOptimisticMessage(text);
       // Ensure optimistic message is visible - it gets appended to messagesWithOptimistic
       // So we need to include it in the visible range
       isAtBottom = true;
-      const totalWithOptimistic = conversationsStore.messages.length + conversationsStore.optimisticMessages.length;
+      const totalWithOptimistic =
+        conversationsStore.messages.length +
+        conversationsStore.optimisticMessages.length;
       visibleEndIndex = totalWithOptimistic;
-      visibleStartIndex = Math.max(0, totalWithOptimistic - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
-      virtualTopPadding = visibleStartIndex <= conversationsStore.messages.length
-        ? (cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
-        : (cumulativeHeights[conversationsStore.messages.length] ?? conversationsStore.messages.length * ESTIMATED_MESSAGE_HEIGHT) + 
-          (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT;
+      visibleStartIndex = Math.max(
+        0,
+        totalWithOptimistic - MIN_VISIBLE_MESSAGES - BUFFER_SIZE,
+      );
+      virtualTopPadding =
+        visibleStartIndex <= conversationsStore.messages.length
+          ? (cumulativeHeights[visibleStartIndex] ??
+            visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
+          : (cumulativeHeights[conversationsStore.messages.length] ??
+              conversationsStore.messages.length * ESTIMATED_MESSAGE_HEIGHT) +
+            (visibleStartIndex - conversationsStore.messages.length) *
+              ESTIMATED_MESSAGE_HEIGHT;
       virtualBottomPadding = 0;
       scrollToBottom();
     }
@@ -305,28 +352,29 @@
       const chatId = conversationsStore.selectedConversation.chat_id;
       const isGroup = conversationsStore.selectedConversation.is_group;
       const recipient =
-        !isGroup && conversationsStore.selectedConversation.participants?.length > 0
+        !isGroup &&
+        conversationsStore.selectedConversation.participants?.length > 0
           ? conversationsStore.selectedConversation.participants[0]
           : undefined;
 
       const response = await fetch(
         `${WS_HTTP_BASE}/conversations/${encodeURIComponent(chatId)}/send`,
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text,
             recipient,
             is_group: isGroup,
           }),
-        }
+        },
       );
 
       if (!response.ok) {
         await response.text();
         recordSendFailure(`HTTP send failed: ${response.status}`);
         updateOptimisticMessage(optimisticId, {
-          status: 'failed',
+          status: "failed",
           error: `Send failed: ${response.status}`,
         });
         return;
@@ -336,14 +384,15 @@
 
       if (result.success) {
         recordSendSuccess();
-        updateOptimisticMessage(optimisticId, { status: 'sent' });
+        updateOptimisticMessage(optimisticId, { status: "sent" });
         updateConversationAfterLocalSend(chatId, text);
 
         // Record feedback if this was derived from a draft
         if (lastDraftUsed && Date.now() - lastDraftUsed.timestamp < 300000) {
-          const action = text.trim() === lastDraftUsed.text.trim() ? 'sent' : 'edited';
+          const action =
+            text.trim() === lastDraftUsed.text.trim() ? "sent" : "edited";
           const feedbackPayload: {
-            action: 'sent' | 'edited';
+            action: "sent" | "edited";
             suggestion_text: string;
             chat_id: string;
             context_messages: string[];
@@ -352,9 +401,11 @@
             action,
             suggestion_text: lastDraftUsed.text,
             chat_id: chatId,
-            context_messages: conversationsStore.messages.slice(-5).map(m => m.text || '')
+            context_messages: conversationsStore.messages
+              .slice(-5)
+              .map((m) => m.text || ""),
           };
-          if (action === 'edited') {
+          if (action === "edited") {
             feedbackPayload.edited_text = text;
           }
           void jarvis.recordFeedback(feedbackPayload).catch(() => {});
@@ -367,26 +418,30 @@
         // Safety timeout: auto-clear if watcher push doesn't arrive within 10s.
         setTimeout(() => removeOptimisticMessage(optimisticId), 10000);
       } else {
-        recordSendFailure(result.error || 'Send returned success=false');
+        recordSendFailure(result.error || "Send returned success=false");
         updateOptimisticMessage(optimisticId, {
-          status: 'failed',
-          error: result.error || 'Failed to send message',
+          status: "failed",
+          error: result.error || "Failed to send message",
         });
       }
     } catch (err) {
-      recordSendFailure(err instanceof Error ? err.message : 'Send threw unknown error');
+      recordSendFailure(
+        err instanceof Error ? err.message : "Send threw unknown error",
+      );
       updateOptimisticMessage(optimisticId, {
-        status: 'failed',
-        error: 'Failed to send. Check Messages app permissions.',
+        status: "failed",
+        error: "Failed to send. Check Messages app permissions.",
       });
-      console.error('Send error:', err);
+      console.error("Send error:", err);
     } finally {
       sendingMessage = false;
     }
   }
 
   function handleRetry(optimisticId: string) {
-    const msg = conversationsStore.optimisticMessages.find((m) => m.id === optimisticId);
+    const msg = conversationsStore.optimisticMessages.find(
+      (m) => m.id === optimisticId,
+    );
     if (msg) {
       handleSendMessage(msg.text, optimisticId);
     }
@@ -421,7 +476,8 @@
     // Check if at bottom
     const { scrollTop, scrollHeight, clientHeight } = container;
     const threshold = 150;
-    const currentlyAtBottom = scrollHeight - scrollTop - clientHeight < threshold;
+    const currentlyAtBottom =
+      scrollHeight - scrollTop - clientHeight < threshold;
 
     if (!suppressScrollRecalc) {
       isAtBottom = currentlyAtBottom;
@@ -456,7 +512,8 @@
         // Update padding using cumulative heights
         virtualTopPadding = cumulativeHeights[visibleStartIndex]!;
         const totalLen = conversationsStore.messages.length;
-        virtualBottomPadding = cumulativeHeights[totalLen]! - cumulativeHeights[visibleEndIndex]!;
+        virtualBottomPadding =
+          cumulativeHeights[totalLen]! - cumulativeHeights[visibleEndIndex]!;
       }
 
       await tick();
@@ -480,13 +537,15 @@
   // Effects
   $effect(() => {
     const currentCount = conversationsStore.messages.length;
-    const currentLastId = conversationsStore.messages[currentCount - 1]?.id ?? null;
+    const currentLastId =
+      conversationsStore.messages[currentCount - 1]?.id ?? null;
 
     if (currentCount > previousMessageCount && previousMessageCount > 0) {
       // Only treat as "new messages" if last message changed (appended at end).
       // When loading older messages (prepended), last message stays the same.
       if (currentLastId !== previousLastMessageId) {
-        const newMessages = conversationsStore.messages.slice(previousMessageCount);
+        const newMessages =
+          conversationsStore.messages.slice(previousMessageCount);
         const newIds = new Set(newMessageIds);
         newMessages.forEach((m) => newIds.add(m.id));
         newMessageIds = newIds;
@@ -496,12 +555,20 @@
           const optimisticCount = conversationsStore.optimisticMessages.length;
           const msgLen = conversationsStore.messages.length + optimisticCount;
           visibleEndIndex = msgLen;
-          visibleStartIndex = Math.max(0, msgLen - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
+          visibleStartIndex = Math.max(
+            0,
+            msgLen - MIN_VISIBLE_MESSAGES - BUFFER_SIZE,
+          );
           // Calculate top padding based on real messages only (optimistic don't have heights yet)
-          virtualTopPadding = visibleStartIndex <= conversationsStore.messages.length
-            ? (cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
-            : (cumulativeHeights[conversationsStore.messages.length] ?? conversationsStore.messages.length * ESTIMATED_MESSAGE_HEIGHT) + 
-              (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT;
+          virtualTopPadding =
+            visibleStartIndex <= conversationsStore.messages.length
+              ? (cumulativeHeights[visibleStartIndex] ??
+                visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
+              : (cumulativeHeights[conversationsStore.messages.length] ??
+                  conversationsStore.messages.length *
+                    ESTIMATED_MESSAGE_HEIGHT) +
+                (visibleStartIndex - conversationsStore.messages.length) *
+                  ESTIMATED_MESSAGE_HEIGHT;
           virtualBottomPadding = 0;
 
           suppressScrollRecalc = true;
@@ -534,7 +601,12 @@
     if (!countChanged) return;
     lastMessageCount = msgCount;
 
-    if (!isLoading && msgCount === 0 && conversationsStore.error && needsScrollToBottom) {
+    if (
+      !isLoading &&
+      msgCount === 0 &&
+      conversationsStore.error &&
+      needsScrollToBottom
+    ) {
       needsScrollToBottom = false;
       return;
     }
@@ -544,10 +616,17 @@
         const optimisticCount = conversationsStore.optimisticMessages.length;
         const msgLen = msgCount + optimisticCount;
         visibleEndIndex = msgLen;
-        visibleStartIndex = Math.max(0, msgLen - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
-        virtualTopPadding = visibleStartIndex <= msgCount
-          ? (cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
-          : (cumulativeHeights[msgCount] ?? msgCount * ESTIMATED_MESSAGE_HEIGHT) + (visibleStartIndex - msgCount) * ESTIMATED_MESSAGE_HEIGHT;
+        visibleStartIndex = Math.max(
+          0,
+          msgLen - MIN_VISIBLE_MESSAGES - BUFFER_SIZE,
+        );
+        virtualTopPadding =
+          visibleStartIndex <= msgCount
+            ? (cumulativeHeights[visibleStartIndex] ??
+              visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
+            : (cumulativeHeights[msgCount] ??
+                msgCount * ESTIMATED_MESSAGE_HEIGHT) +
+              (visibleStartIndex - msgCount) * ESTIMATED_MESSAGE_HEIGHT;
         virtualBottomPadding = 0;
 
         needsScrollToBottom = false;
@@ -584,7 +663,7 @@
       virtualTopPadding = 0;
       virtualBottomPadding = 0;
       // Keep draft panel state or allow it to be driven by prefetchedSuggestions.
-      // We no longer explicitly force showDraftPanel = false here to allow 
+      // We no longer explicitly force showDraftPanel = false here to allow
       // automatic generation to stay visible across switches if desired.
       if (oldChatId) {
         clearOptimisticMessages(oldChatId);
@@ -609,7 +688,7 @@
     await tick();
     await tick();
     await tick();
-    
+
     if (!messagesContainer) return;
 
     const doScroll = (behavior: ScrollBehavior) => {
@@ -621,24 +700,24 @@
     };
 
     // First pass: immediate
-    doScroll(instant ? 'auto' : 'smooth');
+    doScroll(instant ? "auto" : "smooth");
 
     // Second pass: after a short delay for layout settling
     requestAnimationFrame(() => {
       if (!messagesContainer) return;
-      doScroll(instant ? 'auto' : 'smooth');
-      
+      doScroll(instant ? "auto" : "smooth");
+
       // Third pass: slightly longer delay for virtual scroll and height updates
       setTimeout(() => {
         if (!messagesContainer) return;
-        
+
         // Final forced scroll
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        
+
         // Update virtual scroll visibility after reaching the bottom
         hasNewMessagesBelow = false;
         updateVirtualScroll();
-        
+
         // One last check after 150ms for any late-loading images or attachments
         setTimeout(() => {
           if (messagesContainer && isAtBottom) {
@@ -653,12 +732,19 @@
     const optimisticCount = conversationsStore.optimisticMessages.length;
     const msgLen = conversationsStore.messages.length + optimisticCount;
     visibleEndIndex = msgLen;
-    visibleStartIndex = Math.max(0, msgLen - MIN_VISIBLE_MESSAGES - BUFFER_SIZE);
+    visibleStartIndex = Math.max(
+      0,
+      msgLen - MIN_VISIBLE_MESSAGES - BUFFER_SIZE,
+    );
 
-    virtualTopPadding = visibleStartIndex <= conversationsStore.messages.length
-      ? (cumulativeHeights[visibleStartIndex] ?? visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
-      : (cumulativeHeights[conversationsStore.messages.length] ?? conversationsStore.messages.length * ESTIMATED_MESSAGE_HEIGHT) + 
-        (visibleStartIndex - conversationsStore.messages.length) * ESTIMATED_MESSAGE_HEIGHT;
+    virtualTopPadding =
+      visibleStartIndex <= conversationsStore.messages.length
+        ? (cumulativeHeights[visibleStartIndex] ??
+          visibleStartIndex * ESTIMATED_MESSAGE_HEIGHT)
+        : (cumulativeHeights[conversationsStore.messages.length] ??
+            conversationsStore.messages.length * ESTIMATED_MESSAGE_HEIGHT) +
+          (visibleStartIndex - conversationsStore.messages.length) *
+            ESTIMATED_MESSAGE_HEIGHT;
     virtualBottomPadding = 0;
 
     scrollToBottom();
@@ -667,39 +753,39 @@
   function handleKeydown(event: KeyboardEvent) {
     const isMod = event.metaKey || event.ctrlKey;
 
-    if ($activeZone !== 'messages' && $activeZone !== null) return;
+    if ($activeZone !== "messages" && $activeZone !== null) return;
     if (isTypingInInput(event)) {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         event.preventDefault();
         (event.target as HTMLElement).blur();
-        setActiveZone('messages');
+        setActiveZone("messages");
       }
       return;
     }
     if (!conversationsStore.selectedConversation) return;
 
     // Component-specific shortcuts
-    if (isMod && event.key === 'd') {
+    if (isMod && event.key === "d") {
       event.preventDefault();
       prefetchedSuggestions = undefined;
       showDraftPanel = true;
       return;
     }
 
-    if (event.key === 'r') {
+    if (event.key === "r") {
       event.preventDefault();
-      setActiveZone('compose');
-      document.querySelector<HTMLTextAreaElement>('.compose-input')?.focus();
-      announce('Composing reply');
+      setActiveZone("compose");
+      document.querySelector<HTMLTextAreaElement>(".compose-input")?.focus();
+      announce("Composing reply");
       return;
     }
 
-    if (event.key === 'ArrowLeft' || event.key === 'h') {
+    if (event.key === "ArrowLeft" || event.key === "h") {
       event.preventDefault();
-      setActiveZone('conversations');
+      setActiveZone("conversations");
       setMessageIndex(-1);
       focusedMessageIndex = -1;
-      announce('Returned to conversations list');
+      announce("Returned to conversations list");
       return;
     }
 
@@ -707,20 +793,25 @@
     if (messages.length === 0) return;
 
     const maxIndex = messages.length - 1;
-    const action = getNavAction(event.key, event.shiftKey, focusedMessageIndex, maxIndex);
+    const action = getNavAction(
+      event.key,
+      event.shiftKey,
+      focusedMessageIndex,
+      maxIndex,
+    );
     if (!action) return;
 
     event.preventDefault();
 
-    if (action.type === 'escape') {
+    if (action.type === "escape") {
       setMessageIndex(-1);
       focusedMessageIndex = -1;
       setActiveZone(null);
       return;
     }
 
-    setActiveZone('messages');
-    const newIndex = action.type === 'first' ? 0 : action.index;
+    setActiveZone("messages");
+    const newIndex = action.type === "first" ? 0 : action.index;
     setMessageIndex(newIndex);
     focusedMessageIndex = newIndex;
     scrollToMessageByIndex(newIndex);
@@ -738,18 +829,22 @@
 
   function announceMessage(message: Message) {
     const sender = message.is_from_me
-      ? 'You'
-      : message.sender_name || message.sender || 'Contact';
+      ? "You"
+      : message.sender_name || message.sender || "Contact";
     const time = formatDate(message.date);
-    const text = message.text || 'Attachment';
-    announce(`${sender} at ${time}: ${text.slice(0, 100)}${text.length > 100 ? '...' : ''}`);
+    const text = message.text || "Attachment";
+    announce(
+      `${sender} at ${time}: ${text.slice(0, 100)}${text.length > 100 ? "..." : ""}`,
+    );
   }
 
   function handleDraftSelect(text: string) {
-    let normalized = text.replace(/\r/g, '').trim();
-    normalized = normalized.replace(/^["'`]+|["'`]+$/g, '').trim();
-    normalized = normalized.replace(/^(?:\(?\d{1,2}\)?[.):\-]\s*|[-*\u2022]\s+)/, '').trim();
-    normalized = normalized.replace(/:\s*$/, '').trim();
+    let normalized = text.replace(/\r/g, "").trim();
+    normalized = normalized.replace(/^["'`]+|["'`]+$/g, "").trim();
+    normalized = normalized
+      .replace(/^(?:\(?\d{1,2}\)?[.):\-]\s*|[-*\u2022]\s+)/, "")
+      .trim();
+    normalized = normalized.replace(/:\s*$/, "").trim();
 
     if (normalized && composeAreaRef) {
       composeAreaRef.setValue(normalized);
@@ -760,21 +855,23 @@
 
   async function handleDraftAccept(text: string) {
     if (!conversationsStore.selectedConversation) return;
-    
+
     // Store for 'sent' or 'edited' tracking later
     lastDraftUsed = { text, timestamp: Date.now() };
-    
+
     // Record feedback as 'copied' (user has put it in the compose box)
     // We'll record 'sent' later when they actually send.
     try {
       await jarvis.recordFeedback({
-        action: 'copied',
+        action: "copied",
         suggestion_text: text,
         chat_id: conversationsStore.selectedConversation.chat_id,
-        context_messages: conversationsStore.messages.slice(-5).map(m => m.text || '')
+        context_messages: conversationsStore.messages
+          .slice(-5)
+          .map((m) => m.text || ""),
       });
     } catch (e) {
-      console.warn('Failed to record draft feedback:', e);
+      console.warn("Failed to record draft feedback:", e);
     }
   }
 
@@ -786,8 +883,14 @@
     if (actualIndex === 0) return true;
     if (actualIndex >= messages.length) return false;
 
-    const curr = getMessageDateString(messages[actualIndex]!.id, messages[actualIndex]!.date);
-    const prev = getMessageDateString(messages[actualIndex - 1]!.id, messages[actualIndex - 1]!.date);
+    const curr = getMessageDateString(
+      messages[actualIndex]!.id,
+      messages[actualIndex]!.date,
+    );
+    const prev = getMessageDateString(
+      messages[actualIndex - 1]!.id,
+      messages[actualIndex - 1]!.date,
+    );
     return curr !== prev;
   }
 
@@ -799,7 +902,7 @@
   let unsubscribeScroll: (() => void) | null = null;
 
   onMount(() => {
-    window.addEventListener('keydown', handleKeydown);
+    window.addEventListener("keydown", handleKeydown);
 
     unsubscribeScroll = scrollToMessageId.subscribe(async (messageId) => {
       if (messageId !== null) {
@@ -810,7 +913,7 @@
   });
 
   onDestroy(() => {
-    window.removeEventListener('keydown', handleKeydown);
+    window.removeEventListener("keydown", handleKeydown);
     stopMessagePolling();
     unsubscribeScroll?.();
   });
@@ -828,11 +931,15 @@
     </EmptyState>
   {:else}
     <div class="header">
-      <div 
-        class="avatar" 
+      <div
+        class="avatar"
         class:group={conversationsStore.selectedConversation.is_group}
         onmouseenter={handleAvatarMouseEnter}
         onmouseleave={handleAvatarMouseLeave}
+        role="img"
+        aria-label={conversationsStore.selectedConversation.is_group
+          ? "Group avatar"
+          : `${conversationsStore.selectedConversation.display_name || formatParticipant(conversationsStore.selectedConversation.participants[0] ?? "") || "Unknown"} avatar`}
       >
         {#if conversationsStore.selectedConversation.is_group}
           <svg viewBox="0 0 24 24" fill="currentColor">
@@ -843,8 +950,10 @@
         {:else}
           {(
             conversationsStore.selectedConversation.display_name ||
-            formatParticipant(conversationsStore.selectedConversation.participants[0] ?? '') ||
-            '?'
+            formatParticipant(
+              conversationsStore.selectedConversation.participants[0] ?? "",
+            ) ||
+            "?"
           )
             .charAt(0)
             .toUpperCase()}
@@ -852,11 +961,13 @@
       </div>
       <div class="info">
         <h2>
-          {conversationsStore.selectedConversation.display_name || conversationsStore.selectedConversation.participants.map(p => formatParticipant(p)).join(', ')}
+          {conversationsStore.selectedConversation.display_name ||
+            conversationsStore.selectedConversation.participants
+              .map((p) => formatParticipant(p))
+              .join(", ")}
         </h2>
       </div>
-      <div class="header-actions">
-      </div>
+      <div class="header-actions"></div>
     </div>
 
     <div class="messages" bind:this={messagesContainer} onscroll={handleScroll}>
@@ -878,7 +989,12 @@
               onclick={handleLoadEarlier}
               aria-label="Load earlier messages"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
                 <polyline points="17 11 12 6 7 11"></polyline>
                 <line x1="12" y1="6" x2="12" y2="18"></line>
               </svg>
@@ -892,7 +1008,10 @@
         </div>
 
         <!-- Virtual scroll spacer for messages above visible range -->
-        <div class="virtual-spacer-top" style="height: {virtualTopPadding}px;"></div>
+        <div
+          class="virtual-spacer-top"
+          style="height: {virtualTopPadding}px;"
+        ></div>
 
         <!-- Only render visible messages -->
         <div class="virtual-content">
@@ -905,7 +1024,8 @@
               {message}
               isGroup={conversationsStore.selectedConversation.is_group}
               isHighlighted={$highlightedMessageId === message.id}
-              isKeyboardFocused={focusedMessageIndex === visibleStartIndex + visibleIndex}
+              isKeyboardFocused={focusedMessageIndex ===
+                visibleStartIndex + visibleIndex}
               isNew={isNewMessage(message.id)}
               onRetry={handleRetry}
               onDismiss={handleDismissFailedMessage}
@@ -915,7 +1035,10 @@
         </div>
 
         <!-- Virtual scroll spacer for messages below visible range -->
-        <div class="virtual-spacer-bottom" style="height: {virtualBottomPadding}px;"></div>
+        <div
+          class="virtual-spacer-bottom"
+          style="height: {virtualBottomPadding}px;"
+        ></div>
       {/if}
     </div>
 
@@ -924,7 +1047,7 @@
         class="scroll-to-bottom-fab"
         onclick={handleNewMessagesClick}
         onkeydown={(e: KeyboardEvent) => {
-          if (e.key === 'Enter' || e.key === ' ') {
+          if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             handleNewMessagesClick();
           }
@@ -933,9 +1056,16 @@
         aria-label="Scroll to bottom"
       >
         {#if newMessageIds.size > 0}
-          <span class="fab-badge">{newMessageIds.size > 99 ? '99+' : newMessageIds.size}</span>
+          <span class="fab-badge"
+            >{newMessageIds.size > 99 ? "99+" : newMessageIds.size}</span
+          >
         {/if}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
       </button>
@@ -951,12 +1081,14 @@
             showDraftPanel = false;
             prefetchedSuggestions = undefined;
           }}
-          {...(prefetchedSuggestions && { initialSuggestions: prefetchedSuggestions })}
+          {...prefetchedSuggestions && {
+            initialSuggestions: prefetchedSuggestions,
+          }}
         />
       {/key}
     {/if}
 
-    {#key conversationsStore.selectedConversation?.chat_id || 'none'}
+    {#key conversationsStore.selectedConversation?.chat_id || "none"}
       <ComposeArea
         bind:this={composeAreaRef}
         onSend={(text) => handleSendMessage(text)}
@@ -971,7 +1103,8 @@
 
     {#if conversationsStore.selectedConversation && !conversationsStore.selectedConversation.is_group}
       <ContactHoverCard
-        identifier={conversationsStore.selectedConversation.participants[0] || ''}
+        identifier={conversationsStore.selectedConversation.participants[0] ||
+          ""}
         bind:visible={hoverCardVisible}
         x={hoverCardX}
         y={hoverCardY}
@@ -979,7 +1112,6 @@
     {/if}
   {/if}
 </div>
-
 
 <style>
   .message-view {
