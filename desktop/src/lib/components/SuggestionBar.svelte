@@ -194,8 +194,8 @@
 
 <svelte:window onkeydown={handleKeyDown} />
 
-<div class="suggestion-bar">
-  <span class="bar-icon"><Icon name="sparkles" size={16} /></span>
+<div class="suggestion-bar" aria-live="polite">
+  <span class="bar-icon" aria-hidden="true"><Icon name="sparkles" size={16} /></span>
 
   {#if barState === "streaming"}
     <button 
@@ -208,11 +208,12 @@
       }}
       disabled={!streamingText}
       title="Click to use current draft"
+      aria-label="Use current draft: {streamingText || 'Generating...'}"
     >
       {#if streamingText}
-        <span class="streaming-text">{streamingText}<span class="cursor"></span></span>
+        <span class="streaming-text">{streamingText}<span class="cursor" aria-hidden="true"></span></span>
       {:else}
-        <div class="typing-indicator">
+        <div class="typing-indicator" aria-hidden="true">
           <span class="typing-dot"></span>
           <span class="typing-dot"></span>
           <span class="typing-dot"></span>
@@ -223,8 +224,8 @@
   {/if}
 
   {#if barState === "loading"}
-    <div class="bar-content loading">
-      <div class="typing-indicator">
+    <div class="bar-content loading" role="status" aria-busy="true" aria-label="Generating suggestions">
+      <div class="typing-indicator" aria-hidden="true">
         <span class="typing-dot"></span>
         <span class="typing-dot"></span>
         <span class="typing-dot"></span>
@@ -234,7 +235,7 @@
   {/if}
 
   {#if barState === "results"}
-    <div class="bar-content chips">
+    <div class="bar-content chips" role="group" aria-label="Suggested replies">
       {#each suggestions as suggestion}
         <button
           class="chip"
@@ -244,6 +245,7 @@
             onAccept?.(suggestion.text);
           }}
           title="{suggestion.text} (confidence: {Math.round(suggestion.confidence * 100)}%)"
+          aria-label="Use suggestion: {suggestion.text}"
         >
           {truncate(suggestion.text, 100)}
         </button>
@@ -252,10 +254,10 @@
   {/if}
 
   {#if barState === "error"}
-    <div class="bar-content error">
+    <div class="bar-content error" role="alert">
       <Icon name="alert-circle" size={14} />
       <span class="error-text">{errorMessage}</span>
-      <button class="bar-btn" onclick={generateReplies} title="Retry">
+      <button class="bar-btn" onclick={generateReplies} title="Retry" aria-label="Retry generation">
         <Icon name="refresh-cw" size={14} />
       </button>
     </div>
