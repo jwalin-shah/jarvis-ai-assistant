@@ -5,6 +5,7 @@ Tests analytics engine, aggregator, trends detection, and report generation.
 
 from datetime import UTC, datetime, timedelta
 
+from jarvis.contracts.imessage import Message
 from jarvis.analytics import (
     AnalyticsEngine,
     ReportGenerator,
@@ -18,7 +19,6 @@ from jarvis.analytics import (
     detect_peak_periods,
     detect_trend,
 )
-from jarvis.contracts.imessage import Message
 
 
 def create_message(
