@@ -383,7 +383,8 @@ class CategoryFeatureExtractor:
         features.append(capitalized / max(len(words) - 1, 1))
 
         # Reaction/emotion features (7)
-        # Using str.startswith(tuple) is implemented in C and is ~6-8x faster than generator expression
+        # Using str.startswith(tuple) is implemented in C and is ~6-8x faster than
+        # generator expression
         is_reaction_msg = 1.0 if text.startswith(REACTION_PATTERNS) else 0.0
         features.append(is_reaction_msg)
 
