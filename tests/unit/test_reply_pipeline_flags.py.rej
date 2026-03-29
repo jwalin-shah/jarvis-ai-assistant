@@ -1,0 +1,11 @@
+--- tests/unit/test_reply_pipeline_flags.py
++++ tests/unit/test_reply_pipeline_flags.py
+@@ -107,7 +107,7 @@
+         content="doc",
+         source="unknown",
+         metadata={"text": "doc", "similarity": 0.9},
+-        score=0.0
++        score=0.9
+     )
+
+     req = build_generation_request(

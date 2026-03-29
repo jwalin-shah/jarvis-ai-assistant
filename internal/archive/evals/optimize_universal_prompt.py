@@ -16,9 +16,10 @@ import dspy
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+# noqa: E402
 
-from evals.dspy_client import DSPYMLXClient
-from evals.dspy_reply import (
+from evals.dspy_client import DSPYMLXClient  # noqa: E402
+from evals.dspy_reply import (  # noqa: E402
     TRAIN_EXAMPLES,
     judge_metric,
 )
