@@ -23,7 +23,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import psutil  # noqa: E402
 
-from models.loader import MLXModelLoader, ModelConfig  # noqa: E402
+from models.loader import MLXModelLoader, ModelConfig  # noqa: E402  # noqa: E402
 
 
 def mem_mb() -> str:

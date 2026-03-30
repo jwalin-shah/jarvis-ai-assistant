@@ -39,7 +39,7 @@ if _env_path.exists():
             key, _, val = line.partition("=")
             os.environ.setdefault(key.strip(), val.strip())
 
-from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Data types
