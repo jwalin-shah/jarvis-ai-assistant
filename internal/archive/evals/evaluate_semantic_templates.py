@@ -172,7 +172,7 @@ Respond with ONLY a JSON array in this exact format:
                 )
 
             print(
-                f"  ✓ Batch {i // batch_size + 1}/" \
+                f"  ✓ Batch {i // batch_size + 1}/"
                 f"{(len(evaluations) + batch_size - 1) // batch_size} complete"
             )
 
@@ -487,7 +487,7 @@ def main():
             if evaluations:
                 print(f"\n⚖️  Judging {len(evaluations)} template responses with Cerebras...")
                 print(
-                    f"   (Batch size: {args.batch_size}, " \
+                    f"   (Batch size: {args.batch_size}, "
                     f"Estimated time: {len(evaluations) // args.batch_size * 2.1:.0f}s)"
                 )
                 judge_results = batch_judge_templates(evaluations, client, args.batch_size)
