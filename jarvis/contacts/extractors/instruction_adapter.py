@@ -59,19 +59,27 @@ class InstructionExtractorAdapter(ExtractorAdapter):
             return []
 
         # Mock a message object
-        class MockMessage:
-            def __init__(self, text: str, is_from_me: bool) -> None:
-                self.text = text
-                self.is_from_me = is_from_me
-                self.sender_name = "User" if is_from_me else "Contact"
-                self.id = message_id
+        # NOTE: Using a concrete Message object would be better but requires more boilerplate
+        # or contract imports. For now, we type-ignore or ensure structural compatibility.
+        # However, TopicSegment expects List[Message], so we need to be careful.
+        from jarvis.contracts.imessage import Message
 
         # Wrap in a segment
         now = datetime.now()
+        message = Message(
+            id=message_id,
+            chat_id="eval_chat",
+            sender="User" if is_from_me else "Contact",
+            sender_name="User" if is_from_me else "Contact",
+            text=text,
+            date=now,
+            is_from_me=is_from_me,
+        )
+
         segment = TopicSegment(
             chat_id="eval_chat",
             contact_id="eval_contact",
-            messages=[MockMessage(text, is_from_me)],
+            messages=[message],
             start_time=now,
             end_time=now,
             message_count=1,
