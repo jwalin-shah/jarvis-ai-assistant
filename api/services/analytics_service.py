@@ -31,12 +31,23 @@ def iter_filtered_messages(
 ) -> Iterator[tuple[Any, list[Any]]]:
     """Iterate over conversations and their filtered messages."""
     conversations = reader.get_conversations(limit=200)
-    for conv in conversations:
-        messages = reader.get_messages(
-            conv.chat_id, limit=per_conversation_limit, after=time_range_start
-        )
-        if messages:
-            yield conv, messages
+
+    chunk_size = 10
+    for i in range(0, len(conversations), chunk_size):
+        chunk = conversations[i : i + chunk_size]
+        chat_ids = [c.chat_id for c in chunk]
+
+        if chat_ids:
+            batch_messages = reader.get_messages_batch(
+                chat_ids,
+                limit_per_chat=per_conversation_limit,
+                after=time_range_start
+            )
+
+            for conv in chunk:
+                messages = batch_messages.get(conv.chat_id, [])
+                if messages:
+                    yield conv, messages
 
 
 def get_activity_level(count: int) -> int:
@@ -115,13 +126,23 @@ def _capped_message_stream(
     """Collect messages across conversations with a total cap to prevent OOM on 8GB systems."""
     messages: list[Any] = []
     conversations = reader.get_conversations(limit=200)
-    for conv in conversations:
-        batch = reader.get_messages(
-            conv.chat_id, limit=per_conversation_limit, after=time_range_start
-        )
-        messages.extend(batch)
-        if len(messages) >= max_total:
-            break
+
+    chunk_size = 10
+    for i in range(0, len(conversations), chunk_size):
+        chunk = conversations[i : i + chunk_size]
+        chat_ids = [c.chat_id for c in chunk]
+
+        if chat_ids:
+            batch_messages = reader.get_messages_batch(
+                chat_ids,
+                limit_per_chat=per_conversation_limit,
+                after=time_range_start
+            )
+            for conv in chunk:
+                batch = batch_messages.get(conv.chat_id, [])
+                messages.extend(batch)
+                if len(messages) >= max_total:
+                    return messages[:max_total]
     return messages
 
 
@@ -323,14 +344,26 @@ def fetch_leaderboard_data(
 
     engine = get_analytics_engine()
 
-    for conv in conversations:
-        messages = reader.get_messages(conv.chat_id, limit=500, after=time_range_start)
-        if not messages:
-            continue
+    chunk_size = 10
+    for i in range(0, len(conversations), chunk_size):
+        chunk = conversations[i : i + chunk_size]
+        chat_ids = [c.chat_id for c in chunk]
 
-        analytics = engine.compute_contact_analytics(messages, conv.chat_id, conv.display_name)
-        contact_data.append(analytics)
-        del messages
+        if chat_ids:
+            batch_messages = reader.get_messages_batch(
+                chat_ids, limit_per_chat=500, after=time_range_start
+            )
+
+            for conv in chunk:
+                messages = batch_messages.get(conv.chat_id, [])
+                if not messages:
+                    continue
+
+                analytics = engine.compute_contact_analytics(
+                    messages, conv.chat_id, conv.display_name
+                )
+                contact_data.append(analytics)
+                del messages
 
     if sort_by == "messages":
         contact_data.sort(key=lambda c: c.total_messages, reverse=True)
@@ -526,10 +559,21 @@ def fetch_export_data(
         all_msgs: list[Any] = []
         contact_msgs: dict[str, list[Any]] = defaultdict(list)
 
-        for conv in conversations:
-            messages = reader.get_messages(conv.chat_id, limit=500, after=time_range_start)
-            all_msgs.extend(messages)
-            contact_msgs[conv.chat_id].extend(messages)
+        chunk_size = 10
+        for i in range(0, len(conversations), chunk_size):
+            chunk = conversations[i : i + chunk_size]
+            chat_ids = [c.chat_id for c in chunk]
+
+            if chat_ids:
+                batch_messages = reader.get_messages_batch(
+                    chat_ids, limit_per_chat=500, after=time_range_start
+                )
+
+                for conv in chunk:
+                    messages = batch_messages.get(conv.chat_id, [])
+                    if messages:
+                        all_msgs.extend(messages)
+                        contact_msgs[conv.chat_id].extend(messages)
 
         content = report_gen.export_to_json(all_msgs, contact_msgs)
         del all_msgs

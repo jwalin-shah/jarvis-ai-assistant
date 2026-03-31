@@ -259,6 +259,9 @@ class TestOverviewEndpoint:
     ):
         """Overview returns aggregated metrics."""
         mock_get_reader.return_value.__enter__.return_value = mock_reader
+        client.app.dependency_overrides[
+            __import__("api.dependencies").dependencies.get_imessage_reader
+        ] = lambda: mock_reader
 
         overview_data = {
             "total_messages": 1000,
@@ -296,8 +299,13 @@ class TestOverviewEndpoint:
     def test_overview_uses_cache(self, mock_get_reader, client, mock_reader):
         """Second request uses cached data."""
         mock_get_reader.return_value.__enter__.return_value = mock_reader
+        client.app.dependency_overrides[
+            __import__("api.dependencies").dependencies.get_imessage_reader
+        ] = lambda: mock_reader
 
         overview_data = {"total_messages": 100, "time_range": "week"}
+        # Disable rate limiting for this test to ensure it hits cache and not 429
+        client.app.state.limiter._enabled = False
 
         with patch("api.routers.analytics.run_in_threadpool") as mock_threadpool:
 
