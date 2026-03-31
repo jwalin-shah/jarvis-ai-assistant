@@ -359,7 +359,9 @@ def fetch_leaderboard_data(
                 if not messages:
                     continue
 
-                analytics = engine.compute_contact_analytics(messages, conv.chat_id, conv.display_name)
+                analytics = engine.compute_contact_analytics(
+                    messages, conv.chat_id, conv.display_name
+                )
                 contact_data.append(analytics)
                 del messages
 
