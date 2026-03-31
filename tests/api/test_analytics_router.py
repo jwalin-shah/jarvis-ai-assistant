@@ -59,7 +59,14 @@ def analytics_router():
 @pytest.fixture
 def client(app):
     """Create test client."""
-    return TestClient(app, raise_server_exceptions=False)
+    from api.dependencies import get_imessage_reader
+    mock_reader = MagicMock()
+    mock_reader.__enter__.return_value = mock_reader
+    mock_reader.check_access.return_value = True
+    app.dependency_overrides[get_imessage_reader] = lambda: mock_reader
+    client = TestClient(app, raise_server_exceptions=False)
+    yield client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

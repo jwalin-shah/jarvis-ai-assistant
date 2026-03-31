@@ -6,9 +6,12 @@ DSPy's high-level logic with the local MLX model via BaseLM.forward().
 
 import os
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "internal" / "archive"))
+
 import dspy
 import pytest
-
 from evals.dspy_client import DSPYMLXClient
 
 
