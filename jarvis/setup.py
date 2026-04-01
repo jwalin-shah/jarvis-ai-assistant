@@ -500,7 +500,7 @@ class SetupWizard:
             Recommended MemoryMode based on available memory.
         """
         try:
-            from jarvis.core.memory.controller import get_memory_controller
+            from jarvis.core.memory import get_memory_controller
 
             controller = get_memory_controller()
             state = controller.get_state()
