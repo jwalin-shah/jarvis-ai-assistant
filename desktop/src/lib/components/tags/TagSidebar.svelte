@@ -100,6 +100,7 @@
           class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           on:click={() => dispatch("createFolder")}
           title="Create folder"
+          aria-label="Create smart folder"
         >
           <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
@@ -166,7 +167,8 @@
             <span
               role="button"
               tabindex="0"
-              class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              aria-label="Edit folder"
+              class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 rounded outline-none"
               on:click|stopPropagation={() => dispatch("editFolder", folder)}
               on:keydown|stopPropagation={(e) => (e.key === "Enter" || e.key === " ") && dispatch("editFolder", folder)}
             >
@@ -190,6 +192,7 @@
           class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           on:click={() => dispatch("createTag")}
           title="Create tag"
+          aria-label="Create tag"
         >
           <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
@@ -245,7 +248,8 @@
             <span
               role="button"
               tabindex="0"
-              class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              aria-label="Edit tag"
+              class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 rounded outline-none"
               on:click|stopPropagation={() => dispatch("editTag", tag)}
               on:keydown|stopPropagation={(e) => (e.key === "Enter" || e.key === " ") && dispatch("editTag", tag)}
             >
