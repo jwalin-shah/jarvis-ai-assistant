@@ -279,19 +279,6 @@
     color: var(--text-secondary, #aaa);
   }
 
-  .tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .tag {
-    padding: 4px 10px;
-    background: var(--tag-bg, #2a2a2a);
-    border-radius: 16px;
-    font-size: 12px;
-    color: var(--text-primary, #ddd);
-  }
 
   .fact-group {
     margin-bottom: 12px;

@@ -24,13 +24,13 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from jarvis.contracts.health import Permission, PermissionStatus, SchemaInfo
-from jarvis.contracts.memory import MemoryMode
 from jarvis.config import (
     JarvisConfig,
     load_config,
     save_config,
 )
+from jarvis.contracts.health import Permission, PermissionStatus, SchemaInfo
+from jarvis.contracts.memory import MemoryMode
 
 logger = logging.getLogger(__name__)
 
@@ -500,7 +500,7 @@ class SetupWizard:
             Recommended MemoryMode based on available memory.
         """
         try:
-            from jarvis.core.memory.controller import get_memory_controller
+            from jarvis.core.memory import get_memory_controller
 
             controller = get_memory_controller()
             state = controller.get_state()
