@@ -284,7 +284,7 @@ end tell
 
         # Escape special characters for AppleScript
         escaped_text = self._escape_for_applescript(text)
-        escaped_recipient = recipient.replace("\\", "\\\\").replace('"', '\\"')
+        escaped_recipient = self._escape_for_applescript(recipient)
 
         applescript = f"""
 tell application "Messages"
@@ -315,7 +315,7 @@ end tell
 
         # Escape special characters for AppleScript
         escaped_text = self._escape_for_applescript(text)
-        escaped_chat_id = actual_chat_id.replace("\\", "\\\\").replace('"', '\\"')
+        escaped_chat_id = self._escape_for_applescript(actual_chat_id)
 
         # For group chats, we find the chat by its full GUID and send directly to it
         applescript = f"""
