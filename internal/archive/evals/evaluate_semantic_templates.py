@@ -44,7 +44,7 @@ def fetch_real_messages(limit: int = 100) -> list[dict]:
         # Get diverse messages of different lengths
         cursor.execute(
             """
-            SELECT 
+            SELECT
                 m.text,
                 m.date,
                 c.display_name,
