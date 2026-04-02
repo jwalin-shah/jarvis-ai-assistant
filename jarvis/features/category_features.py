@@ -384,7 +384,8 @@ class CategoryFeatureExtractor:
         features.append(capitalized / max(len(words) - 1, 1))
 
         # Reaction/emotion features (7)
-        # ⚡ BOLT OPTIMIZATION: Use tuple passing directly to startswith instead of generator expression (~9x speedup)
+        # ⚡ BOLT OPTIMIZATION: Use tuple passing directly to startswith instead of
+        # generator expression (~9x speedup)
         is_reaction_msg = 1.0 if text.startswith(REACTION_PATTERNS) else 0.0
         features.append(is_reaction_msg)
 
