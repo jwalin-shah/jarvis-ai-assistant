@@ -27,6 +27,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+# noqa: E402
 # Ensure model-relative paths resolve regardless of promptfoo basePath/cwd.
 os.chdir(PROJECT_ROOT)
 
