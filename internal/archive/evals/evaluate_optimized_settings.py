@@ -218,9 +218,7 @@ def main():
     print("\n📈 Improvements:")
     print(f"   Score: {score_improvement:+.2f} points")
     pct_shorter = length_reduction / baseline_results["avg_length"] * 100
-    print(
-        f"   Length: -{length_reduction:.0f} chars ({pct_shorter:.0f}% shorter)"
-    )
+    print(f"   Length: -{length_reduction:.0f} chars ({pct_shorter:.0f}% shorter)")
 
     # Save results
     output = {
