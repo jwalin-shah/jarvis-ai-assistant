@@ -109,6 +109,7 @@ describe("direct.ts", () => {
     mockSelect.mockResolvedValue([]);
     mockClose.mockResolvedValue(undefined);
     mockLoad.mockResolvedValue({
+      execute: vi.fn(),
       select: mockSelect,
       close: mockClose,
     });
@@ -206,6 +207,7 @@ describe("direct.ts", () => {
 
       // Should allow retry - error is not permanently cached
       mockLoad.mockResolvedValue({
+      execute: vi.fn(),
         select: mockSelect,
         close: mockClose,
       });
