@@ -31,7 +31,6 @@ from tqdm import tqdm
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
-# noqa: E402
 
 # Load .env
 _env_path = PROJECT_ROOT / ".env"
@@ -43,6 +42,7 @@ if _env_path.exists():
             os.environ.setdefault(key.strip(), val.strip())
 
 import dspy  # noqa: E402
+
 from evals.dspy_client import DSPYMLXClient  # noqa: E402
 from evals.dspy_reply import (  # noqa: E402
     TRAIN_EXAMPLES,
