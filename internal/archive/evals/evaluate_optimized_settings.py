@@ -9,11 +9,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, EvalExample, load_eval_dataset
-from evals.judge_config import JUDGE_MODEL, get_judge_client
-from tqdm import tqdm
+from evals.eval_pipeline import EVAL_DATASET_PATH, EvalExample, load_eval_dataset  # noqa: E402
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
+from tqdm import tqdm  # noqa: E402
 
-from models.loader import get_model
+from models.loader import get_model  # noqa: E402
 
 # Configuration
 NUM_EXAMPLES = 20  # Small batch for quick eval
@@ -217,8 +217,9 @@ def main():
 
     print("\n📈 Improvements:")
     print(f"   Score: {score_improvement:+.2f} points")
+    pct_shorter = length_reduction / baseline_results["avg_length"] * 100
     print(
-        f"   Length: -{length_reduction:.0f} chars ({length_reduction / baseline_results['avg_length'] * 100:.0f}% shorter)"
+        f"   Length: -{length_reduction:.0f} chars ({pct_shorter:.0f}% shorter)"
     )
 
     # Save results
