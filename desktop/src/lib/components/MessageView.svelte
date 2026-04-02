@@ -1042,6 +1042,12 @@
     margin: 0;
   }
 
+  .info p {
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
   .header-actions {
     display: flex;
     gap: var(--space-2);
