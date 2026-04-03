@@ -191,7 +191,9 @@ on run argv
     end tell
 end run
 """
-            return self._run_applescript(applescript, f"attachment to {chat_id}", [actual_chat_id, abs_path])
+            return self._run_applescript(
+                applescript, f"attachment to {chat_id}", [actual_chat_id, abs_path]
+            )
         else:
             if not recipient:
                 return SendResult(success=False, error="Recipient required")
@@ -213,7 +215,9 @@ on run argv
     end tell
 end run
 """
-            return self._run_applescript(applescript, f"attachment to {recipient}", [recipient, abs_path])
+            return self._run_applescript(
+                applescript, f"attachment to {recipient}", [recipient, abs_path]
+            )
 
     @staticmethod
     def _validate_recipient_format(recipient: str) -> bool:
@@ -321,7 +325,9 @@ end run
 """
         return self._run_applescript(applescript, f"group: {chat_id}", [actual_chat_id, text])
 
-    def _run_applescript(self, script: str, target_desc: str, args: list[str] | None = None) -> SendResult:
+    def _run_applescript(
+        self, script: str, target_desc: str, args: list[str] | None = None
+    ) -> SendResult:
         """Execute an AppleScript and return the result."""
         try:
             logger.info("Sending iMessage to %s", target_desc)
