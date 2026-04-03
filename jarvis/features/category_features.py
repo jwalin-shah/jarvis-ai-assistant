@@ -50,7 +50,8 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 # Feature extraction patterns
-# Optimized: Using a tuple for REACTION_PATTERNS allows native multi-prefix checking with startswith()
+# Optimized: Using a tuple for REACTION_PATTERNS allows native
+# multi-prefix checking with startswith()
 REACTION_PATTERNS = ("Laughed at", "Loved", "Liked", "Disliked", "Emphasized", "Questioned")
 REQUEST_VERBS = {"send", "give", "help", "tell", "show", "let", "call", "get", "make", "take"}
 PROMISE_VERBS = {"promise", "guarantee", "commit", "swear"}
