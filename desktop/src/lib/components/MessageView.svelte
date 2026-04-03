@@ -51,7 +51,7 @@
   let hoverCardY = $state(0);
   let hoverTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  function handleAvatarMouseEnter(event: MouseEvent) {
+  function handleAvatarMouseEnter(event: MouseEvent | FocusEvent) {
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     hoverCardX = rect.left;
     hoverCardY = rect.bottom + 8;
@@ -831,8 +831,13 @@
       <div 
         class="avatar" 
         class:group={conversationsStore.selectedConversation.is_group}
+        role="button"
+        aria-label="Contact avatar"
+        tabindex="0"
         onmouseenter={handleAvatarMouseEnter}
         onmouseleave={handleAvatarMouseLeave}
+        onfocus={handleAvatarMouseEnter}
+        onblur={handleAvatarMouseLeave}
       >
         {#if conversationsStore.selectedConversation.is_group}
           <svg viewBox="0 0 24 24" fill="currentColor">
@@ -1034,12 +1039,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    margin: 0;
-  }
-
-  .info p {
-    font-size: var(--text-xs);
-    color: var(--text-secondary);
     margin: 0;
   }
 
