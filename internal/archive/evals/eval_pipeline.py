@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -256,7 +256,7 @@ def main() -> int:
     # Optional: judge
     judge_client = None
     if args.judge:
-        from evals.judge_config import JUDGE_MODEL, get_judge_client
+        from evals.judge_config import JUDGE_MODEL  # noqa: E402, get_judge_client
 
         judge_client = get_judge_client()
         if judge_client is None:
