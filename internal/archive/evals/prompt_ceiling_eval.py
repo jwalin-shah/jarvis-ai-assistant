@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -104,9 +104,7 @@ def clean_message(text: str) -> str:
     text = text.replace('\ufffc', '')
 
     # Remove reaction prefixes
-    text = re.sub(
-        r'^(liked|loved|laughed at|emphasized|questioned)\s+["\']?', "", text, flags=re.IGNORECASE
-    )
+    text = re.sub(r'^(liked|loved|laughed at|emphasized|questioned)\s+["\']?', '', text, flags=re.IGNORECASE)
 
     # Strip whitespace
     text = text.strip()
@@ -413,7 +411,7 @@ def run_evaluation(
     judge_client = None
     judge_model = None
     if use_judge:
-        from evals.judge_config import JUDGE_MODEL, get_judge_client
+        from evals.judge_config import JUDGE_MODEL  # noqa: E402, get_judge_client
         judge_client = get_judge_client()
         judge_model = JUDGE_MODEL
         if judge_client:

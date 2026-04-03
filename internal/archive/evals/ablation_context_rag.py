@@ -20,13 +20,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.eval_pipeline import EVAL_DATASET_PATH, check_anti_ai, load_eval_dataset
-from evals.judge_config import JUDGE_MODEL, get_judge_client
+from evals.eval_pipeline import EVAL_DATASET_PATH  # noqa: E402, check_anti_ai, load_eval_dataset
+from evals.judge_config import JUDGE_MODEL  # noqa: E402, get_judge_client
 
 BATCH_SIZE = 10
 RATE_LIMIT_DELAY = 2.1
@@ -248,7 +248,7 @@ def run_variant(
 ) -> tuple[list[AblationResult], dict]:
     """Run ablation for a single variant."""
 
-    from models.loader import get_model
+    from models.loader import get_model  # noqa: E402
 
     loader = get_model()
     if not loader.is_loaded():
