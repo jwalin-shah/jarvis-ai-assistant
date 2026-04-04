@@ -32,6 +32,7 @@ from tqdm import tqdm
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+
 # Load .env
 _env_path = PROJECT_ROOT / ".env"
 if _env_path.exists():
