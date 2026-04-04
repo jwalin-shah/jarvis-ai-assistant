@@ -733,7 +733,7 @@ def open_system_preferences_fda() -> bool:
         # macOS Ventura+ uses System Settings
         subprocess.run(  # nosec B603 B607
             [
-                "open",
+                "/usr/bin/open",
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
             ],
             check=True,
@@ -743,7 +743,7 @@ def open_system_preferences_fda() -> bool:
         # Fallback for older macOS
         try:
             subprocess.run(  # nosec B603 B607
-                ["open", "/System/Library/PreferencePanes/Security.prefPane"],
+                ["/usr/bin/open", "/System/Library/PreferencePanes/Security.prefPane"],
                 check=True,
             )
             return True
