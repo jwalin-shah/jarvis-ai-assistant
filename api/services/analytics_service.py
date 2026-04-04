@@ -323,8 +323,13 @@ def fetch_leaderboard_data(
 
     engine = get_analytics_engine()
 
+    chat_ids = [conv.chat_id for conv in conversations]
+    batched_messages = reader.get_messages_batch(
+        chat_ids, limit_per_chat=500, after=time_range_start
+    )
+
     for conv in conversations:
-        messages = reader.get_messages(conv.chat_id, limit=500, after=time_range_start)
+        messages = batched_messages.get(conv.chat_id, [])
         if not messages:
             continue
 
@@ -526,8 +531,13 @@ def fetch_export_data(
         all_msgs: list[Any] = []
         contact_msgs: dict[str, list[Any]] = defaultdict(list)
 
+        chat_ids = [conv.chat_id for conv in conversations]
+        batched_messages = reader.get_messages_batch(
+            chat_ids, limit_per_chat=500, after=time_range_start
+        )
+
         for conv in conversations:
-            messages = reader.get_messages(conv.chat_id, limit=500, after=time_range_start)
+            messages = batched_messages.get(conv.chat_id, [])
             all_msgs.extend(messages)
             contact_msgs[conv.chat_id].extend(messages)
 

@@ -214,7 +214,10 @@ class iMessageReader(Protocol):  # noqa: N801 - iMessage is a proper noun
         ...
 
     def get_messages_batch(
-        self, chat_ids: list[str], limit_per_chat: int = 100
+        self,
+        chat_ids: list[str],
+        limit_per_chat: int = 100,
+        after: datetime | None = None,
     ) -> dict[str, list[Message]]:
         """Get messages for multiple conversations in a single SQL query."""
         ...
