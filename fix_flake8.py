@@ -7,7 +7,7 @@ files_to_fix = [
 ]
 
 for path, _, _ in files_to_fix:
-    with open(path, "r") as f:
+    with open(path) as f:
         content = f.read()
     content = content.replace("  # noqa: E402", "")
     content = re.sub(r'^(from .*)', r'\1  # noqa: E402', content, flags=re.MULTILINE)
