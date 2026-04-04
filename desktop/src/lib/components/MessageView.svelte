@@ -51,7 +51,7 @@
   let hoverCardY = $state(0);
   let hoverTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  function handleAvatarMouseEnter(event: MouseEvent) {
+  function handleAvatarMouseEnter(event: MouseEvent | FocusEvent) {
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     hoverCardX = rect.left;
     hoverCardY = rect.bottom + 8;
@@ -828,11 +828,17 @@
     </EmptyState>
   {:else}
     <div class="header">
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- We ignore these a11y warnings here because the element just acts as a hover/focus target for a tooltip, not an actionable button -->
       <div 
         class="avatar" 
         class:group={conversationsStore.selectedConversation.is_group}
         onmouseenter={handleAvatarMouseEnter}
         onmouseleave={handleAvatarMouseLeave}
+        tabindex="0"
+        onfocus={handleAvatarMouseEnter}
+        onblur={handleAvatarMouseLeave}
       >
         {#if conversationsStore.selectedConversation.is_group}
           <svg viewBox="0 0 24 24" fill="currentColor">
@@ -1018,6 +1024,11 @@
     background: var(--group-color);
   }
 
+  .avatar:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
   .avatar svg {
     width: 20px;
     height: 20px;
@@ -1034,12 +1045,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    margin: 0;
-  }
-
-  .info p {
-    font-size: var(--text-xs);
-    color: var(--text-secondary);
     margin: 0;
   }
 
