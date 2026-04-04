@@ -155,7 +155,7 @@ def _get_system_info() -> SystemInfo:
     # Try sysctl for macOS first (most reliable for total physical memory)
     if platform.system() == "Darwin":
         try:
-            cmd = ["sysctl", "-n", "hw.memsize"]
+            cmd = ["/usr/sbin/sysctl", "-n", "hw.memsize"]
             mem_bytes = int(subprocess.check_output(cmd).strip())
             system_ram_gb = mem_bytes / (1024**3)
         except (subprocess.SubprocessError, OSError, ValueError) as e:

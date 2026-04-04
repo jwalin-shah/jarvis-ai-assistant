@@ -40,9 +40,9 @@ from rich.table import Table
 from rich.text import Text
 
 from jarvis.contracts.health import FeatureState
+from jarvis.core.exceptions import JarvisError
 from jarvis.core.health import get_degradation_controller, reset_degradation_controller
 from jarvis.core.memory import get_memory_controller, reset_memory_controller
-from jarvis.core.exceptions import JarvisError
 from jarvis.db import get_db
 from jarvis.system import (
     FEATURE_CHAT,
@@ -382,7 +382,7 @@ def cmd_ner(args: argparse.Namespace) -> int:
             console.print(f"[red]Setup script not found: {setup_script}[/red]")
             return 1
         console.print("[bold]Setting up NER environment...[/bold]")
-        result = subprocess.run(["bash", str(setup_script)], check=False)  # nosec B603 B607
+        result = subprocess.run(["/bin/bash", str(setup_script)], check=False)  # nosec B603 B607
         return result.returncode
 
     if subcommand == "status":

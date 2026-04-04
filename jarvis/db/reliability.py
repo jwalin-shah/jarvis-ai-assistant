@@ -623,7 +623,7 @@ class RecoveryManager:
         # Use sqlite3 .recover command
         try:
             result = subprocess.run(  # nosec B603 B607
-                ["sqlite3", str(self.db_path), ".recover"],
+                ["/usr/bin/sqlite3", str(self.db_path), ".recover"],
                 capture_output=True,
                 text=True,
                 timeout=300,

@@ -25,6 +25,7 @@ from tqdm import tqdm
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+
 # Load .env
 _env_path = PROJECT_ROOT / ".env"
 if _env_path.exists():
@@ -737,7 +738,6 @@ def main() -> int:
         load_start = time.perf_counter()
         try:
             import dspy
-
             from evals.dspy_client import DSPYMLXClient
             from evals.dspy_reply import ReplyModule
 

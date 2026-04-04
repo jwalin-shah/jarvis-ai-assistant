@@ -683,7 +683,7 @@ class TestOpenSystemPreferences:
         mock_run.assert_called_once()
         # Check it tried to open the privacy pane
         args = mock_run.call_args[0][0]
-        assert "open" in args
+        assert "/usr/bin/open" in args
 
 
 class TestRunSetup:
