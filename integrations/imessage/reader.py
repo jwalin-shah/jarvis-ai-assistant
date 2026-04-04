@@ -10,7 +10,7 @@ import threading
 from collections import OrderedDict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Generic, Self, TypeVar
 
@@ -1404,6 +1404,7 @@ class ChatDBReader:
         self,
         chat_ids: list[str],
         limit_per_chat: int | None = 10000,
+        after: datetime | None = None,
     ) -> dict[str, list[Message]]:
         """Batch-fetch messages for multiple conversations in fewer queries.
 
@@ -1414,6 +1415,7 @@ class ChatDBReader:
         Args:
             chat_ids: List of conversation IDs (chat.guid).
             limit_per_chat: Maximum messages per conversation.
+            after: Optional datetime filter to only include messages after this time.
 
         Returns:
             Dict mapping chat_id -> list of Message objects (newest first).
@@ -1431,7 +1433,11 @@ class ChatDBReader:
             cursor = conn.cursor()
 
             # Build a batch query with IN clause and ROW_NUMBER for per-chat limit
-            base_query = """
+            after_clause = ""
+            if after is not None:
+                after_clause = "AND message.date > ?"
+
+            base_query = f"""
                 WITH ranked AS (
                     SELECT
                         message.ROWID as id,
@@ -1460,7 +1466,7 @@ class ChatDBReader:
                     LEFT JOIN handle ON message.handle_id = handle.ROWID
                     LEFT JOIN handle AS affected_handle
                         ON message.other_handle = affected_handle.ROWID
-                    WHERE chat.guid IN ({placeholders})
+                    WHERE chat.guid IN ({{placeholders}}) {after_clause}
                 )
                 SELECT id, guid, chat_id, sender, text, attributedBody, date,
                        is_from_me, reply_to_guid, date_delivered, date_read,
@@ -1474,7 +1480,15 @@ class ChatDBReader:
                 chunk = chat_ids[i : i + chunk_size]
                 placeholders = ",".join("?" * len(chunk))
                 query = base_query.format(placeholders=placeholders)
-                params: list[Any] = list(chunk) + [effective_limit]
+
+                params: list[Any] = list(chunk)
+                if after is not None:
+                    # iMessage timestamps are nanoseconds since 2001-01-01
+                    mac_epoch = datetime(2001, 1, 1, tzinfo=UTC)
+                    after_utc = after.astimezone(UTC)
+                    after_ts = int((after_utc - mac_epoch).total_seconds() * 1_000_000_000)
+                    params.append(after_ts)
+                params.append(effective_limit)
 
                 try:
                     rows = self._execute_with_fallback(cursor, query, params)
@@ -1482,7 +1496,9 @@ class ChatDBReader:
                     logger.warning(f"Batch message fetch failed for chunk: {e}")
                     # Fall back to individual queries for this chunk
                     for cid in chunk:
-                        result[cid] = self.get_messages(cid, limit=limit_per_chat or 10000)
+                        result[cid] = self.get_messages(
+                            cid, limit=limit_per_chat or 10000, after=after
+                        )
                     continue
 
                 # Group rows by chat_id
