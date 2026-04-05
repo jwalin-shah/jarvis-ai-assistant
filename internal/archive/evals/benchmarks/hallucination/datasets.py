@@ -6,7 +6,7 @@ Generates 120+ diverse email source/summary pairs for testing hallucination
 detection across different email types and prompt templates.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass  # noqa: E402
 
 
 @dataclass

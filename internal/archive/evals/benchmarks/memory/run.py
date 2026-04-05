@@ -9,15 +9,15 @@ import argparse
 import json
 import logging
 import sys
-from dataclasses import asdict
-from pathlib import Path
+from dataclasses import asdict  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from evals.benchmarks.memory.models import (
+from evals.benchmarks.memory.models import (  # noqa: E402
     CONTEXT_LENGTHS,
     get_default_model,
     get_models_for_profiling,
 )
-from evals.benchmarks.memory.profiler import MLXMemoryProfiler
+from evals.benchmarks.memory.profiler import MLXMemoryProfiler  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

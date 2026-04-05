@@ -12,16 +12,16 @@ Usage:
     uv run python -m evals.benchmarks.quality compare --model-a default --model-b new
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
 import json
 import logging
 import time
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from pathlib import Path
-from statistics import mean, median, stdev
-from typing import Any
+from dataclasses import dataclass, field  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
+from pathlib import Path  # noqa: E402
+from statistics import mean, median, stdev  # noqa: E402
+from typing import Any  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
