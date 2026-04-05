@@ -11,22 +11,22 @@ import argparse
 import json
 import logging
 import sys
-from datetime import UTC, datetime
-from pathlib import Path
-from statistics import mean, stdev
+from datetime import UTC, datetime  # noqa: E402
+from pathlib import Path  # noqa: E402
+from statistics import mean, stdev  # noqa: E402
 
 import numpy as np
-
-from jarvis.contracts.latency import LatencyBenchmarkResult, LatencyResult
-from evals.benchmarks.latency.scenarios import (
+from evals.benchmarks.latency.scenarios import (  # noqa: E402
     Scenario,
     get_scenario_by_type,
 )
-from evals.benchmarks.latency.timer import (
+from evals.benchmarks.latency.timer import (  # noqa: E402
     HighPrecisionTimer,
     force_model_unload,
     warmup_timer,
 )
+
+from jarvis.contracts.latency import LatencyBenchmarkResult, LatencyResult  # noqa: E402
 
 # Conditional MLX imports for environments without Apple Silicon
 try:

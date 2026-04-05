@@ -14,7 +14,7 @@ Usage:
     python -m benchmarks.classifier.classifier_benchmark --benchmark throughput
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: E402
 
 import argparse
 import gc
@@ -23,17 +23,21 @@ import logging
 import statistics
 import sys
 import tracemalloc
-from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
-from pathlib import Path
-from typing import Any
+from collections.abc import Callable  # noqa: E402
+from dataclasses import asdict, dataclass, field  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
 import numpy as np
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
-from evals.benchmarks.latency.timer import HighPrecisionTimer, force_model_unload, warmup_timer
+from evals.benchmarks.latency.timer import (  # noqa: E402
+    HighPrecisionTimer,
+    force_model_unload,
+    warmup_timer,
+)
 
 logger = logging.getLogger(__name__)
 

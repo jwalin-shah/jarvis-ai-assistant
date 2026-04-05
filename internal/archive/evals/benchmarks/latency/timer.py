@@ -8,10 +8,10 @@ for accurate measurement of model operations.
 
 import gc
 import time
-from collections.abc import Callable, Generator
-from contextlib import contextmanager
-from dataclasses import dataclass
-from typing import Any, TypeVar
+from collections.abc import Callable, Generator  # noqa: E402
+from contextlib import contextmanager  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from typing import Any, TypeVar  # noqa: E402
 
 T = TypeVar("T")
 
