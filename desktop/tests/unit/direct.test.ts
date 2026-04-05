@@ -108,9 +108,11 @@ describe("direct.ts", () => {
     // Set up the mock DB instance that Database.load returns
     mockSelect.mockResolvedValue([]);
     mockClose.mockResolvedValue(undefined);
+    const mockExecute = vi.fn().mockResolvedValue(undefined);
     mockLoad.mockResolvedValue({
       select: mockSelect,
       close: mockClose,
+      execute: mockExecute,
     });
 
     // Re-import the module to get fresh state.
