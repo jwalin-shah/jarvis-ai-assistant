@@ -70,6 +70,18 @@ def mock_reader():
     reader.close = MagicMock()
     return reader
 
+@pytest.fixture(autouse=True)
+def override_dependency(app, mock_reader):
+    """Override dependency for all tests."""
+    from api.dependencies import get_imessage_reader
+
+    def override_get_reader():
+        yield mock_reader
+
+    app.dependency_overrides[get_imessage_reader] = override_get_reader
+    yield
+    app.dependency_overrides.clear()
+
 
 @pytest.fixture
 def mock_request():
