@@ -110,6 +110,7 @@ describe("direct.ts", () => {
     mockClose.mockResolvedValue(undefined);
     mockLoad.mockResolvedValue({
       select: mockSelect,
+      execute: vi.fn(),
       close: mockClose,
     });
 
