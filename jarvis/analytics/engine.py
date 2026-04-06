@@ -178,8 +178,9 @@ class AnalyticsEngine:
         sentiment = self._compute_aggregate_sentiment(sorted_msgs)
 
         # Peak times
+        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         hour_counts: Counter[int] = Counter(m.date.hour for m in sorted_msgs)
-        day_counts: Counter[str] = Counter(m.date.strftime("%A") for m in sorted_msgs)
+        day_counts: Counter[str] = Counter(days[m.date.weekday()] for m in sorted_msgs)
         peak_hour = hour_counts.most_common(1)[0][0] if hour_counts else None
         peak_day = day_counts.most_common(1)[0][0] if day_counts else None
 
@@ -357,11 +358,14 @@ class AnalyticsEngine:
         weekly: Counter[str] = Counter()
         monthly: Counter[str] = Counter()
 
+        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
         for msg in messages:
-            hourly[msg.date.hour] += 1
-            daily[msg.date.strftime("%A")] += 1
-            weekly[msg.date.strftime("%Y-W%W")] += 1
-            monthly[msg.date.strftime("%Y-%m")] += 1
+            dt = msg.date
+            hourly[dt.hour] += 1
+            daily[days[dt.weekday()]] += 1
+            weekly[dt.strftime("%Y-W%W")] += 1
+            monthly[f"{dt.year}-{dt.month:02d}"] += 1
 
         # Ensure all hours are present
         hourly_dict = {h: hourly.get(h, 0) for h in range(24)}

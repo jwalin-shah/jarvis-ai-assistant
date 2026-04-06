@@ -430,11 +430,11 @@ def analyze_sentiment_trends(
         # Get period key based on granularity
         date = msg.date
         if granularity == "day":
-            period_key = date.strftime("%Y-%m-%d")
+            period_key = f"{date.year}-{date.month:02d}-{date.day:02d}"
         elif granularity == "week":
             period_key = date.strftime("%Y-W%W")
         else:  # month
-            period_key = date.strftime("%Y-%m")
+            period_key = f"{date.year}-{date.month:02d}"
 
         sentiment = analyze_sentiment(msg.text)
         period_sentiments[period_key].append(sentiment.score)
@@ -500,8 +500,17 @@ def analyze_response_patterns(messages: list[Message]) -> ResponseTimePattern:
                     their_response_times.append(response_minutes)
 
                 # Track by hour and day of the previous message
+                days = [
+                    "Monday",
+                    "Tuesday",
+                    "Wednesday",
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                ]
                 hour = prev_msg.date.hour
-                day_name = prev_msg.date.strftime("%A")
+                day_name = days[prev_msg.date.weekday()]
                 response_by_hour[hour].append(response_minutes)
                 response_by_day[day_name].append(response_minutes)
 
@@ -561,12 +570,14 @@ def analyze_frequency_trends(messages: list[Message]) -> MessageFrequencyTrends:
     day_of_week_counts: Counter[str] = Counter()
     hour_counts: Counter[int] = Counter()
 
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
     for msg in messages:
         date = msg.date
-        daily_counts[date.strftime("%Y-%m-%d")] += 1
+        daily_counts[f"{date.year}-{date.month:02d}-{date.day:02d}"] += 1
         weekly_counts[date.strftime("%Y-W%W")] += 1
-        monthly_counts[date.strftime("%Y-%m")] += 1
-        day_of_week_counts[date.strftime("%A")] += 1
+        monthly_counts[f"{date.year}-{date.month:02d}"] += 1
+        day_of_week_counts[days[date.weekday()]] += 1
         hour_counts[date.hour] += 1
 
     # Calculate trend direction (compare first half to second half)

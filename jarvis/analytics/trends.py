@@ -223,7 +223,8 @@ def detect_peak_periods(
     ]
 
     # Count by day of week
-    day_counts: Counter[str] = Counter(m.date.strftime("%A") for m in messages)
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    day_counts: Counter[str] = Counter(days[m.date.weekday()] for m in messages)
     peak_days = [
         PeakPeriod(
             period_type="day",
@@ -340,7 +341,9 @@ class TrendAnalyzer:
         sorted_msgs = sorted(messages, key=lambda m: m.date)
 
         # Group by day for daily counts
-        daily_counts: Counter[str] = Counter(m.date.strftime("%Y-%m-%d") for m in sorted_msgs)
+        daily_counts: Counter[str] = Counter(
+            f"{m.date.year}-{m.date.month:02d}-{m.date.day:02d}" for m in sorted_msgs
+        )
         daily_data = sorted(daily_counts.items())
         daily_values = [v for _, v in daily_data]
 
@@ -396,7 +399,9 @@ class TrendAnalyzer:
 
         results: dict[str, TrendResult] = {}
         for contact_id, msgs in contact_messages.items():
-            daily_counts: Counter[str] = Counter(m.date.strftime("%Y-%m-%d") for m in msgs)
+            daily_counts: Counter[str] = Counter(
+                f"{m.date.year}-{m.date.month:02d}-{m.date.day:02d}" for m in msgs
+            )
             daily_values = [v for _, v in sorted(daily_counts.items())]
             if len(daily_values) >= 4:
                 results[contact_id] = detect_trend(daily_values, self.trend_window_size)
@@ -429,7 +434,9 @@ class TrendAnalyzer:
         # Analyze trends
         trending: list[tuple[str, str | None, TrendResult]] = []
         for contact_id, (name, msgs) in contact_data.items():
-            daily_counts: Counter[str] = Counter(m.date.strftime("%Y-%m-%d") for m in msgs)
+            daily_counts: Counter[str] = Counter(
+                f"{m.date.year}-{m.date.month:02d}-{m.date.day:02d}" for m in msgs
+            )
             daily_values = [v for _, v in sorted(daily_counts.items())]
             if len(daily_values) >= 4:
                 trend = detect_trend(daily_values, self.trend_window_size)

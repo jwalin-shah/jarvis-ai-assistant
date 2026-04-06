@@ -231,7 +231,7 @@ def _aggregate_by_day_vectorized(
     df = pd.DataFrame(
         [
             {
-                "date": msg.date.strftime("%Y-%m-%d"),
+                "date": f"{msg.date.year}-{msg.date.month:02d}-{msg.date.day:02d}",
                 "is_from_me": msg.is_from_me,
                 "sender": msg.sender,
                 "hour": msg.date.hour,
@@ -311,7 +311,7 @@ def aggregate_by_day(
     daily_data: dict[str, _DailyBucket] = {}
 
     for msg in messages:
-        date_key = msg.date.strftime("%Y-%m-%d")
+        date_key = f"{msg.date.year}-{msg.date.month:02d}-{msg.date.day:02d}"
         data = daily_data.setdefault(date_key, _DailyBucket())
         data.messages.append(msg)
         if msg.is_from_me:
@@ -368,8 +368,9 @@ def aggregate_by_week(
     weekly_data: dict[str, _WeeklyBucket] = {}
 
     for msg in messages:
-        week_key = msg.date.strftime("%Y-W%W")
-        date_key = msg.date.strftime("%Y-%m-%d")
+        dt = msg.date
+        week_key = dt.strftime("%Y-W%W")
+        date_key = f"{dt.year}-{dt.month:02d}-{dt.day:02d}"
         data = weekly_data.setdefault(week_key, _WeeklyBucket())
         data.messages.append(msg)
         if msg.is_from_me:
@@ -394,8 +395,8 @@ def aggregate_by_week(
                 avg_sentiment = sum(sentiments) / len(sentiments)
 
         # Week start/end dates
-        start_date = dates[0].strftime("%Y-%m-%d") if dates else ""
-        end_date = dates[-1].strftime("%Y-%m-%d") if dates else ""
+        start_date = f"{dates[0].year}-{dates[0].month:02d}-{dates[0].day:02d}" if dates else ""
+        end_date = f"{dates[-1].year}-{dates[-1].month:02d}-{dates[-1].day:02d}" if dates else ""
 
         result.append(
             WeeklyAggregate(
@@ -430,9 +431,10 @@ def aggregate_by_month(
     monthly_data: dict[str, _MonthlyBucket] = {}
 
     for msg in messages:
-        month_key = msg.date.strftime("%Y-%m")
-        week_key = msg.date.strftime("%Y-W%W")
-        date_key = msg.date.strftime("%Y-%m-%d")
+        dt = msg.date
+        month_key = f"{dt.year}-{dt.month:02d}"
+        week_key = dt.strftime("%Y-W%W")
+        date_key = f"{dt.year}-{dt.month:02d}-{dt.day:02d}"
         data = monthly_data.setdefault(month_key, _MonthlyBucket())
         data.messages.append(msg)
         if msg.is_from_me:
