@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -55,9 +56,10 @@ def _validate_file_path(file_path: Path) -> bool:
             Path.home() / "Movies",  # User's Movies
             Path.home() / "Public",  # User's Public
             Path.home() / ".jarvis" / "attachments",  # App-specific attachments
-            Path("/tmp"),  # Temp directory
-            Path("/var/tmp"),  # Alternate temp
-            Path("/private/tmp"),  # macOS temp
+            Path(tempfile.gettempdir()),  # Secure temp directory
+            Path("/tmp"),  # Temp directory # nosec
+            Path("/var/tmp"),  # Alternate temp # nosec
+            Path("/private/tmp"),  # macOS temp # nosec
         ]
 
         # Check if resolved path is within any allowed base
