@@ -51,7 +51,7 @@
   let hoverCardY = $state(0);
   let hoverTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  function handleAvatarMouseEnter(event: MouseEvent) {
+  function handleAvatarMouseEnter(event: MouseEvent | FocusEvent) {
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     hoverCardX = rect.left;
     hoverCardY = rect.bottom + 8;
@@ -828,11 +828,14 @@
     </EmptyState>
   {:else}
     <div class="header">
-      <div 
+      <button
         class="avatar" 
         class:group={conversationsStore.selectedConversation.is_group}
         onmouseenter={handleAvatarMouseEnter}
         onmouseleave={handleAvatarMouseLeave}
+        onfocus={handleAvatarMouseEnter}
+        onblur={handleAvatarMouseLeave}
+        aria-label="View contact details"
       >
         {#if conversationsStore.selectedConversation.is_group}
           <svg viewBox="0 0 24 24" fill="currentColor">
@@ -849,7 +852,7 @@
             .charAt(0)
             .toUpperCase()}
         {/if}
-      </div>
+      </button>
       <div class="info">
         <h2>
           {conversationsStore.selectedConversation.display_name || conversationsStore.selectedConversation.participants.map(p => formatParticipant(p)).join(', ')}
@@ -1012,6 +1015,13 @@
     font-weight: var(--font-weight-semibold);
     color: white;
     flex-shrink: 0;
+    border: none;
+    cursor: pointer;
+  }
+
+  .avatar:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   .avatar.group {
