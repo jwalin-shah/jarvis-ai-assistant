@@ -43,7 +43,10 @@ if _env_path.exists():
 
 import dspy  # noqa: E402
 
+# noqa: E402
 from evals.dspy_client import DSPYMLXClient  # noqa: E402
+
+# noqa: E402
 from evals.dspy_reply import (  # noqa: E402
     TRAIN_EXAMPLES,
     CategoryReplyModule,

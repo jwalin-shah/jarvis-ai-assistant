@@ -15,6 +15,7 @@ CLI usage:
     python -m benchmarks.memory.run --output results/memory.json
 """
 
+# noqa: E402
 from evals.benchmarks.memory.models import (
     CONTEXT_LENGTHS,
     ModelSpec,
@@ -22,6 +23,8 @@ from evals.benchmarks.memory.models import (
     get_default_model,
     get_models_for_profiling,
 )
+
+# noqa: E402
 from evals.benchmarks.memory.profiler import MLXMemoryProfiler
 
 __all__ = [

@@ -71,7 +71,7 @@ class InstructionExtractorAdapter(ExtractorAdapter):
         segment = TopicSegment(
             chat_id="eval_chat",
             contact_id="eval_contact",
-            messages=[MockMessage(text, is_from_me)],
+            messages=[MockMessage(text, is_from_me)],  # type: ignore[list-item]
             start_time=now,
             end_time=now,
             message_count=1,
