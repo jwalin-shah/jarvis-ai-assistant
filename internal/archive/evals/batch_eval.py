@@ -38,7 +38,10 @@ if _env_path.exists():
 # Constants
 # ---------------------------------------------------------------------------
 
+# noqa: E402
 from evals.judge_config import JUDGE_MODEL  # noqa: E402
+
+# noqa: E402
 from evals.judge_config import get_judge_client as _get_judge_client  # noqa: E402
 
 ANTI_AI_PHRASES = [
@@ -737,7 +740,6 @@ def main() -> int:
         load_start = time.perf_counter()
         try:
             import dspy
-
             from evals.dspy_client import DSPYMLXClient
             from evals.dspy_reply import ReplyModule
 

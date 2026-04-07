@@ -14,6 +14,7 @@ Note: The MLXLatencyBenchmarker requires Apple Silicon with MLX installed.
 Timer utilities and scenario definitions work on all platforms.
 """
 
+# noqa: E402
 from evals.benchmarks.latency.scenarios import (
     DEFAULT_MAX_TOKENS,
     LatencyScenario,
@@ -22,6 +23,8 @@ from evals.benchmarks.latency.scenarios import (
     get_default_scenarios,
     get_scenario_by_type,
 )
+
+# noqa: E402
 from evals.benchmarks.latency.timer import (
     HighPrecisionTimer,
     TimingResult,
