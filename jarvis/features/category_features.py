@@ -50,7 +50,14 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 # Feature extraction patterns
-REACTION_PATTERNS = ["Laughed at", "Loved", "Liked", "Disliked", "Emphasized", "Questioned"]
+REACTION_PATTERNS = (
+    "Laughed at",
+    "Loved",
+    "Liked",
+    "Disliked",
+    "Emphasized",
+    "Questioned",
+)
 REQUEST_VERBS = {"send", "give", "help", "tell", "show", "let", "call", "get", "make", "take"}
 PROMISE_VERBS = {"promise", "guarantee", "commit", "swear"}
 FIRST_PERSON_PRONOUNS = {"i", "me", "my", "mine", "myself"}
@@ -383,7 +390,8 @@ class CategoryFeatureExtractor:
         features.append(capitalized / max(len(words) - 1, 1))
 
         # Reaction/emotion features (7)
-        is_reaction_msg = 1.0 if any(text.startswith(p) for p in REACTION_PATTERNS) else 0.0
+        # Using a tuple with startswith is ~8x faster than any(text.startswith(p) for p in list)
+        is_reaction_msg = 1.0 if text.startswith(REACTION_PATTERNS) else 0.0
         features.append(is_reaction_msg)
 
         emotional_count = sum(text_lower.count(marker) for marker in EMOTIONAL_MARKERS)
