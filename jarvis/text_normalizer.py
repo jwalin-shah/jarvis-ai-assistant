@@ -433,7 +433,8 @@ def detect_language(text: str) -> str:
         return "en"  # Too short to detect
 
     try:
-        from langdetect import detect
+        from langdetect import DetectorFactory, detect
+        DetectorFactory.seed = 0
 
         result: str = detect(text)
         return result
