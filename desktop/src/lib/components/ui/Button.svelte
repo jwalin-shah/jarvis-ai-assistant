@@ -82,6 +82,11 @@
     transform: scale(0.98);
   }
 
+  .btn:focus-visible {
+    outline: 2px solid var(--color-primary, #007aff);
+    outline-offset: 2px;
+  }
+
   /* Primary */
   .btn-primary {
     background: var(--color-primary, #007aff);

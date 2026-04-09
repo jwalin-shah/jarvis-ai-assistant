@@ -11,6 +11,20 @@ from tests.helpers_api import api_client_with_reader
 
 def test_drafts_reply_smoke_with_stubbed_pipeline(monkeypatch) -> None:
     """Smoke-test API message flow through /drafts/reply with lightweight stubs."""
+    from jarvis.watcher import ChatDBWatcher
+    async def mock_start(self):
+        pass
+
+    async def mock_stop(self):
+        pass
+
+    async def mock_validate(self):
+        return True
+
+    monkeypatch.setattr(ChatDBWatcher, "start", mock_start)
+    monkeypatch.setattr(ChatDBWatcher, "stop", mock_stop)
+    monkeypatch.setattr(ChatDBWatcher, "_validate_schema", mock_validate)
+
     import api.services.drafts_service as drafts_service
 
     reader = MagicMock()
