@@ -18,8 +18,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from jarvis.core.health import reset_degradation_controller
-from jarvis.core.memory import reset_memory_controller
 from jarvis.config import (
     CONFIG_VERSION,
     JarvisConfig,
@@ -28,6 +26,8 @@ from jarvis.config import (
     reset_config,
     save_config,
 )
+from jarvis.core.health import reset_degradation_controller
+from jarvis.core.memory import reset_memory_controller
 
 # Get actual defaults from config models to avoid hardcoding
 _DEFAULT_CONFIG = JarvisConfig()
@@ -855,7 +855,6 @@ class TestAppLifespanEvents:
 
     def test_testclient_context_manager_handles_startup_shutdown(self, app, monkeypatch):
         """TestClient context manager properly handles app startup and shutdown."""
-        from jarvis.interfaces.desktop.server import JarvisSocketServer
         from jarvis.watcher import ChatDBWatcher
 
         async def mock_start(self):
