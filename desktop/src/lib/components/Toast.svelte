@@ -155,6 +155,12 @@
     filter: brightness(1.1);
   }
 
+  .toast-action:focus-visible,
+  .toast-dismiss:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
   .toast-dismiss {
     flex-shrink: 0;
     padding: 4px;
