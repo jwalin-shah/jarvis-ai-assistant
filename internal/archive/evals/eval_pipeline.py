@@ -143,7 +143,9 @@ def _extract_json_blob(text: str) -> str:
     return s
 
 
-def _judge_single_item(judge_client: object, judge_model: str, ex: EvalExample, generated: str) -> tuple[float | None, str]:
+def _judge_single_item(
+    judge_client: object, judge_model: str, ex: EvalExample, generated: str
+) -> tuple[float | None, str]:
     """Judge one item and return (score, reasoning)."""
     try:
         prompt = (
