@@ -171,7 +171,6 @@ class IMessageSender:
 
         # Get absolute POSIX path for AppleScript
         abs_path = str(path.resolve())
-        escaped_path = self._escape_for_applescript(abs_path)
 
         if is_group:
             if not chat_id:
@@ -181,33 +180,44 @@ class IMessageSender:
             if ";" in chat_id:
                 parts = chat_id.split(";")
                 actual_chat_id = parts[-1] if len(parts) > 1 else chat_id
-            escaped_chat_id = self._escape_for_applescript(actual_chat_id)
-            applescript = f"""
-tell application "Messages"
-    set targetChat to chat id "{escaped_chat_id}"
-    set theFile to POSIX file "{escaped_path}"
-    send theFile to targetChat
-end tell
+            applescript = """
+on run argv
+    set chat_id to item 2 of argv
+    set file_path to item 1 of argv
+    tell application "Messages"
+        set targetChat to chat id chat_id
+        set theFile to POSIX file file_path
+        send theFile to targetChat
+    end tell
+end run
 """
+            return self._run_applescript(
+                applescript, f"attachment to {chat_id}", [abs_path, actual_chat_id]
+            )
         else:
             if not recipient:
                 return SendResult(success=False, error="Recipient required")
-            escaped_recipient = self._escape_for_applescript(recipient)
-            applescript = f"""
-tell application "Messages"
-    set theFile to POSIX file "{escaped_path}"
-    try
-        set targetService to 1st account whose service type = iMessage
-        set targetBuddy to participant "{escaped_recipient}" of targetService
-        send theFile to targetBuddy
-    on error
-        set targetService to 1st account whose service type = SMS
-        set targetBuddy to participant "{escaped_recipient}" of targetService
-        send theFile to targetBuddy
-    end try
-end tell
+            applescript = """
+on run argv
+    set recipient_id to item 2 of argv
+    set file_path to item 1 of argv
+    tell application "Messages"
+        set theFile to POSIX file file_path
+        try
+            set targetService to 1st account whose service type = iMessage
+            set targetBuddy to participant recipient_id of targetService
+            send theFile to targetBuddy
+        on error
+            set targetService to 1st account whose service type = SMS
+            set targetBuddy to participant recipient_id of targetService
+            send theFile to targetBuddy
+        end try
+    end tell
+end run
 """
-        return self._run_applescript(applescript, f"attachment to {chat_id or recipient}")
+            return self._run_applescript(
+                applescript, f"attachment to {recipient}", [abs_path, recipient]
+            )
 
     @staticmethod
     def _validate_recipient_format(recipient: str) -> bool:
@@ -282,24 +292,24 @@ end tell
                 error=f"Invalid recipient format: {recipient}. Must be phone number or email.",
             )
 
-        # Escape special characters for AppleScript
-        escaped_text = self._escape_for_applescript(text)
-        escaped_recipient = recipient.replace("\\", "\\\\").replace('"', '\\"')
-
-        applescript = f"""
-tell application "Messages"
-    try
-        set targetService to 1st account whose service type = iMessage
-        set targetBuddy to participant "{escaped_recipient}" of targetService
-        send "{escaped_text}" to targetBuddy
-    on error
-        set targetService to 1st account whose service type = SMS
-        set targetBuddy to participant "{escaped_recipient}" of targetService
-        send "{escaped_text}" to targetBuddy
-    end try
-end tell
+        applescript = """
+on run argv
+    set recipient_id to item 1 of argv
+    set msg_text to item 2 of argv
+    tell application "Messages"
+        try
+            set targetService to 1st account whose service type = iMessage
+            set targetBuddy to participant recipient_id of targetService
+            send msg_text to targetBuddy
+        on error
+            set targetService to 1st account whose service type = SMS
+            set targetBuddy to participant recipient_id of targetService
+            send msg_text to targetBuddy
+        end try
+    end tell
+end run
 """
-        return self._run_applescript(applescript, f"individual: {recipient}")
+        return self._run_applescript(applescript, f"individual: {recipient}", [recipient, text])
 
     def _send_to_group(self, text: str, chat_id: str | None) -> SendResult:
         """Send a message to a group chat."""
@@ -313,35 +323,41 @@ end tell
         # AppleScript needs: "iMessage;+;chat128521969456139942"
         actual_chat_id = chat_id
 
-        # Escape special characters for AppleScript
-        escaped_text = self._escape_for_applescript(text)
-        escaped_chat_id = actual_chat_id.replace("\\", "\\\\").replace('"', '\\"')
-
         # For group chats, we find the chat by its full GUID and send directly to it
-        applescript = f"""
-tell application "Messages"
-    try
-        send "{escaped_text}" to chat id "{escaped_chat_id}"
-    on error
-        -- Fallback: iterate chats to find match (slow but reliable)
-        repeat with c in chats
-            if id of c is "{escaped_chat_id}" then
-                send "{escaped_text}" to c
-                return
-            end if
-        end repeat
-        error "Chat not found: {escaped_chat_id}"
-    end try
-end tell
+        applescript = """
+on run argv
+    set msg_text to item 1 of argv
+    set target_chat_id to item 2 of argv
+    tell application "Messages"
+        try
+            send msg_text to chat id target_chat_id
+        on error
+            -- Fallback: iterate chats to find match (slow but reliable)
+            repeat with c in chats
+                if id of c is target_chat_id then
+                    send msg_text to c
+                    return
+                end if
+            end repeat
+            error "Chat not found: " & target_chat_id
+        end try
+    end tell
+end run
 """
-        return self._run_applescript(applescript, f"group: {chat_id}")
+        return self._run_applescript(applescript, f"group: {chat_id}", [text, actual_chat_id])
 
-    def _run_applescript(self, script: str, target_desc: str) -> SendResult:
+    def _run_applescript(
+        self, script: str, target_desc: str, args: list[str] | None = None
+    ) -> SendResult:
         """Execute an AppleScript and return the result."""
         try:
             logger.info("Sending iMessage to %s", target_desc)
+            cmd = ["osascript", "-e", script]
+            if args:
+                cmd.extend(args)
+
             subprocess.run(
-                ["osascript", "-e", script],
+                cmd,
                 capture_output=True,
                 check=True,
                 text=True,
