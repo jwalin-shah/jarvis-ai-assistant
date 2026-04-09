@@ -853,8 +853,24 @@ class TestAppLifespanEvents:
         for response in results:
             assert response.status_code == 200
 
-    def test_testclient_context_manager_handles_startup_shutdown(self, app):
+    def test_testclient_context_manager_handles_startup_shutdown(self, app, monkeypatch):
         """TestClient context manager properly handles app startup and shutdown."""
+        from jarvis.interfaces.desktop.server import JarvisSocketServer
+        from jarvis.watcher import ChatDBWatcher
+
+        async def mock_start(self):
+            pass
+
+        async def mock_stop(self):
+            pass
+
+        async def mock_validate(self):
+            return True
+
+        monkeypatch.setattr(ChatDBWatcher, "start", mock_start)
+        monkeypatch.setattr(ChatDBWatcher, "stop", mock_stop)
+        monkeypatch.setattr(ChatDBWatcher, "_validate_schema", mock_validate)
+
         # Using TestClient as context manager ensures proper lifespan handling
         with TestClient(app, raise_server_exceptions=False) as context_client:
             response = context_client.get("/health")
