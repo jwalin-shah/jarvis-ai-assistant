@@ -27,7 +27,7 @@ def _get_memory_fast() -> tuple[float, float, float]:
     """Get system memory using native macOS command (much faster than psutil)."""
     try:
         result = subprocess.run(
-            ["vm_stat"],
+            ["/usr/bin/vm_stat"],
             capture_output=True,
             text=True,
             timeout=2,
