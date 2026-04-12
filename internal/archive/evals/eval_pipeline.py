@@ -21,10 +21,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
 
 # Load .env
 _env_path = PROJECT_ROOT / ".env"

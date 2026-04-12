@@ -25,10 +25,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from tqdm import tqdm
+from tqdm import tqdm  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
 # Load .env
 _env_path = PROJECT_ROOT / ".env"
@@ -39,7 +41,6 @@ if _env_path.exists():
             key, _, val = line.partition("=")
             os.environ.setdefault(key.strip(), val.strip())
 
-from evals.judge_config import JUDGE_MODEL, get_judge_client  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Data types
