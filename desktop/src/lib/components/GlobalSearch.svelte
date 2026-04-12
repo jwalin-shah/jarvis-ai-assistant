@@ -1,8 +1,15 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { api, APIError } from "../api/client";
-  import type { Message, SearchFilters, SemanticSearchResultItem } from "../api/types";
-  import { navigateToMessage, conversationsStore } from "../stores/conversations.svelte";
+  import type {
+    Message,
+    SearchFilters,
+    SemanticSearchResultItem,
+  } from "../api/types";
+  import {
+    navigateToMessage,
+    conversationsStore,
+  } from "../stores/conversations.svelte";
 
   interface Props {
     onClose: () => void;
@@ -52,9 +59,13 @@
   }
 
   let groupedResults: GroupedResults[] = $derived.by(() => {
-    const items = searchMode === "semantic"
-      ? semanticResults.map(r => ({ ...r.message, similarity: r.similarity }))
-      : results;
+    const items =
+      searchMode === "semantic"
+        ? semanticResults.map((r) => ({
+            ...r.message,
+            similarity: r.similarity,
+          }))
+        : results;
 
     if (items.length === 0) return [];
 
@@ -65,8 +76,9 @@
         // Use cached name (populated after search results arrive) instead of reading store
         groups.set(msg.chat_id, {
           chat_id: msg.chat_id,
-          conversation_name: conversationNameCache.get(msg.chat_id) || msg.chat_id,
-          messages: []
+          conversation_name:
+            conversationNameCache.get(msg.chat_id) || msg.chat_id,
+          messages: [],
         });
       }
       groups.get(msg.chat_id)!.messages.push(msg);
@@ -76,8 +88,16 @@
   });
 
   // Flat list of all messages for keyboard navigation
-  let flatResults: { msg: Message & { similarity?: number }; groupIndex: number; msgIndex: number }[] = $derived.by(() => {
-    const flat: { msg: Message & { similarity?: number }; groupIndex: number; msgIndex: number }[] = [];
+  let flatResults: {
+    msg: Message & { similarity?: number };
+    groupIndex: number;
+    msgIndex: number;
+  }[] = $derived.by(() => {
+    const flat: {
+      msg: Message & { similarity?: number };
+      groupIndex: number;
+      msgIndex: number;
+    }[] = [];
     groupedResults.forEach((group, groupIndex) => {
       group.messages.forEach((msg, msgIndex) => {
         flat.push({ msg, groupIndex, msgIndex });
@@ -96,7 +116,9 @@
   });
 
   // Total results count
-  let totalResultsCount = $derived(searchMode === "semantic" ? semanticResults.length : results.length);
+  let totalResultsCount = $derived(
+    searchMode === "semantic" ? semanticResults.length : results.length,
+  );
 
   onMount(() => {
     searchInput?.focus();
@@ -178,12 +200,12 @@
       searchQuery,
       filters,
       100,
-      abortController!.signal
+      abortController!.signal,
     );
 
     results = searchResults;
     semanticResults = [];
-    populateConversationNameCache(searchResults.map(r => r.chat_id));
+    populateConversationNameCache(searchResults.map((r) => r.chat_id));
     searchState = searchResults.length > 0 ? "results" : "no-results";
   }
 
@@ -208,30 +230,32 @@
     const response = await api.semanticSearch(
       searchQuery,
       options,
-      abortController!.signal
+      abortController!.signal,
     );
 
     semanticResults = response.results;
     results = [];
-    populateConversationNameCache(response.results.map(r => r.message.chat_id));
+    populateConversationNameCache(
+      response.results.map((r) => r.message.chat_id),
+    );
     searchState = response.results.length > 0 ? "results" : "no-results";
   }
 
   /** Snapshot conversation names from the store once, after results arrive */
   function populateConversationNameCache(chatIds: string[]) {
     // Build a Map once for O(1) lookup instead of O(n) .find() per chatId
-    const uncached = chatIds.filter(id => !conversationNameCache.has(id));
+    const uncached = chatIds.filter((id) => !conversationNameCache.has(id));
     if (uncached.length === 0) return;
 
     const convMap = new Map(
-      conversationsStore.conversations.map(c => [c.chat_id, c])
+      conversationsStore.conversations.map((c) => [c.chat_id, c]),
     );
     for (const chatId of uncached) {
       const conv = convMap.get(chatId);
       if (conv) {
         conversationNameCache.set(
           chatId,
-          conv.display_name || conv.participants?.join(", ") || chatId
+          conv.display_name || conv.participants?.join(", ") || chatId,
         );
       }
     }
@@ -271,7 +295,9 @@
   let searchResultsRef: HTMLDivElement | null = null;
 
   function scrollSelectedIntoView() {
-    const element = document.querySelector(`[data-result-index="${selectedIndex}"]`) as HTMLElement | null;
+    const element = document.querySelector(
+      `[data-result-index="${selectedIndex}"]`,
+    ) as HTMLElement | null;
     if (!element || !searchResultsRef) return;
     const containerRect = searchResultsRef.getBoundingClientRect();
     const itemRect = element.getBoundingClientRect();
@@ -311,13 +337,15 @@
 
     // For semantic search, highlight individual words from the query
     if (searchMode === "semantic") {
-      const words = safeQuery.split(/\s+/).filter(w => w.length >= 2);
+      const words = safeQuery.split(/\s+/).filter((w) => w.length >= 2);
       if (words.length === 0) return safeText;
 
-      const cacheKey = `semantic:${words.join('|')}`;
+      const cacheKey = `semantic:${words.join("|")}`;
       let regex = regexCache.get(cacheKey);
       if (!regex) {
-        const pattern = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+        const pattern = words
+          .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+          .join("|");
         regex = new RegExp(`(${pattern})`, "gi");
         regexCache.set(cacheKey, regex);
       }
@@ -338,10 +366,15 @@
   function formatDate(dateStr: string): string {
     const date = new Date(dateStr);
     const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.floor(
+      (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
+    );
 
     if (diffDays === 0) {
-      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     } else if (diffDays === 1) {
       return "Yesterday";
     } else if (diffDays < 7) {
@@ -397,17 +430,37 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="search-overlay" onclick={handleOverlayClick} role="presentation">
   <!-- svelte-ignore a11y_interactive_supports_focus -->
-  <div class="search-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Global Search" aria-modal="true">
+  <div
+    class="search-modal"
+    onclick={(e) => e.stopPropagation()}
+    role="dialog"
+    aria-label="Global Search"
+    aria-modal="true"
+  >
     <div class="search-header">
       <div class="search-input-wrapper">
         {#if searchMode === "semantic"}
-          <svg class="search-icon semantic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            class="search-icon semantic"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <title>Semantic Search</title>
             <circle cx="12" cy="12" r="3"></circle>
-            <path d="M12 1v6m0 6v10M1 12h6m6 0h10M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"></path>
+            <path
+              d="M12 1v6m0 6v10M1 12h6m6 0h10M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"
+            ></path>
           </svg>
         {:else}
-          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            class="search-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.35-4.35"></path>
           </svg>
@@ -416,13 +469,30 @@
           bind:this={searchInput}
           type="text"
           class="search-input"
-          placeholder={searchMode === "semantic" ? "Search by meaning..." : "Search messages..."}
+          placeholder={searchMode === "semantic"
+            ? "Search by meaning..."
+            : "Search messages..."}
           bind:value={query}
           oninput={handleInput}
+          aria-label="Search messages"
         />
         {#if query}
-          <button class="clear-btn" onclick={() => { query = ""; searchState = "idle"; results = []; semanticResults = []; }} aria-label="Clear search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <button
+            class="clear-btn"
+            onclick={() => {
+              query = "";
+              searchState = "idle";
+              results = [];
+              semanticResults = [];
+            }}
+            aria-label="Clear search"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
@@ -434,26 +504,57 @@
         class:semantic={searchMode === "semantic"}
         onclick={toggleSearchMode}
         aria-label="Toggle search mode"
-        title={searchMode === "semantic" ? "Switch to keyword search" : "Switch to semantic search"}
+        title={searchMode === "semantic"
+          ? "Switch to keyword search"
+          : "Switch to semantic search"}
       >
         {#if searchMode === "semantic"}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <circle cx="12" cy="12" r="3"></circle>
             <path d="M12 1v6m0 6v10M1 12h6m6 0h10"></path>
           </svg>
         {:else}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+            ></path>
           </svg>
         {/if}
       </button>
-      <button class="filter-toggle" class:active={showFilters} onclick={toggleFilters} aria-label="Toggle filters" title="Filters">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+      <button
+        class="filter-toggle"
+        class:active={showFilters}
+        onclick={toggleFilters}
+        aria-label="Toggle filters"
+        title="Filters"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"
+          ></polygon>
         </svg>
       </button>
       <button class="close-btn" onclick={onClose} aria-label="Close">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
         </svg>
@@ -504,7 +605,9 @@
             </label>
           {:else}
             <div class="threshold-control">
-              <label for="threshold">Similarity: {Math.round(semanticThreshold * 100)}%</label>
+              <label for="threshold"
+                >Similarity: {Math.round(semanticThreshold * 100)}%</label
+              >
               <input
                 id="threshold"
                 type="range"
@@ -516,7 +619,9 @@
               />
             </div>
           {/if}
-          <button class="clear-filters-btn" onclick={clearFilters}>Clear filters</button>
+          <button class="clear-filters-btn" onclick={clearFilters}
+            >Clear filters</button
+          >
         </div>
       </div>
     {/if}
@@ -525,14 +630,28 @@
       {#if searchState === "idle"}
         <div class="empty-state">
           {#if searchMode === "semantic"}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
               <circle cx="12" cy="12" r="3"></circle>
-              <path d="M12 1v6m0 6v10M1 12h6m6 0h10M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"></path>
+              <path
+                d="M12 1v6m0 6v10M1 12h6m6 0h10M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"
+              ></path>
             </svg>
             <p>Semantic search finds messages by meaning</p>
-            <span class="hint">Try "dinner plans" to find messages about eating out</span>
+            <span class="hint"
+              >Try "dinner plans" to find messages about eating out</span
+            >
           {:else}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
               <circle cx="11" cy="11" r="8"></circle>
               <path d="m21 21-4.35-4.35"></path>
             </svg>
@@ -543,11 +662,20 @@
       {:else if searchState === "searching"}
         <div class="loading-state">
           <div class="spinner"></div>
-          <p>{searchMode === "semantic" ? "Computing semantic similarity..." : "Searching..."}</p>
+          <p>
+            {searchMode === "semantic"
+              ? "Computing semantic similarity..."
+              : "Searching..."}
+          </p>
         </div>
       {:else if searchState === "error"}
         <div class="error-state">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="12" y1="8" x2="12" y2="12"></line>
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
@@ -557,7 +685,12 @@
         </div>
       {:else if searchState === "no-results"}
         <div class="no-results-state">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.35-4.35"></path>
             <line x1="8" y1="11" x2="14" y2="11"></line>
@@ -581,7 +714,8 @@
         </div>
       {:else if searchState === "results"}
         <div class="results-count">
-          {totalResultsCount} result{totalResultsCount !== 1 ? "s" : ""} in {groupedResults.length} conversation{groupedResults.length !== 1 ? "s" : ""}
+          {totalResultsCount} result{totalResultsCount !== 1 ? "s" : ""} in {groupedResults.length}
+          conversation{groupedResults.length !== 1 ? "s" : ""}
           {#if searchMode === "semantic"}
             <span class="mode-indicator">Semantic</span>
           {/if}
@@ -602,10 +736,14 @@
                   onclick={() => handleResultClick(message)}
                 >
                   <div class="result-meta">
-                    <span class="sender">{message.sender_name || message.sender}</span>
+                    <span class="sender"
+                      >{message.sender_name || message.sender}</span
+                    >
                     <div class="meta-right">
                       {#if searchMode === "semantic" && message.similarity !== undefined}
-                        <span class="similarity-badge">{formatSimilarity(message.similarity)}</span>
+                        <span class="similarity-badge"
+                          >{formatSimilarity(message.similarity)}</span
+                        >
                       {/if}
                       <span class="date">{formatDate(message.date)}</span>
                     </div>
@@ -615,10 +753,22 @@
                   </div>
                   {#if message.attachments.length > 0}
                     <div class="attachment-indicator">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path
+                          d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"
+                        ></path>
                       </svg>
-                      <span>{message.attachments.length} attachment{message.attachments.length !== 1 ? "s" : ""}</span>
+                      <span
+                        >{message.attachments.length} attachment{message
+                          .attachments.length !== 1
+                          ? "s"
+                          : ""}</span
+                      >
                     </div>
                   {/if}
                 </button>
@@ -659,8 +809,12 @@
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 
   .search-modal {
@@ -946,7 +1100,9 @@
   }
 
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .error-state svg {
