@@ -419,6 +419,7 @@
           placeholder={searchMode === "semantic" ? "Search by meaning..." : "Search messages..."}
           bind:value={query}
           oninput={handleInput}
+          aria-label="Search messages"
         />
         {#if query}
           <button class="clear-btn" onclick={() => { query = ""; searchState = "idle"; results = []; semanticResults = []; }} aria-label="Clear search">
