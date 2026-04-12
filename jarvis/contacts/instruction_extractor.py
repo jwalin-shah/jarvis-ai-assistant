@@ -349,7 +349,7 @@ class InstructionFactExtractor:
             prompt_lines = []
             if messages:
                 current_label = None
-                current_block = []
+                current_block: list[str] = []
                 for m in messages:
                     if m.is_from_me:
                         label = user_name
@@ -480,7 +480,7 @@ class InstructionFactExtractor:
             if messages:
                 # Use first message for flow start; dynamic labels for group chats
                 current_label = None
-                current_block = []
+                current_block: list[str] = []
 
                 for m in messages:
                     # Resolve the label for this specific message

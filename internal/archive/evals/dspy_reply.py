@@ -15,9 +15,8 @@ import json
 import re
 
 import dspy
-
-from evals.judge_config import JUDGE_MODEL
-from evals.judge_config import get_judge_client as _get_judge_client
+from evals.judge_config import JUDGE_MODEL  # noqa: E402
+from evals.judge_config import get_judge_client as _get_judge_client  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
