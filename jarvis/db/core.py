@@ -130,11 +130,14 @@ class JarvisDBBase:
             self._local.connection.execute("PRAGMA temp_store = MEMORY")
             # Load sqlite-vec extension for vector search
             try:
-                self._local.connection.enable_load_extension(True)
-                import sqlite_vec
+                if hasattr(self._local.connection, "enable_load_extension"):
+                    self._local.connection.enable_load_extension(True)
+                    import sqlite_vec
 
-                sqlite_vec.load(self._local.connection)
-                self._local.connection.enable_load_extension(False)
+                    sqlite_vec.load(self._local.connection)
+                    self._local.connection.enable_load_extension(False)
+                else:
+                    logger.debug("sqlite3.Connection missing enable_load_extension, skipping sqlite_vec")
             except (ImportError, sqlite3.Error) as e:
                 logger.debug("sqlite-vec extension not available: %s", e)
 
