@@ -223,9 +223,9 @@ class TaskWorker:
         update_progress: Callable[[int, int, str], None],
     ) -> TaskResult:
         """Handle batch export task."""
+        from integrations.imessage import ChatDBReader
         from jarvis.config import validate_path
         from jarvis.export import ExportFormat, export_messages
-        from jarvis.integrations.imessage import ChatDBReader
 
         params = task.params
         chat_ids = params.get("chat_ids", [])
@@ -333,9 +333,9 @@ class TaskWorker:
         update_progress: Callable[[int, int, str], None],
     ) -> TaskResult:
         """Handle batch summarize task."""
-        from jarvis.context import ContextFetcher
         from jarvis.contracts.models import GenerationRequest
-        from jarvis.integrations.imessage import ChatDBReader
+        from integrations.imessage import ChatDBReader
+        from jarvis.context import ContextFetcher
         from jarvis.prompts import SUMMARY_EXAMPLES, build_summary_prompt
         from models import get_generator
 
@@ -426,9 +426,9 @@ class TaskWorker:
         update_progress: Callable[[int, int, str], None],
     ) -> TaskResult:
         """Handle batch reply generation task."""
-        from jarvis.context import ContextFetcher
         from jarvis.contracts.models import GenerationRequest
-        from jarvis.integrations.imessage import ChatDBReader
+        from integrations.imessage import ChatDBReader
+        from jarvis.context import ContextFetcher
         from models import get_generator
 
         params = task.params
@@ -581,10 +581,10 @@ class TaskWorker:
         update_progress: Callable[[int, int, str], None],
     ) -> TaskResult:
         """Handle background fact extraction task using sliding windows with progress tracking."""
+        from integrations.imessage import ChatDBReader
         from jarvis.contacts.fact_storage import save_facts
         from jarvis.contacts.instruction_extractor import get_instruction_extractor
         from jarvis.db import get_db
-        from jarvis.integrations.imessage import ChatDBReader
 
         params = task.params
         chat_id = params.get("chat_id")

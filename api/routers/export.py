@@ -22,8 +22,8 @@ from api.schemas import (
     ExportResponse,
     ExportSearchRequest,
 )
-from integrations.imessage import ChatDBReader
 from jarvis.contracts.imessage import Conversation, Message
+from integrations.imessage import ChatDBReader
 from jarvis.core.exceptions import ExportError
 from jarvis.export import (
     ExportFormat,

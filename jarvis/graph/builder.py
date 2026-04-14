@@ -699,7 +699,7 @@ class GraphBuilder:
             return {}
 
         from jarvis.contracts.imessage import Message
-        from jarvis.integrations.imessage.parser import (
+        from integrations.imessage.parser import (
             datetime_to_apple_timestamp,
             parse_apple_timestamp,
         )
