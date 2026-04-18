@@ -8,6 +8,7 @@ import os
 
 import dspy
 import pytest
+
 from evals.dspy_client import DSPYMLXClient
 
 

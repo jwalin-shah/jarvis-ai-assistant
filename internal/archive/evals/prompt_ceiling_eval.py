@@ -602,7 +602,7 @@ def main() -> int:
         print(f"Loading real test set: {real_test_path}")
         examples = load_training_format_dataset(real_test_path)
     else:
-        print("ERROR: Synthetic dataset not supported in this version", file=sys.stderr)
+        print(f"ERROR: Synthetic dataset not supported in this version", file=sys.stderr)
         return 1
 
     if args.limit:
