@@ -23,6 +23,9 @@ from jarvis.analytics.trends import (
     get_trend_analyzer,
 )
 
+# Array lookup for faster day extraction than strftime("%A")
+DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
 
 def iter_filtered_messages(
     reader: ChatDBReader,
@@ -185,7 +188,8 @@ def fetch_timeline_data(
 
     for _, messages in iter_filtered_messages(reader, time_range_start, per_conversation_limit=500):
         for msg in messages:
-            date_key = msg.date.strftime("%Y-%m-%d")
+            # Using f-string instead of strftime("%Y-%m-%d") for performance in tight loop
+            date_key = f"{msg.date.year}-{msg.date.month:02d}-{msg.date.day:02d}"
             daily_counts[date_key]["total"] += 1
             if msg.is_from_me:
                 daily_counts[date_key]["sent"] += 1
@@ -228,7 +232,8 @@ def fetch_heatmap_data(
         reader, time_range_start, per_conversation_limit=1000
     ):
         for msg in messages:
-            date_key = msg.date.strftime("%Y-%m-%d")
+            # Using f-string instead of strftime("%Y-%m-%d") for performance in tight loop
+            date_key = f"{msg.date.year}-{msg.date.month:02d}-{msg.date.day:02d}"
             daily_counts[date_key]["total"] += 1
             if msg.is_from_me:
                 daily_counts[date_key]["sent"] += 1
@@ -383,12 +388,14 @@ def fetch_trends_data(
     for _, messages in iter_filtered_messages(reader, time_range_start, per_conversation_limit=500):
         for msg in messages:
             total_messages += 1
-            date_key = msg.date.strftime("%Y-%m-%d")
+            # Using f-string instead of strftime("%Y-%m-%d") for performance in tight loop
+            date_key = f"{msg.date.year}-{msg.date.month:02d}-{msg.date.day:02d}"
             daily_counts[date_key] += 1
             week_key = msg.date.strftime("%Y-W%W")
             weekly_counts[week_key] += 1
             hour_counts[msg.date.hour] += 1
-            day_counts[msg.date.strftime("%A")] += 1
+            # Using pre-defined array for faster day of week extraction than strftime("%A")
+            day_counts[DAYS[msg.date.weekday()]] += 1
 
             chat_id = msg.chat_id
             contact_daily_counts[chat_id][date_key] += 1
