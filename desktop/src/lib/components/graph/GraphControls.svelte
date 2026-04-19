@@ -77,7 +77,7 @@
         on:input={handleSearch}
       />
       {#if searchQuery}
-        <button class="clear-search" on:click={() => { searchQuery = ""; handleSearch(); }}>
+        <button class="clear-search" on:click={() => { searchQuery = ""; handleSearch(); }} aria-label="Clear search" title="Clear search">
           &times;
         </button>
       {/if}
