@@ -142,7 +142,7 @@ def test_build_generation_request_honors_rag_and_few_shot_flags(monkeypatch) -> 
     monkeypatch.setattr(rsg, "get_config", lambda: _config(rag=True, few_shot=True))
 
     context = _context()
-    search_results = [{"text": "doc", "similarity": 0.9}]
+    search_results = [{"text": "doc", "similarity": 0.9, "score": 0.9}]
     request = build_generation_request(
         _StubService(),
         context=context,
