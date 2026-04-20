@@ -353,7 +353,7 @@ def save_facts(
                         # Deprecate old facts: mark expired and reduce confidence
                         placeholders = ",".join(["?"] * len(all_conflict_ids))
                         conn.execute(
-                            f"""
+                            f"""  # nosec B608
                             UPDATE contact_facts
                             SET valid_until = ?, confidence = confidence * 0.5
                             WHERE id IN ({placeholders})

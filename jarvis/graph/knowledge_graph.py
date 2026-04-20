@@ -107,7 +107,7 @@ class KnowledgeGraph:
 
         # Single query to fetch all edges for all nodes
         cursor = conn.execute(
-            f"""
+            f"""  # nosec B608
             SELECT contact_id, subject, predicate, value, confidence
             FROM contact_facts
             WHERE contact_id IN ({placeholders})
