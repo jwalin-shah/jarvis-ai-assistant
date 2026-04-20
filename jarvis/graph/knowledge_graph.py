@@ -112,7 +112,7 @@ class KnowledgeGraph:
             FROM contact_facts
             WHERE contact_id IN ({placeholders})
             ORDER BY contact_id, confidence DESC
-            """,
+            """,  # nosec B608
             tuple(node_ids),
         )
 

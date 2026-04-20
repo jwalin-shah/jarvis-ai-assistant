@@ -357,7 +357,7 @@ def save_facts(
                             UPDATE contact_facts
                             SET valid_until = ?, confidence = confidence * 0.5
                             WHERE id IN ({placeholders})
-                            """,
+                            """,  # nosec B608
                             [current_time] + [str(i) for i in all_conflict_ids],
                         )
                         logger.info("Deprecated %d conflicting facts", len(all_conflict_ids))

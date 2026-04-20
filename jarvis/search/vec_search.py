@@ -206,7 +206,9 @@ class VecSearcher:
                     chunk = all_ids[i : i + 900]
                     placeholders = ",".join(["?"] * len(chunk))
                     rows = conn.execute(
-                        f"SELECT rowid FROM vec_messages WHERE rowid IN ({placeholders})", chunk
+                        f"SELECT rowid FROM vec_messages WHERE rowid IN ({placeholders})"  # nosec B608
+                        ,
+                        chunk,
                     ).fetchall()
                     for r in rows:
                         existing_ids.add(r[0])
