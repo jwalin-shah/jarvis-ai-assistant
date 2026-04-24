@@ -170,6 +170,7 @@
         onclick={sendMessage}
         disabled={!inputText.trim() || isGenerating}
         title="Send (Enter)"
+        aria-label="Send message"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="22" y1="2" x2="11" y2="13"></line>
