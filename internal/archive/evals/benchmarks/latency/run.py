@@ -18,11 +18,11 @@ from statistics import mean, stdev
 import numpy as np
 
 from jarvis.contracts.latency import LatencyBenchmarkResult, LatencyResult
-from evals.benchmarks.latency.scenarios import (
+from internal.archive.evals.benchmarks.latency.scenarios import (
     Scenario,
     get_scenario_by_type,
 )
-from evals.benchmarks.latency.timer import (
+from internal.archive.evals.benchmarks.latency.timer import (
     HighPrecisionTimer,
     force_model_unload,
     warmup_timer,

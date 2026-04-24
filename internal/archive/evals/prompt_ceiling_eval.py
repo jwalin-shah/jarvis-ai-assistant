@@ -419,7 +419,7 @@ def run_evaluation(
     judge_client = None
     judge_model = None
     if use_judge:
-        from evals.judge_config import JUDGE_MODEL, get_judge_client
+        from internal.archive.evals.judge_config import JUDGE_MODEL, get_judge_client
 
         judge_client = get_judge_client()
         judge_model = JUDGE_MODEL

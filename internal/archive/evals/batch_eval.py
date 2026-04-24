@@ -38,8 +38,8 @@ if _env_path.exists():
 # Constants
 # ---------------------------------------------------------------------------
 
-from evals.judge_config import JUDGE_MODEL  # noqa: E402
-from evals.judge_config import get_judge_client as _get_judge_client  # noqa: E402
+from internal.archive.evals.judge_config import JUDGE_MODEL  # noqa: E402
+from internal.archive.evals.judge_config import get_judge_client as _get_judge_client  # noqa: E402
 
 ANTI_AI_PHRASES = [
     "i'd be happy to",
@@ -738,8 +738,8 @@ def main() -> int:
         try:
             import dspy
 
-            from evals.dspy_client import DSPYMLXClient
-            from evals.dspy_reply import ReplyModule
+            from internal.archive.evals.dspy_client import DSPYMLXClient
+            from internal.archive.evals.dspy_reply import ReplyModule
 
             student_lm = DSPYMLXClient(max_tokens=50, temperature=0.1)
             dspy.configure(lm=student_lm)

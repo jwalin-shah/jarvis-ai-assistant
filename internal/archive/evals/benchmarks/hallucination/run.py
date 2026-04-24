@@ -10,13 +10,13 @@ import json
 import sys
 from pathlib import Path
 
-from evals.benchmarks.hallucination.datasets import (
+from internal.archive.evals.benchmarks.hallucination.datasets import (
     generate_grounded_pairs,
     generate_hallucinated_pairs,
     generate_mixed_dataset,
     get_dataset_metadata,
 )
-from evals.benchmarks.hallucination.hhem import get_evaluator
+from internal.archive.evals.benchmarks.hallucination.hhem import get_evaluator
 
 
 def main() -> int:
