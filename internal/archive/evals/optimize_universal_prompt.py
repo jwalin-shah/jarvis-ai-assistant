@@ -17,8 +17,8 @@ import dspy
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.dspy_client import DSPYMLXClient
-from evals.dspy_reply import (
+from internal.archive.evals.dspy_client import DSPYMLXClient
+from internal.archive.evals.dspy_reply import (
     TRAIN_EXAMPLES,
     judge_metric,
 )
@@ -123,7 +123,7 @@ def prepare_trainset(depth: int):
 
 
 def build_teacher_lm():
-    from evals.judge_config import JUDGE_BASE_URL, JUDGE_MODEL, get_judge_api_key
+    from internal.archive.evals.judge_config import JUDGE_BASE_URL, JUDGE_MODEL, get_judge_api_key
 
     key = get_judge_api_key()
     # Teacher models (Cerebras) can handle JSON/Chat via ChatAdapter

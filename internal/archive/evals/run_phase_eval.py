@@ -95,7 +95,7 @@ def main() -> int:
             "uv",
             "run",
             "python",
-            "evals/quality_gate.py",
+            "internal/archive/evals/quality_gate.py",
             "--baseline",
             args.baseline,
             "--candidate",

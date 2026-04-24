@@ -256,7 +256,7 @@ def main() -> int:
     # Optional: judge
     judge_client = None
     if args.judge:
-        from evals.judge_config import JUDGE_MODEL, get_judge_client
+        from internal.archive.evals.judge_config import JUDGE_MODEL, get_judge_client
 
         judge_client = get_judge_client()
         if judge_client is None:

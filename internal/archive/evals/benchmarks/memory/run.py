@@ -12,12 +12,12 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from evals.benchmarks.memory.models import (
+from internal.archive.evals.benchmarks.memory.models import (
     CONTEXT_LENGTHS,
     get_default_model,
     get_models_for_profiling,
 )
-from evals.benchmarks.memory.profiler import MLXMemoryProfiler
+from internal.archive.evals.benchmarks.memory.profiler import MLXMemoryProfiler
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ def main() -> int:
 
     # Determine models to profile
     if args.model:
-        from evals.benchmarks.memory.models import ModelSpec
+        from internal.archive.evals.benchmarks.memory.models import ModelSpec
 
         models = [
             ModelSpec(

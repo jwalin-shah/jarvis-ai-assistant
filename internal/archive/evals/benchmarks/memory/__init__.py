@@ -4,7 +4,7 @@ This module provides memory profiling for MLX models to validate
 that the model stack fits within memory constraints.
 
 Example usage:
-    from evals.benchmarks.memory import MLXMemoryProfiler, get_default_model
+    from internal.archive.evals.benchmarks.memory import MLXMemoryProfiler, get_default_model
 
     profiler = MLXMemoryProfiler()
     model = get_default_model()
@@ -15,14 +15,14 @@ CLI usage:
     python -m benchmarks.memory.run --output results/memory.json
 """
 
-from evals.benchmarks.memory.models import (
+from internal.archive.evals.benchmarks.memory.models import (
     CONTEXT_LENGTHS,
     ModelSpec,
     get_context_lengths,
     get_default_model,
     get_models_for_profiling,
 )
-from evals.benchmarks.memory.profiler import MLXMemoryProfiler
+from internal.archive.evals.benchmarks.memory.profiler import MLXMemoryProfiler
 
 __all__ = [
     "MLXMemoryProfiler",
